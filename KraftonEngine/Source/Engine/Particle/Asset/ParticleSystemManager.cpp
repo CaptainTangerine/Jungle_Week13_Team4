@@ -1,7 +1,7 @@
 ﻿#include "ParticleSystemManager.h"
 
 #include "Asset/AssetPackage.h"
-#include "Particle/Asset/ParticleSystem.h"
+#include "Particle/ParticleSystem.h"
 #include "Platform/Paths.h"
 #include "Serialization/WindowsArchive.h"
 

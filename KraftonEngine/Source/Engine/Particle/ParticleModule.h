@@ -1,10 +1,10 @@
-﻿#pragma once
+#pragma once
 
 #include "Object/Object.h"
 #include "Object/Ptr/SoftObjectPtr.h"
-#include "Particle/Asset/ParticleTypes.h"
+#include "Particle/ParticleTypes.h"
 #include "Engine/Math/Transform.h"
-#include "Source/Engine/Particle/Asset/ParticleModule.generated.h"
+#include "Source/Engine/Particle/ParticleModule.generated.h"
 
 class FArchive;
 struct FParticleEmitterInstance;
