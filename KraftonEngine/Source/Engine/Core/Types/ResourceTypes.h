@@ -6,7 +6,7 @@
 // COM 인터페이스 전방 선언 (d3d11.h 없이 포인터 사용 가능)
 struct ID3D11ShaderResourceView;
 
-// Font/Particle 공통 텍스처 아틀라스 리소스.
+// Font/SubUV 공통 텍스처 아틀라스 리소스.
 // ResourceManager가 소유하며, 컴포넌트는 포인터로 참조만 합니다.
 // Columns × Rows 그리드 정보를 함께 보유해 UV 계산에 활용합니다.
 struct FTextureAtlasResource
@@ -24,5 +24,5 @@ struct FTextureAtlasResource
 
 // 의미론적 별칭 — 타입은 동일하지만 용도를 명시합니다.
 using FFontResource     = FTextureAtlasResource;
-using FParticleResource = FTextureAtlasResource;
+using FSubUVResource    = FTextureAtlasResource;
 using FTextureResource  = FTextureAtlasResource;	// 단일 정적 텍스처 (Columns=Rows=1)

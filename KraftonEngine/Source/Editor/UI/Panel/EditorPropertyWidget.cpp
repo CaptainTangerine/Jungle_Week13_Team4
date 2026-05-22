@@ -2273,8 +2273,8 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyValue>& Props, 
 
 		if (AssetType == "Font")
 			Names = FResourceManager::Get().GetFontNames();
-		else if (AssetType == "Particle")
-			Names = FResourceManager::Get().GetParticleNames();
+		else if (AssetType == "SubUVResource")
+			Names = FResourceManager::Get().GetSubUVResourceNames();
 		else if (AssetType == "Texture")
 			Names = FResourceManager::Get().GetTextureNames();
 

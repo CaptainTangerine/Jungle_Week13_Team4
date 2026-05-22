@@ -20,8 +20,8 @@ FPrimitiveSceneProxy* USubUVComponent::CreateSceneProxy()
 void USubUVComponent::PostDuplicate()
 {
 	UBillboardComponent::PostDuplicate();
-	// 파티클 리소스 재바인딩
-	SetParticle(ParticleName);
+	// SubUV 리소스 재바인딩
+	SetSubUVResource(SubUVResourceName);
 }
 
 USubUVComponent::USubUVComponent()
@@ -38,10 +38,10 @@ USubUVComponent::~USubUVComponent()
 	}
 }
 
-void USubUVComponent::SetParticle(const FName& InParticleName)
+void USubUVComponent::SetSubUVResource(const FName& InResourceName)
 {
-	ParticleName = InParticleName;
-	CachedParticle = FResourceManager::Get().FindParticle(InParticleName);
+	SubUVResourceName = InResourceName;
+	CachedSubUVResource = FResourceManager::Get().FindSubUVResource(InResourceName);
 	RebuildSubUVMaterial();
 }
 
@@ -55,8 +55,8 @@ void USubUVComponent::RebuildSubUVMaterial()
 			FShaderManager::Get().GetOrCreate(EShaderPath::SubUV));
 	}
 
-	if (CachedParticle && CachedParticle->IsLoaded())
-		SubUVMaterial->SetCachedSRV(EMaterialTextureSlot::Diffuse, CachedParticle->SRV);
+	if (CachedSubUVResource && CachedSubUVResource->IsLoaded())
+		SubUVMaterial->SetCachedSRV(EMaterialTextureSlot::Diffuse, CachedSubUVResource->SRV);
 	else
 		SubUVMaterial->SetCachedSRV(EMaterialTextureSlot::Diffuse, nullptr);
 }
@@ -75,10 +75,10 @@ void USubUVComponent::PostEditProperty(const char* PropertyName)
 	// SubUV는 Billboard property를 숨기므로 PostEditProperty도 Primitive로 직접 올라간다.
 	UPrimitiveComponent::PostEditProperty(PropertyName);
 
-	if (strcmp(PropertyName, "ParticleName") == 0 || strcmp(PropertyName, "Particle") == 0)
+	if (strcmp(PropertyName, "SubUVResourceName") == 0 || strcmp(PropertyName, "SubUV Resource") == 0)
 	{
-		SetParticle(ParticleName);
-		// 파티클 교체 시 UV 그리드/텍스처가 바뀌므로 Mesh 단계까지 dirty.
+		SetSubUVResource(SubUVResourceName);
+		// SubUV 리소스 교체 시 UV 그리드/텍스처가 바뀌므로 Mesh 단계까지 dirty.
 		MarkProxyDirty(EDirtyFlag::Mesh);
 	}
 }
@@ -109,10 +109,10 @@ void USubUVComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 {
 	UBillboardComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!CachedParticle) return;
+	if (!CachedSubUVResource) return;
 	if (!bLoop && bIsExecute) return; // 단발 재생 완료 후 정지
 
-	const uint32 TotalFrames = CachedParticle->Columns * CachedParticle->Rows;
+	const uint32 TotalFrames = CachedSubUVResource->Columns * CachedSubUVResource->Rows;
 	if (TotalFrames == 0) return;
 
 	const int32 PrevFrameIndex = FrameIndex;

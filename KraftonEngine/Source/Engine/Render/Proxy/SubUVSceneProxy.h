@@ -28,6 +28,6 @@ private:
 	FConstantBuffer UVRegionCB;
 
 	// Owner 접근 없이 UpdatePerViewport에서 사용하기 위한 캐시
-	const FParticleResource* CachedParticle = nullptr;
+	const FSubUVResource* CachedSubUVResource = nullptr;
 	uint32 CachedFrameIndex = 0;
 };

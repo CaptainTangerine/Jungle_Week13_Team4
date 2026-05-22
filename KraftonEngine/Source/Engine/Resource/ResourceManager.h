@@ -35,13 +35,13 @@ public:
 	// --- Font names ---
 	TArray<FString> GetFontNames() const;
 
-	// --- Particle ---
-	FParticleResource* FindParticle(const FName& ParticleName);
-	const FParticleResource* FindParticle(const FName& ParticleName) const;
-	void RegisterParticle(const FName& ParticleName, const FString& InPath, uint32 Columns = 1, uint32 Rows = 1);
+	// --- SubUV Resource ---
+	FSubUVResource* FindSubUVResource(const FName& ResourceName);
+	const FSubUVResource* FindSubUVResource(const FName& ResourceName) const;
+	void RegisterSubUVResource(const FName& ResourceName, const FString& InPath, uint32 Columns = 1, uint32 Rows = 1);
 
-	// --- Particle names ---
-	TArray<FString> GetParticleNames() const;
+	// --- SubUV resource names ---
+	TArray<FString> GetSubUVResourceNames() const;
 
 	// --- Texture (단일 정적 이미지, 1x1 atlas) ---
 	FTextureResource* FindTexture(const FName& TextureName);
@@ -58,7 +58,7 @@ private:
 	~FResourceManager() { ReleaseGPUResources(); }
 
 	TMap<FString, FFontResource>     FontResources;
-	TMap<FString, FParticleResource> ParticleResources;
+	TMap<FString, FSubUVResource>    SubUVResources;
 	TMap<FString, FTextureResource>  TextureResources;
 	TMap<FString, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> LoadedResource;
 };

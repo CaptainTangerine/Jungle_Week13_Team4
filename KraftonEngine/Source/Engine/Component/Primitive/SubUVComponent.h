@@ -15,11 +15,11 @@ public:
 	USubUVComponent();
 	~USubUVComponent() override;
 
-	// --- Particle Resource ---
-	// FName 키로 ResourceManager에서 FParticleResource*를 찾아 캐싱
-	void SetParticle(const FName& InParticleName);
-	const FParticleResource* GetParticle() const { return CachedParticle; }
-	const FName& GetParticleName() const { return ParticleName; }
+	// --- SubUV Resource ---
+	// FName 키로 ResourceManager에서 FSubUVResource*를 찾아 캐싱
+	void SetSubUVResource(const FName& InResourceName);
+	const FSubUVResource* GetSubUVResource() const { return CachedSubUVResource; }
+	const FName& GetSubUVResourceName() const { return SubUVResourceName; }
 	UMaterial* GetSubUVMaterial() const { return SubUVMaterial; }
 
 	// --- SubUV Frame ---
@@ -47,18 +47,18 @@ protected:
 private:
 	void RebuildSubUVMaterial();
 
-	UPROPERTY(Edit, Save, Category="Particle", DisplayName="Particle", AssetType="Particle")
-	FName ParticleName;
-	FParticleResource* CachedParticle = nullptr; // ResourceManager 소유, 여기선 참조만
-	UMaterial* SubUVMaterial = nullptr;           // Particle SRV를 래핑하는 경량 머티리얼
+	UPROPERTY(Edit, Save, Category="SubUVResource", DisplayName="SubUV Resource", AssetType="SubUVResource")
+	FName SubUVResourceName;
+	FSubUVResource* CachedSubUVResource = nullptr; // ResourceManager 소유, 여기선 참조만
+	UMaterial* SubUVMaterial = nullptr;            // SubUV SRV를 래핑하는 경량 머티리얼
 
-	UPROPERTY(Save, Category="Particle", DisplayName="Frame Index", Min=0.0f, Max=100000.0f, Speed=1.0f)
+	UPROPERTY(Save, Category="SubUVResource", DisplayName="Frame Index", Min=0.0f, Max=100000.0f, Speed=1.0f)
 	int32 FrameIndex = 0;
-	UPROPERTY(Edit, Save, Category="Particle", DisplayName="Play Rate", Min=1.0f, Max=120.0f, Speed=1.0f)
+	UPROPERTY(Edit, Save, Category="SubUVResource", DisplayName="Play Rate", Min=1.0f, Max=120.0f, Speed=1.0f)
 	float  PlayRate = 30.0f; // 초당 프레임 수
 	float  TimeAccumulator = 0.0f;
 
-	UPROPERTY(Edit, Save, Category="Particle", DisplayName="bLoop")
+	UPROPERTY(Edit, Save, Category="SubUVResource", DisplayName="bLoop")
 	bool bLoop = true;
 	bool bIsExecute = false;
 };

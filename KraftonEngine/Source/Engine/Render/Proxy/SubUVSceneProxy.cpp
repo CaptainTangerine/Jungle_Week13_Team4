@@ -31,11 +31,11 @@ void FSubUVSceneProxy::UpdateMesh()
 	if (SubUVMat)
 		SubUVMat->BindPerShaderCB<FSubUVRegionConstants>(&UVRegionCB, ECBSlot::PerShader0);
 
-	// Particle/FrameIndex 캐싱
-	CachedParticle = Comp->GetParticle();
+	// SubUV resource/FrameIndex 캐싱
+	CachedSubUVResource = Comp->GetSubUVResource();
 	CachedFrameIndex = Comp->GetFrameIndex();
 
-	// SectionDraws 단일 항목 — SubUVMaterial로 Particle SRV 바인딩
+	// SectionDraws 단일 항목 — SubUVMaterial로 SubUV SRV 바인딩
 	SectionDraws.clear();
 	if (SubUVMat)
 	{
@@ -49,7 +49,7 @@ void FSubUVSceneProxy::UpdateMaterial()
 	// TickComponent에서 FrameIndex 변경 시 Material dirty로 호출됨
 	USubUVComponent* Comp = GetSubUVComponent();
 	CachedFrameIndex = Comp->GetFrameIndex();
-	CachedParticle = Comp->GetParticle();
+	CachedSubUVResource = Comp->GetSubUVResource();
 
 	// SectionDraws 갱신 — SubUVMaterial의 CachedSRV는 Component가 관리
 	SectionDraws.clear();
@@ -65,7 +65,7 @@ void FSubUVSceneProxy::UpdatePerViewport(const FFrameContext& Frame)
 {
 	if (!bVisible) return;
 
-	if (!CachedParticle || !CachedParticle->IsLoaded())
+	if (!CachedSubUVResource || !CachedSubUVResource->IsLoaded())
 	{
 		bVisible = false;
 		return;
@@ -82,8 +82,8 @@ void FSubUVSceneProxy::UpdatePerViewport(const FFrameContext& Frame)
 	MarkPerObjectCBDirty();
 
 	// Update UV region from cached frame index
-	const uint32 Cols = CachedParticle->Columns;
-	const uint32 Rows = CachedParticle->Rows;
+	const uint32 Cols = CachedSubUVResource->Columns;
+	const uint32 Rows = CachedSubUVResource->Rows;
 	if (Cols > 0 && Rows > 0)
 	{
 		const float FrameW = 1.0f / static_cast<float>(Cols);

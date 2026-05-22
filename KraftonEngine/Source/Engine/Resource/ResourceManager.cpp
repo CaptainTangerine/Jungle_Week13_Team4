@@ -14,12 +14,12 @@
 
 namespace ResourceKey
 {
-	constexpr const char* Font     = "Font";
-	constexpr const char* Particle = "Particle";
-	constexpr const char* Texture  = "Texture";
-	constexpr const char* Path     = "Path";
-	constexpr const char* Columns  = "Columns";
-	constexpr const char* Rows     = "Rows";
+	constexpr const char* Font          = "Font";
+	constexpr const char* SubUVResource = "SubUVResource";
+	constexpr const char* Texture       = "Texture";
+	constexpr const char* Path          = "Path";
+	constexpr const char* Columns       = "Columns";
+	constexpr const char* Rows          = "Rows";
 }
 
 void FResourceManager::LoadFromFile(const FString& Path, ID3D11Device* InDevice)
@@ -54,20 +54,20 @@ void FResourceManager::LoadFromFile(const FString& Path, ID3D11Device* InDevice)
 		}
 	}
 
-	// Particle — { "Name": { "Path": "...", "Columns": 6, "Rows": 6 } }
-	if (Root.hasKey(ResourceKey::Particle))
+	// SubUVResource — { "Name": { "Path": "...", "Columns": 6, "Rows": 6 } }
+	if (Root.hasKey(ResourceKey::SubUVResource))
 	{
-		JSON ParticleSection = Root[ResourceKey::Particle];
-		for (auto& Pair : ParticleSection.ObjectRange())
+		JSON SubUVSection = Root[ResourceKey::SubUVResource];
+		for (auto& Pair : SubUVSection.ObjectRange())
 		{
 			JSON Entry = Pair.second;
-			FParticleResource Resource;
+			FSubUVResource Resource;
 			Resource.Name    = FName(Pair.first.c_str());
 			Resource.Path    = Entry[ResourceKey::Path].ToString();
 			Resource.Columns = static_cast<uint32>(Entry[ResourceKey::Columns].ToInt());
 			Resource.Rows    = static_cast<uint32>(Entry[ResourceKey::Rows].ToInt());
 			Resource.SRV     = nullptr;
-			ParticleResources[Pair.first] = Resource;
+			SubUVResources[Pair.first] = Resource;
 		}
 	}
 
@@ -183,7 +183,7 @@ bool FResourceManager::LoadGPUResources(ID3D11Device* Device)
 		if (!LoadSRV(Resource)) return false;
 	}
 
-	for (auto& [Key, Resource] : ParticleResources)
+	for (auto& [Key, Resource] : SubUVResources)
 	{
 		if (!LoadSRV(Resource)) return false;
 	}
@@ -207,7 +207,7 @@ void FResourceManager::ReleaseGPUResources()
 		}
 		if (Resource.SRV) { Resource.SRV->Release(); Resource.SRV = nullptr; }
 	}
-	for (auto& [Key, Resource] : ParticleResources)
+	for (auto& [Key, Resource] : SubUVResources)
 	{
 		if (Resource.TrackedMemoryBytes > 0)
 		{
@@ -251,28 +251,28 @@ void FResourceManager::RegisterFont(const FName& FontName, const FString& InPath
 	FontResources[FontName.ToString()] = Resource;
 }
 
-// --- Particle ---
-FParticleResource* FResourceManager::FindParticle(const FName& ParticleName)
+// --- SubUV Resource ---
+FSubUVResource* FResourceManager::FindSubUVResource(const FName& ResourceName)
 {
-	auto It = ParticleResources.find(ParticleName.ToString());
-	return (It != ParticleResources.end()) ? &It->second : nullptr;
+	auto It = SubUVResources.find(ResourceName.ToString());
+	return (It != SubUVResources.end()) ? &It->second : nullptr;
 }
 
-const FParticleResource* FResourceManager::FindParticle(const FName& ParticleName) const
+const FSubUVResource* FResourceManager::FindSubUVResource(const FName& ResourceName) const
 {
-	auto It = ParticleResources.find(ParticleName.ToString());
-	return (It != ParticleResources.end()) ? &It->second : nullptr;
+	auto It = SubUVResources.find(ResourceName.ToString());
+	return (It != SubUVResources.end()) ? &It->second : nullptr;
 }
 
-void FResourceManager::RegisterParticle(const FName& ParticleName, const FString& InPath, uint32 Columns, uint32 Rows)
+void FResourceManager::RegisterSubUVResource(const FName& ResourceName, const FString& InPath, uint32 Columns, uint32 Rows)
 {
-	FParticleResource Resource;
-	Resource.Name    = ParticleName;
+	FSubUVResource Resource;
+	Resource.Name    = ResourceName;
 	Resource.Path    = InPath;
 	Resource.Columns = Columns;
 	Resource.Rows    = Rows;
 	Resource.SRV     = nullptr;
-	ParticleResources[ParticleName.ToString()] = Resource;
+	SubUVResources[ResourceName.ToString()] = Resource;
 }
 
 TArray<FString> FResourceManager::GetFontNames() const
@@ -286,11 +286,11 @@ TArray<FString> FResourceManager::GetFontNames() const
 	return Names;
 }
 
-TArray<FString> FResourceManager::GetParticleNames() const
+TArray<FString> FResourceManager::GetSubUVResourceNames() const
 {
 	TArray<FString> Names;
-	Names.reserve(ParticleResources.size());
-	for (const auto& [Key, _] : ParticleResources)
+	Names.reserve(SubUVResources.size());
+	for (const auto& [Key, _] : SubUVResources)
 	{
 		Names.push_back(Key);
 	}
