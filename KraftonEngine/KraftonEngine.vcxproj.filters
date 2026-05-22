@@ -250,6 +250,9 @@
     <Filter Include="Source\Engine\Object\Reflection">
       <UniqueIdentifier>{469de7df-5ecb-d3cb-8cf2-aff37b3c7c25}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Engine\Particle">
+      <UniqueIdentifier>{1613146e-ae48-8d4a-1d6a-1540318e1782}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source\Engine\Physics">
       <UniqueIdentifier>{c1985821-1144-9a46-639a-f7de31f4a1fa}</UniqueIdentifier>
     </Filter>
@@ -1241,6 +1244,21 @@
     <ClCompile Include="Source\Engine\Object\UUIDGenerator.cpp">
       <Filter>Source\Engine\Object</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Particle\ParticleEmitter.cpp">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Particle\ParticleLODLevel.cpp">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Particle\ParticleModule.cpp">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Particle\ParticleSystem.cpp">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Particle\ParticleSystemManager.cpp">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Physics\NativePhysicsScene.cpp">
       <Filter>Source\Engine\Physics</Filter>
     </ClCompile>
@@ -1484,10 +1502,10 @@
     <ClCompile Include="Source\Engine\Serialization\SceneSaveManager.cpp">
       <Filter>Source\Engine\Serialization</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Texture\stb_image_impl.cpp">
+    <ClCompile Include="Source\Engine\Texture\Texture2D.cpp">
       <Filter>Source\Engine\Texture</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Texture\Texture2D.cpp">
+    <ClCompile Include="Source\Engine\Texture\stb_image_impl.cpp">
       <Filter>Source\Engine\Texture</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\UI\UIManager.cpp">
@@ -2351,6 +2369,27 @@
     <ClInclude Include="Source\Engine\Object\Reflection\UStruct.h">
       <Filter>Source\Engine\Object\Reflection</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Particle\ParticleEmitter.h">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Particle\ParticleLODLevel.h">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Particle\ParticleModule.h">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Particle\ParticleSerialization.h">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Particle\ParticleSystem.h">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Particle\ParticleSystemManager.h">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Particle\ParticleTypes.h">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Physics\IPhysicsScene.h">
       <Filter>Source\Engine\Physics</Filter>
     </ClInclude>
@@ -2707,6 +2746,9 @@
     </ClInclude>
     <ClInclude Include="Source\ObjViewer\ObjViewerViewportClient.h">
       <Filter>Source\ObjViewer</Filter>
+    </ClInclude>
+    <ClInclude Include="ThirdParty\stb_image.h">
+      <Filter>ThirdParty</Filter>
     </ClInclude>
     <ClInclude Include="ThirdParty\fbx\include\fbxsdk.h">
       <Filter>ThirdParty\fbx\include</Filter>

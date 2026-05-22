@@ -615,6 +615,11 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Engine\Object\FName.cpp" />
     <ClCompile Include="Source\Engine\Object\Object.cpp" />
     <ClCompile Include="Source\Engine\Object\UUIDGenerator.cpp" />
+    <ClCompile Include="Source\Engine\Particle\ParticleEmitter.cpp" />
+    <ClCompile Include="Source\Engine\Particle\ParticleLODLevel.cpp" />
+    <ClCompile Include="Source\Engine\Particle\ParticleModule.cpp" />
+    <ClCompile Include="Source\Engine\Particle\ParticleSystem.cpp" />
+    <ClCompile Include="Source\Engine\Particle\ParticleSystemManager.cpp" />
     <ClCompile Include="Source\Engine\Physics\NativePhysicsScene.cpp" />
     <ClCompile Include="Source\Engine\Physics\PhysXPhysicsScene.cpp" />
     <ClCompile Include="Source\Engine\Platform\CrashDump.cpp" />
@@ -696,8 +701,8 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Engine\Runtime\GameRenderPipeline.cpp" />
     <ClCompile Include="Source\Engine\Runtime\Launch.cpp" />
     <ClCompile Include="Source\Engine\Serialization\SceneSaveManager.cpp" />
-    <ClCompile Include="Source\Engine\Texture\stb_image_impl.cpp" />
     <ClCompile Include="Source\Engine\Texture\Texture2D.cpp" />
+    <ClCompile Include="Source\Engine\Texture\stb_image_impl.cpp" />
     <ClCompile Include="Source\Engine\UI\UIManager.cpp" />
     <ClCompile Include="Source\Engine\UI\UserWidget.cpp" />
     <ClCompile Include="Source\Engine\Viewport\GameViewportClient.cpp" />
@@ -987,6 +992,13 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Engine\Object\Reflection\ObjectMacros.h" />
     <ClInclude Include="Source\Engine\Object\Reflection\UClass.h" />
     <ClInclude Include="Source\Engine\Object\Reflection\UStruct.h" />
+    <ClInclude Include="Source\Engine\Particle\ParticleEmitter.h" />
+    <ClInclude Include="Source\Engine\Particle\ParticleLODLevel.h" />
+    <ClInclude Include="Source\Engine\Particle\ParticleModule.h" />
+    <ClInclude Include="Source\Engine\Particle\ParticleSerialization.h" />
+    <ClInclude Include="Source\Engine\Particle\ParticleSystem.h" />
+    <ClInclude Include="Source\Engine\Particle\ParticleSystemManager.h" />
+    <ClInclude Include="Source\Engine\Particle\ParticleTypes.h" />
     <ClInclude Include="Source\Engine\Physics\IPhysicsScene.h" />
     <ClInclude Include="Source\Engine\Physics\NativePhysicsScene.h" />
     <ClInclude Include="Source\Engine\Physics\PhysXPhysicsScene.h" />
@@ -1106,6 +1118,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\ObjViewer\ObjViewerPanel.h" />
     <ClInclude Include="Source\ObjViewer\ObjViewerRenderPipeline.h" />
     <ClInclude Include="Source\ObjViewer\ObjViewerViewportClient.h" />
+    <ClInclude Include="ThirdParty\stb_image.h" />
     <ClInclude Include="ThirdParty\fbx\include\fbxsdk.h" />
     <ClInclude Include="ThirdParty\fbx\include\fbxsdk\fbxsdk_def.h" />
     <ClInclude Include="ThirdParty\fbx\include\fbxsdk\fbxsdk_nsbegin.h" />
