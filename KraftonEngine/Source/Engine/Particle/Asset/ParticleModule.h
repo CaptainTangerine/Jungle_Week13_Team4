@@ -1,10 +1,10 @@
-#pragma once
+﻿#pragma once
 
 #include "Object/Object.h"
 #include "Object/Ptr/SoftObjectPtr.h"
-#include "Particle/ParticleTypes.h"
-
-#include "Source/Engine/Particle/ParticleModule.generated.h"
+#include "Particle/Asset/ParticleTypes.h"
+#include "Engine/Math/Transform.h"
+#include "Source/Engine/Particle/Asset/ParticleModule.generated.h"
 
 class FArchive;
 struct FParticleEmitterInstance;
@@ -24,8 +24,51 @@ public:
 	virtual int32 GetParticlePayloadSize() const { return 0; }
 	virtual int32 GetInstancePayloadSize() const { return 0; }
 
-	virtual void Spawn(FParticleEmitterInstance* /*Owner*/, FBaseParticle& /*Particle*/, float /*SpawnTime*/) {}
-	virtual void Update(FParticleEmitterInstance* /*Owner*/, FBaseParticle& /*Particle*/, float /*DeltaTime*/) {}
+public:
+	struct FContext
+	{
+		FParticleEmitterInstance& Owner;
+		const FTransform& GetTransform() const;
+		UObject* GetDistributionData() const;
+		FString GetTemplateName() const;
+		FString GetInstanceName() const;
+		FContext(FParticleEmitterInstance& Ow) : Owner(Ow) {}
+	};
+
+public:
+	
+
+	/**
+	 *	Called on a particle that is freshly spawned by the emitter.
+	 *
+	 *	@param	Owner		The FParticleEmitterInstance that spawned the particle.
+	 *	@param	Offset		The modules offset into the data payload of the particle.
+	 *	@param	SpawnTime	The time of the spawn.
+	 */
+	struct FSpawnContext : FContext
+	{
+		int32 Offset;
+		float SpawnTime;
+		FBaseParticle* ParticleBase;
+		FSpawnContext(FParticleEmitterInstance& Ow, int32 Of, float St, FBaseParticle* Pb) : FContext(Ow), Offset(Of), SpawnTime(St), ParticleBase(Pb) {}
+	};
+	virtual void Spawn(const FSpawnContext& Context) {}
+
+	/**
+	 *	Called on a particle that is being updated by its emitter.
+	 *
+	 *	@param	Owner		The FParticleEmitterInstance that 'owns' the particle.
+	 *	@param	Offset		The modules offset into the data payload of the particle.
+	 *	@param	DeltaTime	The time since the last update.
+	 */
+	struct FUpdateContext : FContext
+	{
+		int32 Offset;
+		float DeltaTime;
+		FUpdateContext(FParticleEmitterInstance& Ow, int32 Of, float Dt) : FContext(Ow), Offset(Of), DeltaTime(Dt) {}
+	};
+	virtual void Update(const FUpdateContext& Context) {}
+
 
 	bool IsEnabled() const { return bEnabled; }
 	void SetEnabled(bool bInEnabled) { bEnabled = bInEnabled; }
@@ -161,6 +204,7 @@ class UParticleModuleLifetime : public UParticleModule
 public:
 	GENERATED_BODY()
 	bool IsSpawnModule() const override { return true; }
+	void Spawn(const FSpawnContext& Context) override;
 
 	UPROPERTY(Edit, Save, Category="Lifetime", DisplayName="Min Lifetime", Min=0.01f, Max=1000.0f, Speed=0.1f)
 	float MinLifetime = 1.0f;
@@ -175,6 +219,7 @@ class UParticleModuleLocation : public UParticleModule
 public:
 	GENERATED_BODY()
 	bool IsSpawnModule() const override { return true; }
+	void Spawn(const FSpawnContext& Context) override;
 
 	UPROPERTY(Edit, Save, Category="Location", DisplayName="Start Location Min")
 	FVector StartLocationMin = FVector(0.0f, 0.0f, 0.0f);
@@ -189,6 +234,7 @@ class UParticleModuleVelocity : public UParticleModule
 public:
 	GENERATED_BODY()
 	bool IsSpawnModule() const override { return true; }
+	void Spawn(const FSpawnContext& Context) override;
 
 	UPROPERTY(Edit, Save, Category="Velocity", DisplayName="Start Velocity Min")
 	FVector StartVelocityMin = FVector(0.0f, 0.0f, 100.0f);
@@ -210,6 +256,8 @@ public:
 	GENERATED_BODY()
 	bool IsSpawnModule() const override { return true; }
 	bool IsUpdateModule() const override { return bColorOverLife; }
+	void Spawn(const FSpawnContext& Context) override;
+	void Update(const FUpdateContext& Context) override;
 
 	UPROPERTY(Edit, Save, Category="Color", DisplayName="Start Color", Type=Color4)
 	FVector4 StartColor = FVector4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -228,6 +276,8 @@ public:
 	GENERATED_BODY()
 	bool IsSpawnModule() const override { return true; }
 	bool IsUpdateModule() const override { return bSizeOverLife; }
+	void Spawn(const FSpawnContext& Context) override;
+	void Update(const FUpdateContext& Context) override;
 
 	UPROPERTY(Edit, Save, Category="Size", DisplayName="Start Size Min")
 	FVector StartSizeMin = FVector(1.0f, 1.0f, 1.0f);

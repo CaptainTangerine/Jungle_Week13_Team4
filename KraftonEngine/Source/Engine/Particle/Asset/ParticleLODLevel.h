@@ -1,9 +1,9 @@
-#pragma once
+﻿#pragma once
 
 #include "Object/Object.h"
-#include "Particle/ParticleModule.h"
+#include "Particle/Asset/ParticleModule.h"
 
-#include "Source/Engine/Particle/ParticleLODLevel.generated.h"
+#include "Source/Engine/Particle/Asset/ParticleLODLevel.generated.h"
 
 class FArchive;
 

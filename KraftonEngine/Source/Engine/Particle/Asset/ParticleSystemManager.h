@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Asset/AssetRegistry.h"
 #include "Core/Singleton.h"
@@ -6,6 +6,7 @@
 
 class UParticleSystem;
 
+// ParticleSystem 에셋 저장 및 로드 
 class FParticleSystemManager : public TSingleton<FParticleSystemManager>
 {
 	friend class TSingleton<FParticleSystemManager>;

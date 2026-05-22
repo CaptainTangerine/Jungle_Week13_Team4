@@ -1,4 +1,4 @@
-#include "AssetRegistry.h"
+﻿#include "AssetRegistry.h"
 #include "Mesh/MeshManager.h"
 #include "Mesh/Skeletal/SkeletalMesh.h"
 #include "Animation/AnimationManager.h"
@@ -7,7 +7,7 @@
 #include "Animation/Montage/AnimMontage.h"
 #include "Animation/Skeleton/Skeleton.h"
 #include "Animation/Skeleton/SkeletonManager.h"
-#include "Particle/ParticleSystemManager.h"
+#include "Particle/Asset/ParticleSystemManager.h"
 #include "Platform/Paths.h"
 
 #include <cstring>

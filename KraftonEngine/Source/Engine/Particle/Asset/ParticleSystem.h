@@ -1,11 +1,12 @@
-#pragma once
+﻿#pragma once
 
 #include "Object/Object.h"
-#include "Particle/ParticleEmitter.h"
+#include "Particle/Asset/ParticleEmitter.h"
 
-#include "Source/Engine/Particle/ParticleSystem.generated.h"
+#include "Source/Engine/Particle/Asset/ParticleSystem.generated.h"
 
 class FArchive;
+// Save와 Edit할 수 있는 Asset 레이어 계층의 시작
 
 UCLASS()
 class UParticleSystem : public UObject

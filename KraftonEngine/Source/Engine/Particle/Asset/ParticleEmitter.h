@@ -1,10 +1,10 @@
-#pragma once
+﻿#pragma once
 
 #include "Object/FName.h"
 #include "Object/Object.h"
-#include "Particle/ParticleLODLevel.h"
+#include "Particle/Asset/ParticleLODLevel.h"
 
-#include "Source/Engine/Particle/ParticleEmitter.generated.h"
+#include "Source/Engine/Particle/Asset/ParticleEmitter.generated.h"
 
 class FArchive;
 

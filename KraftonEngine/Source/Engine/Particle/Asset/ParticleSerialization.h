@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Core/Types/CoreTypes.h"
 #include "Object/Object.h"
@@ -27,6 +27,7 @@ namespace ParticleSerialization
 		Objects.clear();
 	}
 
+	// 저장 가능한 파티클 에셋 객체 트리를 어떻게 파일에서 복원할 것인지
 	template<typename ObjectT>
 	void SerializeInstancedObject(FArchive& Ar, ObjectT*& Object, UObject* Outer)
 	{

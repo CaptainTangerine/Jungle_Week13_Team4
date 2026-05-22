@@ -253,6 +253,9 @@
     <Filter Include="Source\Engine\Particle">
       <UniqueIdentifier>{1613146e-ae48-8d4a-1d6a-1540318e1782}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Engine\Particle\Asset">
+      <UniqueIdentifier>{e1026e62-420f-6132-1259-28b52a9a0ccd}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source\Engine\Physics">
       <UniqueIdentifier>{c1985821-1144-9a46-639a-f7de31f4a1fa}</UniqueIdentifier>
     </Filter>
@@ -1244,20 +1247,20 @@
     <ClCompile Include="Source\Engine\Object\UUIDGenerator.cpp">
       <Filter>Source\Engine\Object</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Particle\ParticleEmitter.cpp">
-      <Filter>Source\Engine\Particle</Filter>
+    <ClCompile Include="Source\Engine\Particle\Asset\ParticleEmitter.cpp">
+      <Filter>Source\Engine\Particle\Asset</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Particle\ParticleLODLevel.cpp">
-      <Filter>Source\Engine\Particle</Filter>
+    <ClCompile Include="Source\Engine\Particle\Asset\ParticleLODLevel.cpp">
+      <Filter>Source\Engine\Particle\Asset</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Particle\ParticleModule.cpp">
-      <Filter>Source\Engine\Particle</Filter>
+    <ClCompile Include="Source\Engine\Particle\Asset\ParticleModule.cpp">
+      <Filter>Source\Engine\Particle\Asset</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Particle\ParticleSystem.cpp">
-      <Filter>Source\Engine\Particle</Filter>
+    <ClCompile Include="Source\Engine\Particle\Asset\ParticleSystem.cpp">
+      <Filter>Source\Engine\Particle\Asset</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Particle\ParticleSystemManager.cpp">
-      <Filter>Source\Engine\Particle</Filter>
+    <ClCompile Include="Source\Engine\Particle\Asset\ParticleSystemManager.cpp">
+      <Filter>Source\Engine\Particle\Asset</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Physics\NativePhysicsScene.cpp">
       <Filter>Source\Engine\Physics</Filter>
@@ -2369,26 +2372,26 @@
     <ClInclude Include="Source\Engine\Object\Reflection\UStruct.h">
       <Filter>Source\Engine\Object\Reflection</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Particle\ParticleEmitter.h">
-      <Filter>Source\Engine\Particle</Filter>
+    <ClInclude Include="Source\Engine\Particle\Asset\ParticleEmitter.h">
+      <Filter>Source\Engine\Particle\Asset</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Particle\ParticleLODLevel.h">
-      <Filter>Source\Engine\Particle</Filter>
+    <ClInclude Include="Source\Engine\Particle\Asset\ParticleLODLevel.h">
+      <Filter>Source\Engine\Particle\Asset</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Particle\ParticleModule.h">
-      <Filter>Source\Engine\Particle</Filter>
+    <ClInclude Include="Source\Engine\Particle\Asset\ParticleModule.h">
+      <Filter>Source\Engine\Particle\Asset</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Particle\ParticleSerialization.h">
-      <Filter>Source\Engine\Particle</Filter>
+    <ClInclude Include="Source\Engine\Particle\Asset\ParticleSerialization.h">
+      <Filter>Source\Engine\Particle\Asset</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Particle\ParticleSystem.h">
-      <Filter>Source\Engine\Particle</Filter>
+    <ClInclude Include="Source\Engine\Particle\Asset\ParticleSystem.h">
+      <Filter>Source\Engine\Particle\Asset</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Particle\ParticleSystemManager.h">
-      <Filter>Source\Engine\Particle</Filter>
+    <ClInclude Include="Source\Engine\Particle\Asset\ParticleSystemManager.h">
+      <Filter>Source\Engine\Particle\Asset</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Particle\ParticleTypes.h">
-      <Filter>Source\Engine\Particle</Filter>
+    <ClInclude Include="Source\Engine\Particle\Asset\ParticleTypes.h">
+      <Filter>Source\Engine\Particle\Asset</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Physics\IPhysicsScene.h">
       <Filter>Source\Engine\Physics</Filter>
