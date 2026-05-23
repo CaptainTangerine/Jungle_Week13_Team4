@@ -251,7 +251,11 @@ void UParticleSystemComponent::RebuildDynamicData()
 				FParticleSpriteRenderData ProxyData;
 				ProxyData.bSortByCameraDistance = SpriteSource.RequiredModule && SpriteSource.RequiredModule->SortMode == EParticleSortMode::DistanceToCamera;
 
-				FString MaterialPath = SpriteSource.RequiredModule ? SpriteSource.RequiredModule->MaterialPath.ToString() : FString("None");
+				FString MaterialPath = SpriteSource.RequiredModule ? SpriteSource.RequiredModule->MaterialPath.ToString() : FString();
+				if (MaterialPath.empty() || MaterialPath == "None")
+				{
+					MaterialPath = ParticleDefaults::DefaultSpriteMaterialPath;
+				}
 				ProxyData.Material = FMaterialManager::Get().GetOrCreateMaterial(MaterialPath);
 
 				int32 ActiveCount = Source.ActiveParticleCount;

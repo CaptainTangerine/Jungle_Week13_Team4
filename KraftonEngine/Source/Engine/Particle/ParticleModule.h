@@ -9,6 +9,11 @@
 class FArchive;
 struct FParticleEmitterInstance;
 
+namespace ParticleDefaults
+{
+	constexpr const char* DefaultSpriteMaterialPath = "Content/Material/Editor/DefaultParticleSprite.mat";
+}
+
 UCLASS()
 class UParticleModule : public UObject
 {
@@ -157,7 +162,7 @@ public:
 	EParticleEmitterType EmitterType = EParticleEmitterType::Sprite;
 
 	UPROPERTY(Edit, Save, Category="Required", DisplayName="Material", AssetType="Material")
-	FSoftObjectPtr MaterialPath = "None";
+	FSoftObjectPtr MaterialPath = ParticleDefaults::DefaultSpriteMaterialPath;
 
 	UPROPERTY(Edit, Save, Category="Required", DisplayName="Max Particles", Min=1.0f, Max=100000.0f, Speed=10.0f)
 	int32 MaxParticles = 1000;

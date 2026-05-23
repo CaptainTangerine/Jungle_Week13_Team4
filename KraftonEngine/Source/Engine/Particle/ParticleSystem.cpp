@@ -190,6 +190,11 @@ void UParticleSystem::InitializeDefaultSpriteSystem()
 		return;
 	}
 
+	if (UParticleModuleRequired* RequiredModule = LODLevel->GetRequiredModule())
+	{
+		RequiredModule->MaterialPath = ParticleDefaults::DefaultSpriteMaterialPath;
+	}
+
 	LODLevel->ClearModules();
 	LODLevel->AddModule(UObjectManager::Get().CreateObject<UParticleModuleLifetime>(LODLevel));
 	LODLevel->AddModule(UObjectManager::Get().CreateObject<UParticleModuleLocation>(LODLevel));

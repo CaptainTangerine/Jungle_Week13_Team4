@@ -1,0 +1,11 @@
+{
+  "PathFileName": "Content/Material/Editor/DefaultParticleSprite.mat",
+  "ShaderPath": "Shaders/UI/Billboard.hlsl",
+  "RenderPass": "AlphaBlend",
+  "BlendState": "AlphaBlend",
+  "RasterizerState": "SolidNoCull",
+  "Textures": {
+    "DiffuseTexture": "Content/Editor/Icons/PointLight_64x.png"
+  },
+  "Origin": "Editor"
+}
