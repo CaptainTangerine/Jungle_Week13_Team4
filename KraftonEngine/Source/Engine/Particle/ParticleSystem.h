@@ -19,7 +19,9 @@ public:
 	void Serialize(FArchive& Ar) override;
 
 	UParticleEmitter* AddEmitter();
+	UParticleEmitter* InsertEmitter(int32 Index);
 	bool RemoveEmitter(UParticleEmitter* InEmitter);
+	bool MoveEmitter(int32 SourceIndex, int32 TargetIndex);
 	void ClearEmitters();
 	void CacheSystemModuleInfo();
 	void InitializeDefaultSpriteSystem();

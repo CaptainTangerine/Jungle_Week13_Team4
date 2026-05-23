@@ -28,6 +28,7 @@ public:
 	// 중복이 있으면 false + OutError. 성공 시 ContentItem.Path/Name 갱신 후 true.
 	// 실제 .uasset 안의 AssetPathFileName 등 캐시는 별도로 reload 필요 (다음 refresh).
 	bool RenameTo(const FString& NewStem, FString* OutError = nullptr);
+	bool DeleteFromDisk(FString* OutError = nullptr);
 
 protected:
 	FString EllipsisText(const FString& text, float maxWidth);
@@ -102,6 +103,17 @@ public:
 protected:
 	const char* GetTypeLabel() const override { return "Anim Graph"; }
 	uint32 GetAccentColor() const override { return IM_COL32(200, 110, 200, 255); }
+};
+
+class ParticleSystemElement final : public ContentBrowserElement
+{
+public:
+	virtual const char* GetDragItemType() override { return "ParticleSystemContentItem"; }
+	void OnDoubleLeftClicked(ContentBrowserContext& Context) override;
+
+protected:
+	const char* GetTypeLabel() const override { return "Particle System"; }
+	uint32 GetAccentColor() const override { return IM_COL32(115, 210, 210, 255); }
 };
 
 class MeshElement final : public ContentBrowserElement

@@ -26,9 +26,14 @@ public:
 	void SetRequiredModule(UParticleModuleRequired* InModule);
 	void SetTypeDataModule(UParticleModuleTypeDataBase* InModule);
 	void AddModule(UParticleModule* InModule);
+	void InsertModule(UParticleModule* InModule, int32 Index);
+	bool DetachModule(UParticleModule* InModule);
 	bool RemoveModule(UParticleModule* InModule);
 	void ClearModules();
+	void EnsureFixedModules();
 	void RebuildModuleLists();
+	bool IsFixedModule(const UParticleModule* InModule) const;
+	int32 GetFirstMovableModuleIndex() const;
 
 	int32 GetLevel() const { return Level; }
 	void SetLevelIndex(int32 InLevel);

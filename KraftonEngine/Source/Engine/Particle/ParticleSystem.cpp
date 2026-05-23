@@ -58,6 +58,24 @@ UParticleEmitter* UParticleSystem::AddEmitter()
 	return NewEmitter;
 }
 
+UParticleEmitter* UParticleSystem::InsertEmitter(int32 Index)
+{
+	UParticleEmitter* NewEmitter = UObjectManager::Get().CreateObject<UParticleEmitter>(this);
+	if (Index < 0)
+	{
+		Index = 0;
+	}
+	if (Index > static_cast<int32>(Emitters.size()))
+	{
+		Index = static_cast<int32>(Emitters.size());
+	}
+
+	Emitters.insert(Emitters.begin() + Index, NewEmitter);
+	CacheSystemModuleInfo();
+	BumpVersion();
+	return NewEmitter;
+}
+
 bool UParticleSystem::RemoveEmitter(UParticleEmitter* InEmitter)
 {
 	auto It = std::find(Emitters.begin(), Emitters.end(), InEmitter);
@@ -69,6 +87,43 @@ bool UParticleSystem::RemoveEmitter(UParticleEmitter* InEmitter)
 	UParticleEmitter* Removed = *It;
 	Emitters.erase(It);
 	ParticleSerialization::DestroyObjectTree(Removed);
+	CacheSystemModuleInfo();
+	BumpVersion();
+	return true;
+}
+
+bool UParticleSystem::MoveEmitter(int32 SourceIndex, int32 TargetIndex)
+{
+	const int32 Count = static_cast<int32>(Emitters.size());
+	if (SourceIndex < 0 || SourceIndex >= Count)
+	{
+		return false;
+	}
+
+	if (TargetIndex < 0)
+	{
+		TargetIndex = 0;
+	}
+	if (TargetIndex > Count)
+	{
+		TargetIndex = Count;
+	}
+
+	int32 AdjustedTargetIndex = TargetIndex;
+	if (SourceIndex < AdjustedTargetIndex)
+	{
+		--AdjustedTargetIndex;
+	}
+
+	if (SourceIndex == AdjustedTargetIndex)
+	{
+		return false;
+	}
+
+	UParticleEmitter* MovingEmitter = Emitters[SourceIndex];
+	Emitters.erase(Emitters.begin() + SourceIndex);
+	Emitters.insert(Emitters.begin() + AdjustedTargetIndex, MovingEmitter);
+
 	CacheSystemModuleInfo();
 	BumpVersion();
 	return true;
@@ -136,7 +191,6 @@ void UParticleSystem::InitializeDefaultSpriteSystem()
 	}
 
 	LODLevel->ClearModules();
-	LODLevel->AddModule(UObjectManager::Get().CreateObject<UParticleModuleSpawn>(LODLevel));
 	LODLevel->AddModule(UObjectManager::Get().CreateObject<UParticleModuleLifetime>(LODLevel));
 	LODLevel->AddModule(UObjectManager::Get().CreateObject<UParticleModuleLocation>(LODLevel));
 	LODLevel->AddModule(UObjectManager::Get().CreateObject<UParticleModuleVelocity>(LODLevel));

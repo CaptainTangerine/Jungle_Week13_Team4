@@ -35,6 +35,7 @@ public:
 	int32 GetParticleStride() const { return ParticleStride; }
 	int32 GetInstancePayloadSize() const { return InstancePayloadSize; }
 	bool IsEnabled() const { return bEnabled; }
+	void SetEnabled(bool bInEnabled) { bEnabled = bInEnabled; }
 
 private:
 	UPROPERTY(Edit, Save, Category="Emitter", DisplayName="Name")
