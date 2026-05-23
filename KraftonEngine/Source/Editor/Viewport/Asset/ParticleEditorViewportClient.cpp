@@ -1,4 +1,4 @@
-#include "ParticleEditorViewportClient.h"
+﻿#include "ParticleEditorViewportClient.h"
 
 #include "Input/InputSystem.h"
 #include "Math/MathUtils.h"
@@ -41,7 +41,7 @@ void FParticleEditorViewportClient::ResetCameraToPreviewBounds()
 	const FVector Center = FVector(0.0f, 0.0f, 0.6f);
 	const float Radius = 2.0f;
 	const float Distance = Radius / std::tan(ViewTransform.FOV * 0.5f) * 1.35f;
-	const FVector ViewDir = FVector(-1.0f, -1.0f, -0.45f).Normalized();
+	const FVector ViewDir = FVector(0.0f, 1.0f, -0.45f).Normalized();
 
 	ViewTransform.ViewLocation = Center - ViewDir * Distance;
 	ViewTransform.LookAt(Center);

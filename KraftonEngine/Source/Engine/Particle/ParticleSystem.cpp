@@ -92,6 +92,43 @@ bool UParticleSystem::RemoveEmitter(UParticleEmitter* InEmitter)
 	return true;
 }
 
+bool UParticleSystem::MoveEmitter(int32 SourceIndex, int32 TargetIndex)
+{
+	const int32 Count = static_cast<int32>(Emitters.size());
+	if (SourceIndex < 0 || SourceIndex >= Count)
+	{
+		return false;
+	}
+
+	if (TargetIndex < 0)
+	{
+		TargetIndex = 0;
+	}
+	if (TargetIndex > Count)
+	{
+		TargetIndex = Count;
+	}
+
+	int32 AdjustedTargetIndex = TargetIndex;
+	if (SourceIndex < AdjustedTargetIndex)
+	{
+		--AdjustedTargetIndex;
+	}
+
+	if (SourceIndex == AdjustedTargetIndex)
+	{
+		return false;
+	}
+
+	UParticleEmitter* MovingEmitter = Emitters[SourceIndex];
+	Emitters.erase(Emitters.begin() + SourceIndex);
+	Emitters.insert(Emitters.begin() + AdjustedTargetIndex, MovingEmitter);
+
+	CacheSystemModuleInfo();
+	BumpVersion();
+	return true;
+}
+
 void UParticleSystem::ClearEmitters()
 {
 	ParticleSerialization::DestroyObjectArray(Emitters);

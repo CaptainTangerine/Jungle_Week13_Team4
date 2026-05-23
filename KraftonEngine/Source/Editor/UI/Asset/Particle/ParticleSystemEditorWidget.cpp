@@ -1,4 +1,4 @@
-#include "Editor/UI/Asset/Particle/ParticleSystemEditorWidget.h"
+﻿#include "Editor/UI/Asset/Particle/ParticleSystemEditorWidget.h"
 
 #include "Asset/AssetRegistry.h"
 #include "Particle/ParticleSystem.h"
@@ -250,6 +250,12 @@ namespace
 		UParticleModule* Module = nullptr;
 	};
 
+	struct FParticleEmitterDragPayload
+	{
+		int32 SourceIndex = -1;
+		UParticleEmitter* Emitter = nullptr;
+	};
+
 	float GetDetailsCategoryLabelOffset()
 	{
 		return 16.0f;
@@ -320,6 +326,25 @@ namespace
 			Label ? Label : "Module");
 	}
 
+	void DrawFloatingEmitterPreview(const char* Label)
+	{
+		const ImVec2 MousePos = ImGui::GetMousePos();
+		const ImVec2 Size(150.0f, 58.0f);
+		const ImVec2 Min(MousePos.x + 12.0f, MousePos.y + 10.0f);
+		const ImVec2 Max(Min.x + Size.x, Min.y + Size.y);
+		ImDrawList* DrawList = ImGui::GetForegroundDrawList();
+		DrawList->AddRectFilled(Min, Max, IM_COL32(122, 92, 110, 240));
+		DrawList->AddRect(Min, Max, IM_COL32(255, 180, 32, 255), 0.0f, 0, 1.5f);
+		DrawList->AddRectFilled(
+			ImVec2(Max.x - 48.0f, Min.y + 5.0f),
+			ImVec2(Max.x - 6.0f, Max.y - 7.0f),
+			IM_COL32(4, 4, 4, 255));
+		DrawList->AddText(
+			ImVec2(Min.x + 7.0f, Min.y + 6.0f),
+			ImGui::GetColorU32(ImGuiCol_Text),
+			Label ? Label : "Emitter");
+	}
+
 	void DrawModuleDropIndicator(const ImVec2& RowMin, float Width, bool bAfter)
 	{
 		const float Y = bAfter ? RowMin.y + 22.0f : RowMin.y;
@@ -327,6 +352,16 @@ namespace
 			ImVec2(RowMin.x, Y),
 			ImVec2(RowMin.x + Width, Y),
 			IM_COL32(255, 170, 32, 255),
+			2.0f);
+	}
+
+	void DrawEmitterDropIndicator(const ImVec2& CardMin, const ImVec2& CardMax, bool bAfter)
+	{
+		const float X = bAfter ? CardMax.x : CardMin.x;
+		ImGui::GetWindowDrawList()->AddLine(
+			ImVec2(X, CardMin.y),
+			ImVec2(X, CardMax.y),
+			IM_COL32(255, 218, 61, 255),
 			2.0f);
 	}
 
@@ -414,7 +449,7 @@ void FParticleSystemEditorWidget::Open(UObject* Object)
 	LightActor->SetActorRotation(FVector(0.0f, 45.0f, -45.0f));
 	if (UDirectionalLightComponent* LightComp = LightActor->GetComponentByClass<UDirectionalLightComponent>())
 	{
-		LightComp->SetShadowBias(0.0f);
+		LightComp->SetShadowBias(0.002f);
 		LightComp->PushToScene();
 	}
 
@@ -876,6 +911,30 @@ void FParticleSystemEditorWidget::DeleteParticleEmitter(UParticleSystem* Particl
 	MarkDirty();
 }
 
+void FParticleSystemEditorWidget::MoveParticleEmitter(UParticleSystem* ParticleSystem, int32 SourceIndex, int32 TargetIndex)
+{
+	if (!ParticleSystem)
+	{
+		return;
+	}
+
+	int32 NewSelectedIndex = TargetIndex;
+	if (SourceIndex < NewSelectedIndex)
+	{
+		--NewSelectedIndex;
+	}
+
+	if (!ParticleSystem->MoveEmitter(SourceIndex, TargetIndex))
+	{
+		return;
+	}
+
+	const int32 Count = static_cast<int32>(ParticleSystem->GetEmitters().size());
+	SelectedEmitterIndex = Count > 0 ? (std::min)((std::max)(NewSelectedIndex, 0), Count - 1) : -1;
+	SelectedModule = nullptr;
+	MarkDirty();
+}
+
 void FParticleSystemEditorWidget::AddParticleModule(UParticleSystem* ParticleSystem, UParticleEmitter* Emitter, UClass* ModuleClass)
 {
 	if (!ParticleSystem || !Emitter || !ModuleClass)
@@ -980,13 +1039,15 @@ void FParticleSystemEditorWidget::RenderEmitterPanel(UParticleSystem* ParticleSy
 		IM_COL32(0, 0, 0, 255));
 	ImGui::BeginChild("##EmitterCanvas", CanvasSize, false, ImGuiWindowFlags_HorizontalScrollbar);
 
-	bool bEmitterContextRequested = false;
-	bool bClickedEmitterCard = false;
-	int32 PendingInsertEmitterIndex = -1;
-	int32 PendingDeleteEmitterIndex = -1;
-	UParticleLODLevel* PendingMoveSourceLODLevel = nullptr;
-	UParticleLODLevel* PendingMoveTargetLODLevel = nullptr;
-	UParticleModule* PendingMoveModule = nullptr;
+		bool bEmitterContextRequested = false;
+		bool bClickedEmitterCard = false;
+		int32 PendingInsertEmitterIndex = -1;
+		int32 PendingDeleteEmitterIndex = -1;
+		int32 PendingMoveEmitterSourceIndex = -1;
+		int32 PendingMoveEmitterTargetIndex = -1;
+		UParticleLODLevel* PendingMoveSourceLODLevel = nullptr;
+		UParticleLODLevel* PendingMoveTargetLODLevel = nullptr;
+		UParticleModule* PendingMoveModule = nullptr;
 	int32 PendingMoveTargetIndex = -1;
 	int32 PendingMoveTargetEmitterIndex = -1;
 	UParticleLODLevel* PendingDeleteModuleLODLevel = nullptr;
@@ -1027,7 +1088,7 @@ void FParticleSystemEditorWidget::RenderEmitterPanel(UParticleSystem* ParticleSy
 			DrawList->AddRectFilled(
 				HeaderMin,
 				ImVec2(HeaderMin.x + CardInnerWidth, HeaderMin.y + HeaderHeight - CardPad),
-				bSelectedEmitter ? IM_COL32(191, 102, 30, 255) : IM_COL32(178, 178, 178, 255));
+				bSelectedEmitter ? IM_COL32(122, 92, 110, 255) : IM_COL32(178, 178, 178, 255));
 			DrawList->AddRectFilled(
 				ImVec2(HeaderMin.x + CardInnerWidth - 56.0f, HeaderMin.y + 4.0f),
 				ImVec2(HeaderMin.x + CardInnerWidth - 6.0f, HeaderMin.y + HeaderHeight - 7.0f),
@@ -1059,6 +1120,20 @@ void FParticleSystemEditorWidget::RenderEmitterPanel(UParticleSystem* ParticleSy
 				bClickedEmitterCard = true;
 				SelectedEmitterIndex = EmitterIndex;
 				SelectedModule = nullptr;
+			}
+			if (!IsMouseInRect(EmitterCheckboxMin, EmitterCheckboxMax)
+				&& ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoPreviewTooltip))
+			{
+				bClickedEmitterCard = true;
+				SelectedEmitterIndex = EmitterIndex;
+				SelectedModule = nullptr;
+
+				FParticleEmitterDragPayload Payload;
+				Payload.SourceIndex = EmitterIndex;
+				Payload.Emitter = Emitter;
+				ImGui::SetDragDropPayload("PARTICLE_EMITTER_CARD", &Payload, sizeof(Payload));
+				DrawFloatingEmitterPreview(EmitterName.c_str());
+				ImGui::EndDragDropSource();
 			}
 
 			if (IsMouseInRect(HeaderOuterMin, ImVec2(HeaderOuterMin.x + CardWidth, HeaderOuterMin.y + HeaderHeight)) &&
@@ -1248,9 +1323,9 @@ void FParticleSystemEditorWidget::RenderEmitterPanel(UParticleSystem* ParticleSy
 					}
 				}
 
-				RenderModuleRow(LODLevel->GetTypeDataModule(), "Type Data", IM_COL32(76, 122, 76, 255), false, FirstMovableIndex);
-				RenderModuleRow(LODLevel->GetRequiredModule(), "Required", IM_COL32(196, 199, 90, 255), false, FirstMovableIndex);
-				RenderModuleRow(SpawnModule, "Spawn", IM_COL32(196, 96, 96, 255), false, FirstMovableIndex);
+				RenderModuleRow(LODLevel->GetTypeDataModule(), "Type Data", IM_COL32(81, 117, 176, 255), false, FirstMovableIndex);
+				RenderModuleRow(LODLevel->GetRequiredModule(), "Required", IM_COL32(63, 115, 130, 255), false, FirstMovableIndex);
+				RenderModuleRow(SpawnModule, "Spawn", IM_COL32(119, 111, 156, 255), false, FirstMovableIndex);
 
 				for (int32 ModuleIndex = 0; ModuleIndex < static_cast<int32>(Modules.size()); ++ModuleIndex)
 				{
@@ -1307,6 +1382,25 @@ void FParticleSystemEditorWidget::RenderEmitterPanel(UParticleSystem* ParticleSy
 			}
 
 			ImGui::EndChild();
+			if (ImGui::BeginDragDropTarget())
+			{
+				const ImGuiPayload* ActivePayload = ImGui::GetDragDropPayload();
+				if (ActivePayload && ActivePayload->IsDataType("PARTICLE_EMITTER_CARD"))
+				{
+					const bool bDropAfter = ImGui::GetMousePos().x > CardMin.x + CardWidth * 0.5f;
+					DrawEmitterDropIndicator(CardMin, CardMax, bDropAfter);
+					if (const ImGuiPayload* Payload = ImGui::AcceptDragDropPayload("PARTICLE_EMITTER_CARD", ImGuiDragDropFlags_AcceptNoDrawDefaultRect))
+					{
+						if (Payload->DataSize == sizeof(FParticleEmitterDragPayload))
+						{
+							const FParticleEmitterDragPayload DragPayload = *static_cast<const FParticleEmitterDragPayload*>(Payload->Data);
+							PendingMoveEmitterSourceIndex = DragPayload.SourceIndex;
+							PendingMoveEmitterTargetIndex = EmitterIndex + (bDropAfter ? 1 : 0);
+						}
+					}
+				}
+				ImGui::EndDragDropTarget();
+			}
 			if (bSelectedEmitter)
 			{
 				ImGui::GetWindowDrawList()->AddRect(CardMin, CardMax, IM_COL32(255, 218, 61, 255), 0.0f, 0, 1.5f);
@@ -1327,6 +1421,10 @@ void FParticleSystemEditorWidget::RenderEmitterPanel(UParticleSystem* ParticleSy
 				ParticleSystem->BumpVersion();
 				MarkDirty();
 			}
+		}
+		else if (PendingMoveEmitterSourceIndex >= 0 && PendingMoveEmitterTargetIndex >= 0)
+		{
+			MoveParticleEmitter(ParticleSystem, PendingMoveEmitterSourceIndex, PendingMoveEmitterTargetIndex);
 		}
 		else if (PendingMoveModule)
 		{
@@ -1816,8 +1914,10 @@ void FParticleSystemEditorWidget::DrawViewportAxisOverlay(ImDrawList* DrawList, 
 		return;
 	}
 
-	const FVector CameraRight = POV.Rotation.GetRightVector();
-	const FVector CameraUp = POV.Rotation.GetUpVector();
+	FRotator AxisRotation = POV.Rotation;
+	AxisRotation.Yaw = 180.0f - AxisRotation.Yaw;
+	const FVector CameraRight = AxisRotation.GetRightVector();
+	const FVector CameraUp = AxisRotation.GetUpVector();
 
 	const ImVec2 Origin(
 		ViewportPos.x + 42.0f,
@@ -1832,7 +1932,7 @@ void FParticleSystemEditorWidget::DrawViewportAxisOverlay(ImDrawList* DrawList, 
 	};
 
 	const FAxisSpec Axes[] = {
-		{ FVector(1.0f, 0.0f, 0.0f), IM_COL32(255, 45, 30, 255), "X" },
+		{ FVector(-1.0f, 0.0f, 0.0f), IM_COL32(255, 45, 30, 255), "X" },
 		{ FVector(0.0f, 1.0f, 0.0f), IM_COL32(60, 220, 45, 255), "Y" },
 		{ FVector(0.0f, 0.0f, 1.0f), IM_COL32(60, 145, 255, 255), "Z" },
 	};

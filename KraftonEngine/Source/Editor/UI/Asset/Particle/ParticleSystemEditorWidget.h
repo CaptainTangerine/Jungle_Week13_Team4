@@ -33,6 +33,7 @@ private:
 	void AddParticleEmitter(class UParticleSystem* ParticleSystem);
 	void InsertParticleEmitter(class UParticleSystem* ParticleSystem, int32 Index);
 	void DeleteParticleEmitter(class UParticleSystem* ParticleSystem, int32 Index);
+	void MoveParticleEmitter(class UParticleSystem* ParticleSystem, int32 SourceIndex, int32 TargetIndex);
 	void AddParticleModule(class UParticleSystem* ParticleSystem, class UParticleEmitter* Emitter, class UClass* ModuleClass);
 	void MoveParticleModule(class UParticleSystem* ParticleSystem, class UParticleLODLevel* SourceLODLevel, class UParticleLODLevel* TargetLODLevel, class UParticleModule* Module, int32 TargetIndex);
 	bool RenderObjectPropertiesInline(class UObject* Object);
