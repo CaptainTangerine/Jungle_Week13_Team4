@@ -16,6 +16,8 @@ public:
 	UParticleSystemComponent() = default;
 	~UParticleSystemComponent() override;
 
+	FPrimitiveSceneProxy* CreateSceneProxy() override;
+
 	void BeginPlay() override;
 	void EndPlay() override;
 	void Serialize(FArchive& Ar) override;

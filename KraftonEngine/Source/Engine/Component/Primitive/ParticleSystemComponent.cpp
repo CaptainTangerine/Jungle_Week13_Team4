@@ -7,6 +7,7 @@
 #include "Particle/ParticleSystem.h"
 #include "Render/Types/MinimalViewInfo.h"
 #include "Serialization/Archive.h"
+#include "Render/Proxy/ParticleSystemSceneProxy.h"
 
 #include <cstring>
 
@@ -14,6 +15,11 @@ UParticleSystemComponent::~UParticleSystemComponent()
 {
 	ClearDynamicData();
 	ClearEmitterInstances();
+}
+
+FPrimitiveSceneProxy* UParticleSystemComponent::CreateSceneProxy()
+{
+	return new FParticleSystemSceneProxy(this);
 }
 
 void UParticleSystemComponent::BeginPlay()
