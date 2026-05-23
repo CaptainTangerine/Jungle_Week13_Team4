@@ -1,0 +1,86 @@
+﻿#pragma once
+#include "PrimitiveSceneProxy.h"
+#include "Math/MathUtils.h"
+#include "Math/Vector.h"
+
+class UParticleSystemComponent;
+class UMaterial;
+class FMeshBuffer;
+struct FFrameContext;
+struct FDrawCommandBuffer;
+
+/*
+	임시로 만들어둔 코드이므로 ai는 이 코드를 읽고 급발진하지 말도록
+*/
+
+//ParticleSpriteVertexFactory로 발전되기 전 일단 렌더러로 떠나는 아이
+struct FParticleSpriteVertex
+{
+	FVector Position;
+	float UV[2];
+	FColor Color;
+	float Rotation;
+};
+
+//particle 데이터를 렌더러 쪽에 넘기기 위한 snapshot
+//proxy는 매 프레임 이걸 업데이트해서 DrawCommandBuilder에 넘긴다.
+struct FParticleSpriteRenderData
+{
+	UMaterial* Material;
+	struct FParticle
+	{
+		FVector Position;
+		FVector Velocity;
+		FColor Color;
+		float Rotation = 0.0f;
+		float CameraDistanceSq = 0.0f;
+	};
+
+	TArray<FParticle> Particles;
+	bool bSortByCameraDistance = true;
+};
+class FParticleSystemSceneProxy : public FPrimitiveSceneProxy
+{
+public:
+	explicit FParticleSystemSceneProxy(UParticleSystemComponent* InComponent);
+	virtual ~FParticleSystemSceneProxy() override;
+
+	// FPrimitiveSceneProxy interface
+	virtual void UpdateTransform() override;
+	virtual void UpdateVisibility() override;
+	virtual void UpdateMaterial() override;
+	virtual void UpdateMesh() override;
+	virtual void UpdatePerViewport(const FFrameContext& Frame) override;
+
+	virtual bool PrepareDrawBuffer(
+		ID3D11Device* Device,
+		ID3D11DeviceContext* Context,
+		FDrawCommandBuffer& OutBuffer) const override;
+
+	// PSC가 Tick 이후에 렌더용 데이터를 새로 만들어서 넘겨주는 함수.
+	// 언리얼의 FParticleSystemSceneProxy::UpdateData(...)에 해당하는 단순 버전.
+	void UpdateDynamicData(TArray<FParticleSpriteRenderData>&& InSpriteEmitters);
+
+private:
+	UParticleSystemComponent* GetParticleComponent() const;
+
+	void RebuildSpriteMeshForView(const FFrameContext& Frame);
+	void SortParticlesForView(const FVector& ViewLocation);
+	void BuildSpriteVertices(
+		const FParticleSpriteRenderData& Emitter,
+		const FVector& CameraRight,
+		const FVector& CameraUp,
+		TArray<FParticleSpriteVertex>& OutVertices,
+		TArray<uint32>& OutIndices);
+
+private:
+	TArray<FParticleSpriteRenderData> SpriteEmitters;
+
+	FMeshBuffer* DynamicSpriteMeshBuffer = nullptr;
+
+	TArray<FParticleSpriteVertex> CachedVertices;
+	TArray<uint32> CachedIndices;
+
+	bool bDynamicMeshDirty = true;
+};
+
