@@ -238,6 +238,14 @@ void FDrawCommandBuilder::BuildCommandForProxy(FScene& Scene, const FPrimitiveSc
 				ApplyMaterialRenderState(Cmd.RenderState, Mat, BaseRenderState);
 		}
 
+		//alpha blend 에서는 depth write를 막음.
+		//opaque 뒤에 있는 translucent는 depth test로 버리지만
+		//그 앞의 translucent에 대해서는 반투명한 애들의 depth가 남아 다른 애들이 버려지는 걸 막음.
+		if (Pass == ERenderPass::AlphaBlend)
+		{
+			Cmd.RenderState.DepthStencil = EDepthStencilState::DepthReadOnly;
+		}
+
 		Cmd.BuildSortKey();
 	}
 }

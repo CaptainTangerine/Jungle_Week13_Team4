@@ -45,6 +45,8 @@ void FFrameContext::SetViewportInfo(const FViewport* VP)
 	DepthCopyTexture        = VP->GetDepthCopyTexture();
 	DepthCopySRV            = VP->GetDepthCopySRV();
 	StencilCopySRV          = VP->GetStencilCopySRV();
+	OcclusionDepthCopyTexture = VP->GetOcclusionDepthCopyTexture();
+	OcclusionDepthCopySRV   = VP->GetOcclusionDepthCopySRV();
 	NormalRTV               = VP->GetNormalRTV();
 	NormalSRV               = VP->GetNormalSRV();
 	CullingHeatmapRTV       = VP->GetCullingHeatmapRTV();

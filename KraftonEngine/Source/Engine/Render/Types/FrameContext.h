@@ -55,6 +55,8 @@ struct FFrameContext
 	ID3D11Texture2D*          DepthCopyTexture     = nullptr;  // 복사본 (CopyResource 대상)
 	ID3D11ShaderResourceView* DepthCopySRV         = nullptr;
 	ID3D11ShaderResourceView* StencilCopySRV       = nullptr;
+	ID3D11Texture2D*          OcclusionDepthCopyTexture = nullptr;
+	ID3D11ShaderResourceView* OcclusionDepthCopySRV     = nullptr;
 
 	// GBuffer Normal RT — Opaque MRT[1] 출력, PostProcess에서 SRV로 읽기
 	ID3D11RenderTargetView*   NormalRTV             = nullptr;
@@ -124,6 +126,8 @@ struct FFrameContext
 		DepthCopyTexture        = nullptr;
 		DepthCopySRV            = nullptr;
 		StencilCopySRV          = nullptr;
+		OcclusionDepthCopyTexture = nullptr;
+		OcclusionDepthCopySRV   = nullptr;
 		NormalRTV               = nullptr;
 		NormalSRV               = nullptr;
 		CullingHeatmapRTV       = nullptr;

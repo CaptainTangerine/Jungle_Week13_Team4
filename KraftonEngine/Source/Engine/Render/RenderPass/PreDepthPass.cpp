@@ -33,6 +33,10 @@ void FPreDepthPass::EndPass(const FPassContext& Ctx)
 	{
 		DC->OMSetRenderTargets(0, nullptr, nullptr);
 		DC->CopyResource(Frame.DepthCopyTexture, Frame.DepthTexture);
+		if (Frame.OcclusionDepthCopyTexture)
+		{
+			DC->CopyResource(Frame.OcclusionDepthCopyTexture, Frame.DepthTexture);
+		}
 
 		ID3D11ShaderResourceView* depthSRV = Frame.DepthCopySRV;
 		DC->PSSetShaderResources(ESystemTexSlot::SceneDepth, 1, &depthSRV);

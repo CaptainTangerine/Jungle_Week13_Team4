@@ -195,7 +195,7 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 		SCOPE_STAT_CAT("GPUOcclusion", "4_ExecutePass");
 		GPUOcclusion.DispatchOcclusionTest(
 			Ctx,
-			VP->GetDepthCopySRV(),
+			VP->GetOcclusionDepthCopySRV(),
 			Output.FrustumVisibleProxies,
 			Frame.View, Frame.Proj,
 			VP->GetWidth(), VP->GetHeight());

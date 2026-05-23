@@ -178,6 +178,16 @@ bool FViewport::CreateResources()
 	if (FAILED(hr)) return false;
 	StencilCopySRV->SetPrivateData(WKPDID_D3DDebugObjectName, static_cast<UINT>(strlen("ViewportStencilCopySRV")), "ViewportStencilCopySRV");
 
+	D3D11_TEXTURE2D_DESC OcclusionCopyDesc = CopyDesc;
+	OcclusionCopyDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	hr = Device->CreateTexture2D(&OcclusionCopyDesc, nullptr, &OcclusionDepthCopyTexture);
+	if (FAILED(hr)) return false;
+	OcclusionDepthCopyTexture->SetPrivateData(WKPDID_D3DDebugObjectName, static_cast<UINT>(strlen("ViewportOcclusionDepthCopyTexture")), "ViewportOcclusionDepthCopyTexture");
+
+	hr = Device->CreateShaderResourceView(OcclusionDepthCopyTexture, &DepthSRVDesc, &OcclusionDepthCopySRV);
+	if (FAILED(hr)) return false;
+	OcclusionDepthCopySRV->SetPrivateData(WKPDID_D3DDebugObjectName, static_cast<UINT>(strlen("ViewportOcclusionDepthCopySRV")), "ViewportOcclusionDepthCopySRV");
+
 	D3D11_SHADER_RESOURCE_VIEW_DESC SceneColorCopySRVDesc = {};
 	SceneColorCopySRVDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	SceneColorCopySRVDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
@@ -256,6 +266,8 @@ void FViewport::ReleaseResources()
 	if (StencilCopySRV) { StencilCopySRV->Release(); StencilCopySRV = nullptr; }
 	if (DepthCopySRV) { DepthCopySRV->Release(); DepthCopySRV = nullptr; }
 	if (DepthCopyTexture) { DepthCopyTexture->Release(); DepthCopyTexture = nullptr; }
+	if (OcclusionDepthCopySRV) { OcclusionDepthCopySRV->Release(); OcclusionDepthCopySRV = nullptr; }
+	if (OcclusionDepthCopyTexture) { OcclusionDepthCopyTexture->Release(); OcclusionDepthCopyTexture = nullptr; }
 	if (DSV) { DSV->Release(); DSV = nullptr; }
 	if (DepthTexture) { DepthTexture->Release(); DepthTexture = nullptr; }
 	if (SRV) { SRV->Release(); SRV = nullptr; }
