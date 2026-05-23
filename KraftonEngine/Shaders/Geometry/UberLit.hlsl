@@ -163,8 +163,10 @@ UberVS_Output VS_SkeletalMesh(VS_Input_PNCTTBB input)
 struct UberPS_Output
 {
     float4 Color : SV_TARGET0; // 최종 색상 (기존 프레임 버퍼)
+#if !defined(UBER_COLOR_ONLY) || !UBER_COLOR_ONLY
     float4 Normal : SV_TARGET1; // World Normal (GBuffer Normal RT)
     float4 Culling : SV_TARGET2; // Tile Culling Heatmap
+#endif
 };
 
 // =============================================================================
@@ -196,8 +198,10 @@ HeatColor = lerp(HeatColor, float3(1.0f, 1.0f, 0.0f),  t3);
 HeatColor = lerp(HeatColor, float3(1.0f, 0.05f, 0.0f), t4);
 
 output.Color = float4(HeatColor, 1.f);
+#if !defined(UBER_COLOR_ONLY) || !UBER_COLOR_ONLY
 output.Normal = float4(normalize(input.normal), 1.0f);
 output.Culling = float4(0, 0, 0, 0);
+#endif
 return output;
 #endif
 
@@ -222,7 +226,9 @@ return output;
 #if defined(LIGHTING_MODEL_UNLIT) && LIGHTING_MODEL_UNLIT
     // Unlit: 라이팅 없이 Albedo만 출력
     float3 finalColor = ApplyWireframe(baseColor.rgb);
+#if !defined(UBER_COLOR_ONLY) || !UBER_COLOR_ONLY
     output.Culling = float4(0, 0, 0, 0);
+#endif
 
 #else
     float3 diffuse = float3(0, 0, 0);
@@ -242,7 +248,9 @@ return output;
 
 #endif
 
+#if !defined(UBER_COLOR_ONLY) || !UBER_COLOR_ONLY
     output.Culling = ComputeCullingHeatmap(input.position, input.worldPos);
+#endif
     // Diffuse에만 albedo를 곱하고, Specular는 빛 색상 그대로 더한다
     // (비금속 표면: specular 반사 = 빛의 색, 물체 색이 아님)
     float3 finalColor = baseColor.rgb * diffuse + specular + g_DefaultEmissive.rgb;
@@ -250,7 +258,9 @@ return output;
 #endif
 
     output.Color = float4(finalColor, baseColor.a);
+#if !defined(UBER_COLOR_ONLY) || !UBER_COLOR_ONLY
     output.Normal = float4(N, 1.0f); // alpha=1: 유효한 노말 마킹
+#endif
     
     return output;
 }

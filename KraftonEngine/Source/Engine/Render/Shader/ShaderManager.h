@@ -180,10 +180,32 @@ namespace EUberLitDefines
 	inline const D3D_SHADER_MACRO GouraudWeightBoneHeatMap[] = { {"LIGHTING_MODEL_GOURAUD", "1"}, {"WEIGHT_BONE_HEATMAP", "1"}, {nullptr, nullptr} };
 	inline const D3D_SHADER_MACRO LambertWeightBoneHeatMap[] = { {"LIGHTING_MODEL_LAMBERT", "1"}, {"WEIGHT_BONE_HEATMAP", "1"}, {nullptr, nullptr} };
 	inline const D3D_SHADER_MACRO PhongWeightBoneHeatMap[] = { {"LIGHTING_MODEL_PHONG", "1"}, {"WEIGHT_BONE_HEATMAP", "1"}, {nullptr, nullptr} };
+	inline const D3D_SHADER_MACRO DefaultColorOnly[] = { {"LIGHTING_MODEL_PHONG", "1"}, {"UBER_COLOR_ONLY", "1"}, {nullptr, nullptr} };
+	inline const D3D_SHADER_MACRO UnlitColorOnly[] = { {"LIGHTING_MODEL_UNLIT", "1"}, {"UBER_COLOR_ONLY", "1"}, {nullptr, nullptr} };
+	inline const D3D_SHADER_MACRO GouraudColorOnly[] = { {"LIGHTING_MODEL_GOURAUD", "1"}, {"UBER_COLOR_ONLY", "1"}, {nullptr, nullptr} };
+	inline const D3D_SHADER_MACRO LambertColorOnly[] = { {"LIGHTING_MODEL_LAMBERT", "1"}, {"UBER_COLOR_ONLY", "1"}, {nullptr, nullptr} };
+	inline const D3D_SHADER_MACRO PhongColorOnly[] = { {"LIGHTING_MODEL_PHONG", "1"}, {"UBER_COLOR_ONLY", "1"}, {nullptr, nullptr} };
+	inline const D3D_SHADER_MACRO DefaultWeightBoneHeatMapColorOnly[] = { {"LIGHTING_MODEL_PHONG", "1"}, {"WEIGHT_BONE_HEATMAP", "1"}, {"UBER_COLOR_ONLY", "1"}, {nullptr, nullptr} };
+	inline const D3D_SHADER_MACRO UnlitWeightBoneHeatMapColorOnly[] = { {"LIGHTING_MODEL_UNLIT", "1"}, {"WEIGHT_BONE_HEATMAP", "1"}, {"UBER_COLOR_ONLY", "1"}, {nullptr, nullptr} };
+	inline const D3D_SHADER_MACRO GouraudWeightBoneHeatMapColorOnly[] = { {"LIGHTING_MODEL_GOURAUD", "1"}, {"WEIGHT_BONE_HEATMAP", "1"}, {"UBER_COLOR_ONLY", "1"}, {nullptr, nullptr} };
+	inline const D3D_SHADER_MACRO LambertWeightBoneHeatMapColorOnly[] = { {"LIGHTING_MODEL_LAMBERT", "1"}, {"WEIGHT_BONE_HEATMAP", "1"}, {"UBER_COLOR_ONLY", "1"}, {nullptr, nullptr} };
+	inline const D3D_SHADER_MACRO PhongWeightBoneHeatMapColorOnly[] = { {"LIGHTING_MODEL_PHONG", "1"}, {"WEIGHT_BONE_HEATMAP", "1"}, {"UBER_COLOR_ONLY", "1"}, {nullptr, nullptr} };
 
-	inline const D3D_SHADER_MACRO* GetDefines(ELightingModel LightingModel, EVertexFactory VertexFactory, bool bWeightBoneHeatMap = false)
+	inline const D3D_SHADER_MACRO* GetDefines(ELightingModel LightingModel, EVertexFactory VertexFactory, bool bWeightBoneHeatMap = false, bool bColorOnly = false)
 	{
 		(void)VertexFactory;
+		if (bWeightBoneHeatMap && bColorOnly)
+		{
+			switch (LightingModel)
+			{
+			case ELightingModel::Unlit:   return UnlitWeightBoneHeatMapColorOnly;
+			case ELightingModel::Gouraud: return GouraudWeightBoneHeatMapColorOnly;
+			case ELightingModel::Lambert: return LambertWeightBoneHeatMapColorOnly;
+			case ELightingModel::Phong:   return PhongWeightBoneHeatMapColorOnly;
+			case ELightingModel::Default:
+			default:                      return DefaultWeightBoneHeatMapColorOnly;
+			}
+		}
 		if (bWeightBoneHeatMap)
 		{
 			switch (LightingModel)
@@ -194,6 +216,18 @@ namespace EUberLitDefines
 			case ELightingModel::Phong:   return PhongWeightBoneHeatMap;
 			case ELightingModel::Default:
 			default:                      return DefaultWeightBoneHeatMap;
+			}
+		}
+		if (bColorOnly)
+		{
+			switch (LightingModel)
+			{
+			case ELightingModel::Unlit:   return UnlitColorOnly;
+			case ELightingModel::Gouraud: return GouraudColorOnly;
+			case ELightingModel::Lambert: return LambertColorOnly;
+			case ELightingModel::Phong:   return PhongColorOnly;
+			case ELightingModel::Default:
+			default:                      return DefaultColorOnly;
 			}
 		}
 
@@ -208,12 +242,12 @@ namespace EUberLitDefines
 		}
 	}
 
-	inline FShaderKey MakePermutationKey(ELightingModel LightingModel, EVertexFactory VertexFactory, bool bWeightBoneHeatMap = false)
+	inline FShaderKey MakePermutationKey(ELightingModel LightingModel, EVertexFactory VertexFactory, bool bWeightBoneHeatMap = false, bool bColorOnly = false)
 	{
 		const char* VSEntryPoint = VertexFactory == EVertexFactory::SkeletalMesh
 			? EntryPoint::SkeletalMeshVS
 			: EntryPoint::StaticMeshVS;
-		return FShaderKey(EShaderPath::UberLit, GetDefines(LightingModel, VertexFactory, bWeightBoneHeatMap), VSEntryPoint, EntryPoint::PS);
+		return FShaderKey(EShaderPath::UberLit, GetDefines(LightingModel, VertexFactory, bWeightBoneHeatMap, bColorOnly), VSEntryPoint, EntryPoint::PS);
 	}
 }
 
@@ -270,7 +304,7 @@ public:
 	FShader* GetOrCreate(const FString& Path, EShaderErrorMode ErrorMode = EShaderErrorMode::Notification) { return GetOrCreate(FShaderKey(Path), ErrorMode); }
 	FShader* GetOrCreateShadowDepthPermutation(EShadowDepthDefines::EVertexFactory VF, EShaderErrorMode ErrorMode = EShaderErrorMode::Notification);
 	FShader* GetOrCreateUberLitPermutation(EUberLitDefines::ELightingModel LightingModel, EUberLitDefines::EVertexFactory VertexFactory,
-		EShaderErrorMode ErrorMode = EShaderErrorMode::Notification, bool bWeightBoneHeatMap = false);
+		EShaderErrorMode ErrorMode = EShaderErrorMode::Notification, bool bWeightBoneHeatMap = false, bool bColorOnly = false);
 	FShader* FindOrCreate(const FString& Path);
 
 	// Compute Shader — 캐시 기반. 호출자는 포인터만 보관, FShaderManager가 소유 + 핫 리로드.

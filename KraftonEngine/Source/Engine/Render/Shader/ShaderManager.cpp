@@ -171,10 +171,10 @@ FShader* FShaderManager::GetOrCreateShadowDepthPermutation(EShadowDepthDefines::
 }
 
 FShader* FShaderManager::GetOrCreateUberLitPermutation(EUberLitDefines::ELightingModel LightingModel,
-	EUberLitDefines::EVertexFactory VertexFactory, EShaderErrorMode ErrorMode, bool bWeightBoneHeatMap)
+	EUberLitDefines::EVertexFactory VertexFactory, EShaderErrorMode ErrorMode, bool bWeightBoneHeatMap, bool bColorOnly)
 {
-	const D3D_SHADER_MACRO* Defines = EUberLitDefines::GetDefines(LightingModel, VertexFactory, bWeightBoneHeatMap);
-	return PreCompile(EUberLitDefines::MakePermutationKey(LightingModel, VertexFactory, bWeightBoneHeatMap), Defines, ErrorMode);
+	const D3D_SHADER_MACRO* Defines = EUberLitDefines::GetDefines(LightingModel, VertexFactory, bWeightBoneHeatMap, bColorOnly);
+	return PreCompile(EUberLitDefines::MakePermutationKey(LightingModel, VertexFactory, bWeightBoneHeatMap, bColorOnly), Defines, ErrorMode);
 }
 
 // ============================================================

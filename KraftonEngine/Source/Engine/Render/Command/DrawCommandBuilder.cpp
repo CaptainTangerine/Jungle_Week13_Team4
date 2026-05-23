@@ -102,7 +102,7 @@ void FDrawCommandBuilder::BeginCollect(const FFrameContext& Frame)
 // ============================================================
 // SelectEffectiveShader — ViewMode에 따른 UberLit 셰이더 변형 선택
 // ============================================================
-FShader* FDrawCommandBuilder::SelectEffectiveShader(FShader* ProxyShader, EViewMode ViewMode, bool bUseSkeletalVertexFactory, bool bWeightBoneHeatMap)
+FShader* FDrawCommandBuilder::SelectEffectiveShader(FShader* ProxyShader, ERenderPass Pass, EViewMode ViewMode, bool bUseSkeletalVertexFactory, bool bWeightBoneHeatMap)
 {
 	if (ProxyShader != FShaderManager::Get().GetOrCreate(EShaderPath::UberLit))
 		return ProxyShader;
@@ -110,21 +110,22 @@ FShader* FDrawCommandBuilder::SelectEffectiveShader(FShader* ProxyShader, EViewM
 	const EUberLitDefines::EVertexFactory VertexFactory = bUseSkeletalVertexFactory
 		? EUberLitDefines::EVertexFactory::SkeletalMesh
 		: EUberLitDefines::EVertexFactory::StaticMesh;
+	const bool bColorOnly = (Pass == ERenderPass::AlphaBlend);
 
 	switch (ViewMode)
 	{
 	case EViewMode::Unlit:
-		return FShaderManager::Get().GetOrCreateUberLitPermutation(EUberLitDefines::ELightingModel::Unlit, VertexFactory, EShaderErrorMode::Notification, bWeightBoneHeatMap);
+		return FShaderManager::Get().GetOrCreateUberLitPermutation(EUberLitDefines::ELightingModel::Unlit, VertexFactory, EShaderErrorMode::Notification, bWeightBoneHeatMap, bColorOnly);
 	case EViewMode::Lit_Gouraud:
-		return FShaderManager::Get().GetOrCreateUberLitPermutation(EUberLitDefines::ELightingModel::Gouraud, VertexFactory, EShaderErrorMode::Notification, bWeightBoneHeatMap);
+		return FShaderManager::Get().GetOrCreateUberLitPermutation(EUberLitDefines::ELightingModel::Gouraud, VertexFactory, EShaderErrorMode::Notification, bWeightBoneHeatMap, bColorOnly);
 	case EViewMode::Lit_Lambert:
-		return FShaderManager::Get().GetOrCreateUberLitPermutation(EUberLitDefines::ELightingModel::Lambert, VertexFactory, EShaderErrorMode::Notification, bWeightBoneHeatMap);
+		return FShaderManager::Get().GetOrCreateUberLitPermutation(EUberLitDefines::ELightingModel::Lambert, VertexFactory, EShaderErrorMode::Notification, bWeightBoneHeatMap, bColorOnly);
 	case EViewMode::Lit_Phong:
 	case EViewMode::LightCulling:
-		return FShaderManager::Get().GetOrCreateUberLitPermutation(EUberLitDefines::ELightingModel::Phong, VertexFactory, EShaderErrorMode::Notification, bWeightBoneHeatMap);
+		return FShaderManager::Get().GetOrCreateUberLitPermutation(EUberLitDefines::ELightingModel::Phong, VertexFactory, EShaderErrorMode::Notification, bWeightBoneHeatMap, bColorOnly);
 	default:
-		return bUseSkeletalVertexFactory
-			? FShaderManager::Get().GetOrCreateUberLitPermutation(EUberLitDefines::ELightingModel::Default, VertexFactory, EShaderErrorMode::Notification, bWeightBoneHeatMap)
+		return bUseSkeletalVertexFactory || bColorOnly
+			? FShaderManager::Get().GetOrCreateUberLitPermutation(EUberLitDefines::ELightingModel::Default, VertexFactory, EShaderErrorMode::Notification, bWeightBoneHeatMap, bColorOnly)
 			: ProxyShader;
 	}
 }
@@ -200,7 +201,7 @@ void FDrawCommandBuilder::BuildCommandForProxy(FScene& Scene, const FPrimitiveSc
 		FShader* SectionShader = (Section.Material && Section.Material->GetShader())
 			? Section.Material->GetShader()
 			: Proxy.GetShader();
-		FShader* EffectiveShader = SelectEffectiveShader(SectionShader, CollectViewMode, bGPUSkinning, bWeightBoneHeatMap);
+		FShader* EffectiveShader = SelectEffectiveShader(SectionShader, Pass, CollectViewMode, bGPUSkinning, bWeightBoneHeatMap);
 
 		FDrawCommand& Cmd = DrawCommandList.AddCommand();
 		Cmd.Pass = Pass;
