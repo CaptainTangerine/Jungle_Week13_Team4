@@ -19,6 +19,7 @@ public:
 	void Serialize(FArchive& Ar) override;
 
 	UParticleEmitter* AddEmitter();
+	UParticleEmitter* InsertEmitter(int32 Index);
 	bool RemoveEmitter(UParticleEmitter* InEmitter);
 	void ClearEmitters();
 	void CacheSystemModuleInfo();
