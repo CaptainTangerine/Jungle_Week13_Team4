@@ -20,6 +20,8 @@
 #include "Animation/AnimationManager.h"
 #include "Animation/Skeleton/Skeleton.h"
 #include "Animation/Skeleton/SkeletonManager.h"
+#include "Particle/ParticleSystem.h"
+#include "Particle/Asset/ParticleSystemManager.h"
 #include "Asset/AssetRegistry.h"
 #include "Editor/UI/Dialog/FbxImportOptionsDialog.h"
 #include "Editor/UI/Asset/Mesh/MeshEditorWidget.h"
@@ -615,6 +617,20 @@ void AnimGraphElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
 	if (UAnimGraphAsset* GraphAsset = FAnimGraphManager::Get().Load(FilePath))
 	{
 		Context.EditorEngine->OpenAssetEditorForObject(GraphAsset);
+	}
+}
+
+void ParticleSystemElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
+{
+	if (!Context.EditorEngine)
+	{
+		return;
+	}
+
+	const FString FilePath = FPaths::ToUtf8(ContentItem.Path.wstring());
+	if (UParticleSystem* ParticleSystem = FParticleSystemManager::Get().Load(FilePath))
+	{
+		Context.EditorEngine->OpenAssetEditorForObject(ParticleSystem);
 	}
 }
 
