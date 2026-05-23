@@ -31,10 +31,11 @@ public:
 	void RebuildModuleLists();
 
 	int32 GetLevel() const { return Level; }
+	void SetLevelIndex(int32 InLevel);
 	bool IsEnabled() const { return bEnabled; }
 
 private:
-	UPROPERTY(Edit, Save, Category="LOD", DisplayName="Level", Min=0.0f, Max=16.0f, Speed=1.0f)
+	UPROPERTY(Save, Category="LOD", DisplayName="Level")
 	int32 Level = 0;
 
 	UPROPERTY(Edit, Save, Category="LOD", DisplayName="Enabled")

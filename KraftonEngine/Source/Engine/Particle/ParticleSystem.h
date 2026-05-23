@@ -23,8 +23,10 @@ public:
 	void ClearEmitters();
 	void CacheSystemModuleInfo();
 	void InitializeDefaultSpriteSystem();
+	int32 SelectLODIndexByDistance(float Distance) const;
 
 	const TArray<UParticleEmitter*>& GetEmitters() const { return Emitters; }
+	const TArray<float>& GetLODDistances() const { return LODDistances; }
 
 	void SetSourcePath(const FString& InPath) { SourcePath = InPath; }
 	const FString& GetSourcePath() const { return SourcePath; }
@@ -38,6 +40,9 @@ private:
 
 	UPROPERTY(Edit, Save, Category="ParticleSystem", DisplayName="Warmup Time", Min=0.0f, Max=60.0f, Speed=0.1f)
 	float WarmupTime = 0.0f;
+
+	UPROPERTY(Edit, Save, Category="LOD", DisplayName="LOD Distances")
+	TArray<float> LODDistances = { 0.0f, 1500.0f, 3000.0f, 6000.0f };
 
 	UPROPERTY(Edit, Category="ParticleSystem", DisplayName="Emitters", AllowedClass=UParticleEmitter)
 	TArray<UParticleEmitter*> Emitters;

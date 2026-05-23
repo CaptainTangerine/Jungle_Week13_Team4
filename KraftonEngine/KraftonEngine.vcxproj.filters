@@ -974,6 +974,9 @@
     <ClCompile Include="Source\Engine\Component\Primitive\HeightFogComponent.cpp">
       <Filter>Source\Engine\Component\Primitive</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Component\Primitive\ParticleSystemComponent.cpp">
+      <Filter>Source\Engine\Component\Primitive</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Component\Primitive\SkeletalMeshComponent.cpp">
       <Filter>Source\Engine\Component\Primitive</Filter>
     </ClCompile>
@@ -1249,6 +1252,12 @@
     </ClCompile>
     <ClCompile Include="Source\Engine\Particle\ParticleEmitter.cpp">
       <Filter>Source\Engine\Particle\Asset</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Particle\ParticleEmitterInstance.cpp">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Particle\ParticleDynamicData.cpp">
+      <Filter>Source\Engine\Particle</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Particle\ParticleLODLevel.cpp">
       <Filter>Source\Engine\Particle\Asset</Filter>
@@ -2018,6 +2027,9 @@
     <ClInclude Include="Source\Engine\Component\Primitive\HeightFogComponent.h">
       <Filter>Source\Engine\Component\Primitive</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Component\Primitive\ParticleSystemComponent.h">
+      <Filter>Source\Engine\Component\Primitive</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Component\Primitive\SkeletalMeshComponent.h">
       <Filter>Source\Engine\Component\Primitive</Filter>
     </ClInclude>
@@ -2374,6 +2386,15 @@
     </ClInclude>
     <ClInclude Include="Source\Engine\Particle\ParticleEmitter.h">
       <Filter>Source\Engine\Particle\Asset</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Particle\ParticleEmitterInstance.h">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Particle\ParticleHelper.h">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Particle\ParticleDynamicData.h">
+      <Filter>Source\Engine\Particle</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Particle\ParticleLODLevel.h">
       <Filter>Source\Engine\Particle\Asset</Filter>

@@ -5,6 +5,27 @@
 
 #include <algorithm>
 
+namespace
+{
+	void NormalizeLODDistances(TArray<float>& LODDistances)
+	{
+		if (LODDistances.empty())
+		{
+			LODDistances.push_back(0.0f);
+			return;
+		}
+
+		LODDistances[0] = 0.0f;
+		for (int32 Index = 1; Index < static_cast<int32>(LODDistances.size()); ++Index)
+		{
+			if (LODDistances[Index] < LODDistances[Index - 1])
+			{
+				LODDistances[Index] = LODDistances[Index - 1];
+			}
+		}
+	}
+}
+
 UParticleSystem::~UParticleSystem()
 {
 	ParticleSerialization::DestroyObjectArray(Emitters);
@@ -12,12 +33,18 @@ UParticleSystem::~UParticleSystem()
 
 void UParticleSystem::Serialize(FArchive& Ar)
 {
+	if (Ar.IsSaving())
+	{
+		NormalizeLODDistances(LODDistances);
+	}
+
 	Ar << Version;
 	SerializeProperties(Ar, PF_Save);
 	ParticleSerialization::SerializeInstancedObjectArray(Ar, Emitters, this);
 
 	if (Ar.IsLoading())
 	{
+		NormalizeLODDistances(LODDistances);
 		CacheSystemModuleInfo();
 	}
 }
@@ -56,6 +83,8 @@ void UParticleSystem::ClearEmitters()
 
 void UParticleSystem::CacheSystemModuleInfo()
 {
+	NormalizeLODDistances(LODDistances);
+
 	for (UParticleEmitter* Emitter : Emitters)
 	{
 		if (Emitter)
@@ -63,6 +92,36 @@ void UParticleSystem::CacheSystemModuleInfo()
 			Emitter->CacheEmitterModuleInfo();
 		}
 	}
+}
+
+int32 UParticleSystem::SelectLODIndexByDistance(float Distance) const
+{
+	if (LODDistances.empty())
+	{
+		return 0;
+	}
+
+	const float ClampedDistance = Distance < 0.0f ? 0.0f : Distance;
+	int32 SelectedLOD = 0;
+	float PreviousThreshold = 0.0f;
+
+	for (int32 Index = 0; Index < static_cast<int32>(LODDistances.size()); ++Index)
+	{
+		float Threshold = LODDistances[Index] < 0.0f ? 0.0f : LODDistances[Index];
+		if (Threshold < PreviousThreshold)
+		{
+			Threshold = PreviousThreshold;
+		}
+
+		if (ClampedDistance >= Threshold)
+		{
+			SelectedLOD = Index;
+		}
+
+		PreviousThreshold = Threshold;
+	}
+
+	return SelectedLOD;
 }
 
 void UParticleSystem::InitializeDefaultSpriteSystem()

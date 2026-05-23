@@ -22,10 +22,13 @@ public:
 	bool RemoveLODLevel(UParticleLODLevel* InLODLevel);
 	void ClearLODLevels();
 	void CacheEmitterModuleInfo();
+	void ReindexLODLevels();
 
 	UParticleLODLevel* GetLODLevel(int32 Index) const;
+	UParticleLODLevel* GetLODLevelForIndex(int32 Index) const;
 	UParticleLODLevel* GetHighestEnabledLODLevel() const;
 	const TArray<UParticleLODLevel*>& GetLODLevels() const { return LODLevels; }
+	int32 GetLODLevelCount() const { return static_cast<int32>(LODLevels.size()); }
 
 	const FName& GetEmitterName() const { return EmitterName; }
 	int32 GetParticleSize() const { return ParticleSize; }

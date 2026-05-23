@@ -118,3 +118,8 @@ void UParticleLODLevel::RebuildModuleLists()
 		}
 	}
 }
+
+void UParticleLODLevel::SetLevelIndex(int32 InLevel)
+{
+	Level = InLevel < 0 ? 0 : InLevel;
+}

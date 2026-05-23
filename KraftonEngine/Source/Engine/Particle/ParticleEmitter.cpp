@@ -1,17 +1,10 @@
 ﻿#include "ParticleEmitter.h"
 
+#include "Math/MathUtils.h"
 #include "Particle/Asset/ParticleSerialization.h"
 #include "Serialization/Archive.h"
 
 #include <algorithm>
-
-namespace
-{
-	int32 AlignParticleBytes(int32 Value, int32 Alignment)
-	{
-		return ((Value + Alignment - 1) / Alignment) * Alignment;
-	}
-}
 
 UParticleEmitter::UParticleEmitter()
 {
@@ -31,6 +24,7 @@ void UParticleEmitter::Serialize(FArchive& Ar)
 
 	if (Ar.IsLoading())
 	{
+		ReindexLODLevels();
 		CacheEmitterModuleInfo();
 	}
 }
@@ -39,6 +33,7 @@ UParticleLODLevel* UParticleEmitter::AddLODLevel()
 {
 	UParticleLODLevel* NewLODLevel = UObjectManager::Get().CreateObject<UParticleLODLevel>(this);
 	LODLevels.push_back(NewLODLevel);
+	ReindexLODLevels();
 	CacheEmitterModuleInfo();
 	return NewLODLevel;
 }
@@ -54,6 +49,7 @@ bool UParticleEmitter::RemoveLODLevel(UParticleLODLevel* InLODLevel)
 	UParticleLODLevel* Removed = *It;
 	LODLevels.erase(It);
 	ParticleSerialization::DestroyObjectTree(Removed);
+	ReindexLODLevels();
 	CacheEmitterModuleInfo();
 	return true;
 }
@@ -67,7 +63,7 @@ void UParticleEmitter::ClearLODLevels()
 void UParticleEmitter::CacheEmitterModuleInfo()
 {
 	ParticleSize = sizeof(FBaseParticle);
-	ParticleStride = AlignParticleBytes(ParticleSize, 16);
+	ParticleStride = FMath::AlignBytes(ParticleSize, 16);
 	InstancePayloadSize = 0;
 
 	for (UParticleLODLevel* LODLevel : LODLevels)
@@ -79,15 +75,32 @@ void UParticleEmitter::CacheEmitterModuleInfo()
 
 		LODLevel->RebuildModuleLists();
 
+		int32 LODParticleStride = FMath::AlignBytes(ParticleSize, 16);
+		int32 LODInstancePayloadSize = 0;
+
 		for (UParticleModule* Module : LODLevel->GetModules())
 		{
-			if (!Module)
+			if (!Module || !Module->IsEnabled())
 			{
 				continue;
 			}
 
-			ParticleStride += AlignParticleBytes(Module->GetParticlePayloadSize(), 16);
-			InstancePayloadSize += AlignParticleBytes(Module->GetInstancePayloadSize(), 16);
+			LODParticleStride += FMath::AlignBytes(Module->GetParticlePayloadSize(), 16);
+			LODInstancePayloadSize += FMath::AlignBytes(Module->GetInstancePayloadSize(), 16);
+		}
+
+		ParticleStride = std::max(ParticleStride, LODParticleStride);
+		InstancePayloadSize = std::max(InstancePayloadSize, LODInstancePayloadSize);
+	}
+}
+
+void UParticleEmitter::ReindexLODLevels()
+{
+	for (int32 Index = 0; Index < static_cast<int32>(LODLevels.size()); ++Index)
+	{
+		if (LODLevels[Index])
+		{
+			LODLevels[Index]->SetLevelIndex(Index);
 		}
 	}
 }
@@ -95,6 +108,44 @@ void UParticleEmitter::CacheEmitterModuleInfo()
 UParticleLODLevel* UParticleEmitter::GetLODLevel(int32 Index) const
 {
 	return Index >= 0 && Index < static_cast<int32>(LODLevels.size()) ? LODLevels[Index] : nullptr;
+}
+
+UParticleLODLevel* UParticleEmitter::GetLODLevelForIndex(int32 Index) const
+{
+	if (LODLevels.empty())
+	{
+		return nullptr;
+	}
+
+	int32 ClampedIndex = Index;
+	if (ClampedIndex < 0)
+	{
+		ClampedIndex = 0;
+	}
+	if (ClampedIndex >= static_cast<int32>(LODLevels.size()))
+	{
+		ClampedIndex = static_cast<int32>(LODLevels.size()) - 1;
+	}
+
+	for (int32 LODIndex = ClampedIndex; LODIndex >= 0; --LODIndex)
+	{
+		UParticleLODLevel* LODLevel = LODLevels[LODIndex];
+		if (LODLevel && LODLevel->IsEnabled())
+		{
+			return LODLevel;
+		}
+	}
+
+	for (int32 LODIndex = ClampedIndex + 1; LODIndex < static_cast<int32>(LODLevels.size()); ++LODIndex)
+	{
+		UParticleLODLevel* LODLevel = LODLevels[LODIndex];
+		if (LODLevel && LODLevel->IsEnabled())
+		{
+			return LODLevel;
+		}
+	}
+
+	return nullptr;
 }
 
 UParticleLODLevel* UParticleEmitter::GetHighestEnabledLODLevel() const

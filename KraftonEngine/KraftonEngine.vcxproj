@@ -524,6 +524,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Engine\Component\Primitive\CylindricalBillboardComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\Primitive\DecalComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\Primitive\HeightFogComponent.cpp" />
+    <ClCompile Include="Source\Engine\Component\Primitive\ParticleSystemComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\Primitive\SkeletalMeshComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\Primitive\SkinnedMeshComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\Primitive\StaticMeshComponent.cpp" />
@@ -615,7 +616,9 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Engine\Object\FName.cpp" />
     <ClCompile Include="Source\Engine\Object\Object.cpp" />
     <ClCompile Include="Source\Engine\Object\UUIDGenerator.cpp" />
+    <ClCompile Include="Source\Engine\Particle\ParticleDynamicData.cpp" />
     <ClCompile Include="Source\Engine\Particle\ParticleEmitter.cpp" />
+    <ClCompile Include="Source\Engine\Particle\ParticleEmitterInstance.cpp" />
     <ClCompile Include="Source\Engine\Particle\ParticleLODLevel.cpp" />
     <ClCompile Include="Source\Engine\Particle\ParticleModule.cpp" />
     <ClCompile Include="Source\Engine\Particle\ParticleSystem.cpp" />
@@ -874,6 +877,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Engine\Component\Primitive\CylindricalBillboardComponent.h" />
     <ClInclude Include="Source\Engine\Component\Primitive\DecalComponent.h" />
     <ClInclude Include="Source\Engine\Component\Primitive\HeightFogComponent.h" />
+    <ClInclude Include="Source\Engine\Component\Primitive\ParticleSystemComponent.h" />
     <ClInclude Include="Source\Engine\Component\Primitive\SkeletalMeshComponent.h" />
     <ClInclude Include="Source\Engine\Component\Primitive\SkinnedMeshComponent.h" />
     <ClInclude Include="Source\Engine\Component\Primitive\StaticMeshComponent.h" />
@@ -992,7 +996,10 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Engine\Object\Reflection\ObjectMacros.h" />
     <ClInclude Include="Source\Engine\Object\Reflection\UClass.h" />
     <ClInclude Include="Source\Engine\Object\Reflection\UStruct.h" />
+    <ClInclude Include="Source\Engine\Particle\ParticleDynamicData.h" />
     <ClInclude Include="Source\Engine\Particle\ParticleEmitter.h" />
+    <ClInclude Include="Source\Engine\Particle\ParticleEmitterInstance.h" />
+    <ClInclude Include="Source\Engine\Particle\ParticleHelper.h" />
     <ClInclude Include="Source\Engine\Particle\ParticleLODLevel.h" />
     <ClInclude Include="Source\Engine\Particle\ParticleModule.h" />
     <ClInclude Include="Source\Engine\Particle\Asset\ParticleSerialization.h" />

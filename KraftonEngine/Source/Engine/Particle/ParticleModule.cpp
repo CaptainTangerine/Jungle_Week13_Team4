@@ -1,6 +1,8 @@
 ﻿#include "ParticleModule.h"
 
 #include "Math/MathUtils.h"
+#include "Particle/ParticleEmitterInstance.h"
+#include "Particle/ParticleHelper.h"
 #include "Serialization/Archive.h"
 
 namespace
@@ -14,29 +16,36 @@ namespace
 	{
 		return FLinearColor(Color.R, Color.G, Color.B, Color.A);
 	}
+
+	FLinearColor LerpColor(const FLinearColor& A, const FLinearColor& B, float Alpha)
+	{
+		return FLinearColor(
+			FMath::Lerp(A.R, B.R, Alpha),
+			FMath::Lerp(A.G, B.G, Alpha),
+			FMath::Lerp(A.B, B.B, Alpha),
+			FMath::Lerp(A.A, B.A, Alpha));
+	}
 }
 
 
-// TODO : 진짜 구현은 런타임 계층이 생긴 뒤 처리
 const FTransform& UParticleModule::FContext::GetTransform() const
 {
-	static const FTransform IdentityTransform;
-	return IdentityTransform;
+	return Owner.GetComponentTransform();
 }
 
 UObject* UParticleModule::FContext::GetDistributionData() const
 {
-	return nullptr;
+	return Owner.GetDistributionData();
 }
 
 FString UParticleModule::FContext::GetTemplateName() const
 {
-	return FString();
+	return Owner.GetTemplateName();
 }
 
 FString UParticleModule::FContext::GetInstanceName() const
 {
-	return FString();
+	return Owner.GetInstanceName();
 }
 
 
@@ -118,7 +127,16 @@ void UParticleModuleColor::Spawn(const FSpawnContext& Context)
 
 void UParticleModuleColor::Update(const FUpdateContext& Context)
 {
-	(void)Context;
+	if (!bColorOverLife)
+	{
+		return;
+	}
+
+	const FLinearColor InitialColor = ToLinearColor(StartColor);
+	const FLinearColor FinalColor = ToLinearColor(EndColor);
+	BEGIN_UPDATE_LOOP
+		Particle.Color = LerpColor(InitialColor, FinalColor, FMath::Clamp(Particle.RelativeTime, 0.0f, 1.0f));
+	END_UPDATE_LOOP
 }
 
 void UParticleModuleSize::Spawn(const FSpawnContext& Context)
@@ -135,5 +153,12 @@ void UParticleModuleSize::Spawn(const FSpawnContext& Context)
 
 void UParticleModuleSize::Update(const FUpdateContext& Context)
 {
-	(void)Context;
+	if (!bSizeOverLife)
+	{
+		return;
+	}
+
+	BEGIN_UPDATE_LOOP
+		Particle.Size = Particle.BaseSize + (EndSize - Particle.BaseSize) * FMath::Clamp(Particle.RelativeTime, 0.0f, 1.0f);
+	END_UPDATE_LOOP
 }

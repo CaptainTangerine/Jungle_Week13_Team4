@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+#include "Core/Types/CoreTypes.h"
+
 namespace FMath
 {
 	constexpr float Pi = 3.14159265358979323846f;
@@ -17,6 +19,15 @@ namespace FMath
 	inline float Lerp(float A, float B, float Alpha)
 	{
 		return A + Alpha * (B - A);
+	}
+
+	inline int32 AlignBytes(int32 Value, int32 Alignment)
+	{
+		if (Alignment <= 0)
+		{
+			return Value;
+		}
+		return ((Value + Alignment - 1) / Alignment) * Alignment;
 	}
 }
 
