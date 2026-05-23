@@ -98,6 +98,34 @@ static bool ProjectFileExistsForContentBrowser(const FString& Path)
 	return std::filesystem::exists(FullPath) && std::filesystem::is_regular_file(FullPath);
 }
 
+static bool IsProjectPathForContentBrowser(const std::filesystem::path& Path)
+{
+	std::error_code Ec;
+	const std::filesystem::path Root = std::filesystem::weakly_canonical(FPaths::RootDir(), Ec);
+	if (Ec)
+	{
+		return false;
+	}
+
+	const std::filesystem::path Candidate = std::filesystem::weakly_canonical(Path, Ec);
+	if (Ec)
+	{
+		return false;
+	}
+
+	auto RootIt = Root.begin();
+	auto CandidateIt = Candidate.begin();
+	for (; RootIt != Root.end() && CandidateIt != Candidate.end(); ++RootIt, ++CandidateIt)
+	{
+		if (*RootIt != *CandidateIt)
+		{
+			return false;
+		}
+	}
+
+	return RootIt == Root.end();
+}
+
 static bool HasImportedFbxAssetForContentBrowser(const FString& SourceFbxPath)
 {
 	return ProjectFileExistsForContentBrowser(FMeshManager::GetSkeletalMeshBinaryFilePath(SourceFbxPath)) ||
@@ -295,6 +323,39 @@ bool ContentBrowserElement::RenameTo(const FString& NewStem, FString* OutError)
 	return true;
 }
 
+bool ContentBrowserElement::DeleteFromDisk(FString* OutError)
+{
+	auto SetError = [&](const char* Msg) { if (OutError) *OutError = Msg; };
+
+	if (ContentItem.bIsDirectory)
+	{
+		SetError("Directories cannot be deleted from this menu.");
+		return false;
+	}
+
+	if (!IsProjectPathForContentBrowser(ContentItem.Path))
+	{
+		SetError("Cannot delete files outside the project.");
+		return false;
+	}
+
+	std::error_code Ec;
+	if (!std::filesystem::exists(ContentItem.Path, Ec) || !std::filesystem::is_regular_file(ContentItem.Path, Ec))
+	{
+		SetError("File does not exist.");
+		return false;
+	}
+
+	std::filesystem::remove(ContentItem.Path, Ec);
+	if (Ec)
+	{
+		SetError(Ec.message().c_str());
+		return false;
+	}
+
+	return true;
+}
+
 bool ContentBrowserElement::RenderSelectSpace(ContentBrowserContext& Context)
 {
 	FString Name = FPaths::ToUtf8(ContentItem.Name);
@@ -388,6 +449,24 @@ void ContentBrowserElement::Render(ContentBrowserContext& Context)
 		{
 			Context.SelectedElement = shared_from_this();
 			Context.bRenameRequested = true;
+		}
+		if (!ContentItem.bIsDirectory && ImGui::MenuItem("Delete"))
+		{
+			Context.SelectedElement = shared_from_this();
+			FString Error;
+			if (DeleteFromDisk(&Error))
+			{
+				Context.SelectedElement.reset();
+				Context.bPendingContentRefresh = true;
+				ImGui::CloseCurrentPopup();
+				ImGui::EndPopup();
+				return;
+			}
+
+			if (!Error.empty())
+			{
+				UE_LOG("Failed to delete asset: %s", Error.c_str());
+			}
 		}
 		ImGui::Separator();
 		RenderContextMenu(Context);
