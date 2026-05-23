@@ -20,7 +20,7 @@ namespace
 FParticleSystemSceneProxy::FParticleSystemSceneProxy(UParticleSystemComponent* InComponent)
 	: FPrimitiveSceneProxy(InComponent)
 {
-	ProxyFlags |= EPrimitiveProxyFlags::PerViewportUpdate;
+	ProxyFlags |= EPrimitiveProxyFlags::PerViewportUpdate | EPrimitiveProxyFlags::NeverCull;
 	// 동료가 작업한 동적 버퍼 할당
 	DynamicSpriteVB = new FDynamicVertexBuffer();
 	DynamicSpriteIB = new FDynamicIndexBuffer();

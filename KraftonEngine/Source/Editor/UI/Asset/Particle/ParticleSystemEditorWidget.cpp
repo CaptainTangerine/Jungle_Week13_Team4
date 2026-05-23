@@ -1,6 +1,7 @@
 ﻿#include "Editor/UI/Asset/Particle/ParticleSystemEditorWidget.h"
 
 #include "Asset/AssetRegistry.h"
+#include "Component/Primitive/ParticleSystemComponent.h"
 #include "Particle/ParticleSystem.h"
 #include "Particle/Asset/ParticleSystemManager.h"
 #include "Editor/EditorEngine.h"
@@ -437,13 +438,30 @@ void FParticleSystemEditorWidget::Open(UObject* Object)
 		return;
 	}
 
+	UParticleSystem* ParticleSystem = Cast<UParticleSystem>(EditedObject);
+	if (!ParticleSystem)
+	{
+		return;
+	}
+	if (ParticleSystem->GetEmitters().empty())
+	{
+		ParticleSystem->InitializeDefaultSpriteSystem();
+		SelectedEmitterIndex = 0;
+		MarkDirty();
+	}
+
 	FWorldContext& WorldContext = GEngine->CreateWorldContext(EWorldType::EditorPreview, PreviewWorldHandle);
 	WorldContext.World->SetWorldType(EWorldType::EditorPreview);
 	WorldContext.World->InitWorld();
 
 	AActor* PreviewActor = WorldContext.World->SpawnActor<AActor>();
 	PreviewActor->SetActorLocation(FVector(0.0f, 0.0f, 0.0f));
+	PreviewActor->bTickInEditor = true;
 
+	UParticleSystemComponent* ParticleComponent = PreviewActor->AddComponent<UParticleSystemComponent>();
+	PreviewActor->SetRootComponent(ParticleComponent);
+	ParticleComponent->SetTemplate(ParticleSystem);
+	
 	ADirectionalLightActor* LightActor = WorldContext.World->SpawnActor<ADirectionalLightActor>();
 	LightActor->InitDefaultComponents();
 	LightActor->SetActorRotation(FVector(0.0f, 45.0f, -45.0f));

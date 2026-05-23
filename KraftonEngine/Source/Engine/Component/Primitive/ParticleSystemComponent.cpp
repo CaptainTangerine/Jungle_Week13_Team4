@@ -4,6 +4,7 @@
 #include "GameFramework/World.h"
 #include "Particle/Asset/ParticleSystemManager.h"
 #include "Particle/ParticleEmitter.h"
+#include "Particle/ParticleLODLevel.h"
 #include "Particle/ParticleSystem.h"
 #include "Render/Types/MinimalViewInfo.h"
 #include "Serialization/Archive.h"

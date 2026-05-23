@@ -5,7 +5,7 @@
   "BlendState": "AlphaBlend",
   "RasterizerState": "SolidNoCull",
   "Textures": {
-    "DiffuseTexture": "Content/Editor/Icons/PointLight_64x.png"
+    "DiffuseTexture": "Content/Editor/Icons/Cascade/icon_Cascade_DeleteLOD_40x.png"
   },
   "Origin": "Editor"
 }
