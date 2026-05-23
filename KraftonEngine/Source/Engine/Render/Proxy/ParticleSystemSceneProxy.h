@@ -8,6 +8,8 @@
 class UParticleSystemComponent;
 class UMaterial;
 class FMeshBuffer;
+class FDynamicVertexBuffer;
+class FDynamicIndexBuffer;
 struct FFrameContext;
 struct FDrawCommandBuffer;
 
@@ -72,7 +74,8 @@ private:
 private:
 	TArray<FParticleSpriteRenderData> SpriteEmitters;
 
-	FMeshBuffer* DynamicSpriteMeshBuffer = nullptr;
+	FDynamicVertexBuffer* DynamicSpriteVB = nullptr;
+	FDynamicIndexBuffer* DynamicSpriteIB = nullptr;
 
 	TArray<FParticleSpriteVertex> CachedVertices;
 	TArray<uint32> CachedIndices;
