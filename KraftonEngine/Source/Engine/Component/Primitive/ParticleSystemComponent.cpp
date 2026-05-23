@@ -257,15 +257,22 @@ void UParticleSystemComponent::RebuildDynamicData()
 				int32 ActiveCount = Source.ActiveParticleCount;
 				int32 Stride = Source.ParticleStride;
 				const uint8* ParticleDataBytes = Source.DataContainer.ParticleData;
+				const uint16* ParticleIndices = Source.DataContainer.ParticleIndices;
+				if (!ParticleDataBytes || Stride <= 0)
+				{
+					continue;
+				}
 
 				ProxyData.Particles.reserve(ActiveCount);
 				for (int32 i = 0; i < ActiveCount; ++i)
 				{
-					const FBaseParticle* BaseParticle = reinterpret_cast<const FBaseParticle*>(ParticleDataBytes + i * Stride);
+					const int32 ParticleIndex = ParticleIndices ? ParticleIndices[i] : i;
+					const FBaseParticle* BaseParticle = reinterpret_cast<const FBaseParticle*>(ParticleDataBytes + ParticleIndex * Stride);
 
 					FParticleSpriteRenderData::FParticle Particle;
 					Particle.Position = BaseParticle->Location;
 					Particle.Velocity = BaseParticle->Velocity;
+					Particle.Size = BaseParticle->Size;
 					Particle.Color = BaseParticle->Color.ToFColor(true);
 					Particle.Rotation = BaseParticle->Rotation;
 

@@ -2,6 +2,7 @@
 #include "Component/Primitive/ParticleSystemComponent.h"
 #include "Render/Command/DrawCommand.h"
 #include "Render/Resource/Buffer.h"
+#include "Render/Types/FrameContext.h"
 
 #include <algorithm>
 #include <cmath>
@@ -80,9 +81,9 @@ void FParticleSystemSceneProxy::RebuildSpriteMeshForView(const FFrameContext& Fr
 	CachedIndices.clear();
 	SectionDraws.clear(); // 머티리얼별(섹션별) 드로우 정보 초기화
 
-	FVector ViewLocation = FVector(0.0f, 0.0f, 0.0f); // Frame.GetCameraLocation() 등으로 대체
-	FVector CameraRight = FVector(1.0f, 0.0f, 0.0f);  // Frame.GetCameraRight() 등으로 대체
-	FVector CameraUp = FVector(0.0f, 1.0f, 0.0f);     // Frame.GetCameraUp() 등으로 대체
+	const FVector ViewLocation = Frame.CameraPosition;
+	const FVector CameraRight = Frame.CameraRight;
+	const FVector CameraUp = Frame.CameraUp;
 
 	for (FParticleSpriteRenderData& Emitter : SpriteEmitters)
 	{
@@ -133,14 +134,17 @@ void FParticleSystemSceneProxy::SortParticlesForView(const FVector& ViewLocation
 	}
 }
 
-void FParticleSystemSceneProxy::BuildSpriteVertices(const FParticleSpriteRenderData& Emitter, const FVector& CameraRight, const FVector& CameraUp, TArray<FParticleSpriteVertex>& OutVertices, TArray<uint32>& OutIndices)
+void FParticleSystemSceneProxy::BuildSpriteVertices(const FParticleSpriteRenderData& Emitter, const FVector& CameraRight, const FVector& CameraUp, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices)
 {
+	const FVector Normal = CameraUp.Cross(CameraRight).Normalized();
+	const FVector4 Tangent(CameraRight, 1.0f);
+
 	for (const auto& Particle : Emitter.Particles)
 	{
 		uint32 BaseIndex = static_cast<uint32>(OutVertices.size());
 
-		// 파티클 크기 (FParticle에 Size가 없으므로 임의의 기본값 사용)
-		float HalfSize = 10.0f;
+		const float HalfWidth = std::max(0.001f, Particle.Size.X * 0.5f);
+		const float HalfHeight = std::max(0.001f, Particle.Size.Y * 0.5f);
 
 		// 회전 적용
 		float c = std::cos(Particle.Rotation);
@@ -148,18 +152,18 @@ void FParticleSystemSceneProxy::BuildSpriteVertices(const FParticleSpriteRenderD
 		FVector Right = CameraRight * c - CameraUp * s;
 		FVector Up = CameraRight * s + CameraUp * c;
 
-		FVector P0 = Particle.Position - Right * HalfSize + Up * HalfSize; // Top-Left
-		FVector P1 = Particle.Position + Right * HalfSize + Up * HalfSize; // Top-Right
-		FVector P2 = Particle.Position - Right * HalfSize - Up * HalfSize; // Bottom-Left
-		FVector P3 = Particle.Position + Right * HalfSize - Up * HalfSize; // Bottom-Right
+		FVector P0 = Particle.Position - Right * HalfWidth + Up * HalfHeight; // Top-Left
+		FVector P1 = Particle.Position + Right * HalfWidth + Up * HalfHeight; // Top-Right
+		FVector P2 = Particle.Position - Right * HalfWidth - Up * HalfHeight; // Bottom-Left
+		FVector P3 = Particle.Position + Right * HalfWidth - Up * HalfHeight; // Bottom-Right
 
-		FLinearColor Color(Particle.Color.R / 255.f, Particle.Color.G / 255.f, Particle.Color.B / 255.f, Particle.Color.A / 255.f);
+		const FVector4 Color = Particle.Color.ToVector4();
 
-		FParticleSpriteVertex V0, V1, V2, V3;
-		V0.Location = P0; V0.Color = Color;
-		V1.Location = P1; V1.Color = Color;
-		V2.Location = P2; V2.Color = Color;
-		V3.Location = P3; V3.Color = Color;
+		FVertexPNCTT V0, V1, V2, V3;
+		V0.Position = P0; V0.Normal = Normal; V0.Color = Color; V0.UV = FVector2(0.0f, 0.0f); V0.Tangent = Tangent;
+		V1.Position = P1; V1.Normal = Normal; V1.Color = Color; V1.UV = FVector2(1.0f, 0.0f); V1.Tangent = Tangent;
+		V2.Position = P2; V2.Normal = Normal; V2.Color = Color; V2.UV = FVector2(0.0f, 1.0f); V2.Tangent = Tangent;
+		V3.Position = P3; V3.Normal = Normal; V3.Color = Color; V3.UV = FVector2(1.0f, 1.0f); V3.Tangent = Tangent;
 
 		OutVertices.push_back(V0);
 		OutVertices.push_back(V1);
@@ -193,7 +197,7 @@ bool FParticleSystemSceneProxy::PrepareDrawBuffer(ID3D11Device* Device, ID3D11De
 		if (DynamicSpriteVB->GetMaxCount() == 0)
 		{
 			uint32 InitialVertexCount = std::max(256u, RequiredVertexCount);
-			DynamicSpriteVB->Create(Device, InitialVertexCount, sizeof(FParticleSpriteVertex));
+			DynamicSpriteVB->Create(Device, InitialVertexCount, sizeof(FVertexPNCTT));
 		}
 		else
 		{
