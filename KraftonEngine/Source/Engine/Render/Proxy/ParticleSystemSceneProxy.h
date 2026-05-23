@@ -1,7 +1,9 @@
 ﻿#pragma once
+
 #include "PrimitiveSceneProxy.h"
 #include "Math/MathUtils.h"
 #include "Math/Vector.h"
+#include "Particle/ParticleDynamicData.h"
 
 class UParticleSystemComponent;
 class UMaterial;
@@ -14,13 +16,14 @@ struct FDrawCommandBuffer;
 */
 
 //ParticleSpriteVertexFactory로 발전되기 전 일단 렌더러로 떠나는 아이
-struct FParticleSpriteVertex
-{
-	FVector Position;
-	float UV[2];
-	FColor Color;
-	float Rotation;
-};
+//이미 Particle/ParticleDynamicData.h 에 정의되어 있어 해당 구조체를 사용하기 위해 아래는 주석처리
+//struct FParticleSpriteVertex
+//{
+//	FVector Position;
+//	float UV[2];
+//	FColor Color;
+//	float Rotation;
+//};
 
 //particle 데이터를 렌더러 쪽에 넘기기 위한 snapshot
 //proxy는 매 프레임 이걸 업데이트해서 DrawCommandBuilder에 넘긴다.
@@ -50,28 +53,21 @@ public:
 	virtual void UpdateVisibility() override;
 	virtual void UpdateMaterial() override;
 	virtual void UpdateMesh() override;
-	virtual void UpdatePerViewport(const FFrameContext& Frame) override;
-
-	virtual bool PrepareDrawBuffer(
-		ID3D11Device* Device,
-		ID3D11DeviceContext* Context,
-		FDrawCommandBuffer& OutBuffer) const override;
-
 	// PSC가 Tick 이후에 렌더용 데이터를 새로 만들어서 넘겨주는 함수.
 	// 언리얼의 FParticleSystemSceneProxy::UpdateData(...)에 해당하는 단순 버전.
 	void UpdateDynamicData(TArray<FParticleSpriteRenderData>&& InSpriteEmitters);
+	virtual void UpdatePerViewport(const FFrameContext& Frame) override;
+
+	virtual bool PrepareDrawBuffer(ID3D11Device* Device,
+		ID3D11DeviceContext* Context, FDrawCommandBuffer& OutBuffer) const override;
 
 private:
 	UParticleSystemComponent* GetParticleComponent() const;
 
 	void RebuildSpriteMeshForView(const FFrameContext& Frame);
 	void SortParticlesForView(const FVector& ViewLocation);
-	void BuildSpriteVertices(
-		const FParticleSpriteRenderData& Emitter,
-		const FVector& CameraRight,
-		const FVector& CameraUp,
-		TArray<FParticleSpriteVertex>& OutVertices,
-		TArray<uint32>& OutIndices);
+	void BuildSpriteVertices(const FParticleSpriteRenderData& Emitter, const FVector& CameraRight,
+		const FVector& CameraUp, TArray<FParticleSpriteVertex>& OutVertices, TArray<uint32>& OutIndices);
 
 private:
 	TArray<FParticleSpriteRenderData> SpriteEmitters;
