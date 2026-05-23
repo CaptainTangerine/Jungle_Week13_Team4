@@ -1,4 +1,4 @@
-#include "ParticleEmitterInstance.h"
+﻿#include "ParticleEmitterInstance.h"
 
 #include "Component/Primitive/ParticleSystemComponent.h"
 #include "Math/MathUtils.h"
@@ -9,6 +9,37 @@
 
 #include <algorithm>
 #include <cstring>
+
+namespace
+{
+	EParticleEmitterType ResolveEmitterType(const UParticleLODLevel* LODLevel)
+	{
+		if (!LODLevel)
+		{
+			return EParticleEmitterType::Sprite;
+		}
+
+		if (const UParticleModuleTypeDataBase* TypeData = LODLevel->GetTypeDataModule())
+		{
+			return TypeData->EmitterType;
+		}
+		if (const UParticleModuleRequired* RequiredModule = LODLevel->GetRequiredModule())
+		{
+			return RequiredModule->EmitterType;
+		}
+		return EParticleEmitterType::Sprite;
+	}
+
+	EParticleEmitterType ResolveEmitterType(const UParticleEmitter* EmitterTemplate)
+	{
+		if (!EmitterTemplate)
+		{
+			return EParticleEmitterType::Sprite;
+		}
+
+		return ResolveEmitterType(EmitterTemplate->GetLODLevelForIndex(0));
+	}
+}
 
 const FParticleModuleCache* FParticleLODLevelCompiledData::FindModuleCache(const UParticleModule* Module) const
 {
@@ -22,10 +53,34 @@ const FParticleModuleCache* FParticleLODLevelCompiledData::FindModuleCache(const
 	return nullptr;
 }
 
+FParticleEmitterInstance* FParticleEmitterInstance::Create(UParticleSystemComponent* InComponent, UParticleEmitter* InTemplate)
+{
+	FParticleEmitterInstance* Instance = nullptr;
+	switch (ResolveEmitterType(InTemplate))
+	{
+	case EParticleEmitterType::Mesh:
+		Instance = new FParticleMeshEmitterInstance();
+		break;
+	case EParticleEmitterType::Beam:
+		Instance = new FParticleBeamEmitterInstance();
+		break;
+	case EParticleEmitterType::Ribbon:
+		Instance = new FParticleRibbonEmitterInstance();
+		break;
+	case EParticleEmitterType::Sprite:
+	default:
+		Instance = new FParticleSpriteEmitterInstance();
+		break;
+	}
+
+	Instance->Init(InComponent, InTemplate);
+	return Instance;
+}
+
 void FParticleEmitterInstance::Init(UParticleSystemComponent* InComponent, UParticleEmitter* InTemplate)
 {
 	Component = InComponent;
-	SpriteTemplate = InTemplate;
+	EmitterTemplate = InTemplate;
 	EmitterTime = 0.0f;
 	SpawnFraction = 0.0f;
 	bBurstFired = false;
@@ -47,7 +102,7 @@ void FParticleEmitterInstance::Reset()
 	InstancePayloadSize = 0;
 	PayloadOffset = 0;
 	ParticleSize = sizeof(FBaseParticle);
-	ParticleStride = sizeof(FBaseParticle);
+	ParticleStride = FMath::AlignBytes(ParticleSize, 16);
 	ActiveParticles = 0;
 	MaxActiveParticles = 0;
 	ParticleCounter = 0;
@@ -58,7 +113,7 @@ void FParticleEmitterInstance::Reset()
 
 void FParticleEmitterInstance::Tick(float DeltaTime)
 {
-	if (!SpriteTemplate || !CurrentLODLevel || DeltaTime <= 0.0f)
+	if (!EmitterTemplate || !CurrentLODLevel || DeltaTime <= 0.0f)
 	{
 		return;
 	}
@@ -78,12 +133,15 @@ void FParticleEmitterInstance::Tick(float DeltaTime)
 			}
 		}
 
+		// 버스트
 		if (!bBurstFired && SpawnRateModule->BurstCount > 0 && PreviousEmitterTime <= SpawnRateModule->BurstTime && EmitterTime >= SpawnRateModule->BurstTime)
 		{
 			SpawnParticles(SpawnRateModule->BurstCount, SpawnRateModule->BurstTime, 0.0f, InitialLocation, FVector::ZeroVector);
 			bBurstFired = true;
 		}
 
+		// 초당 얼마나 생성할지 따져서 현재 프레임에 생성할 파티클의 개수 결정
+		// 소수점의 경우가 있을 수 있고 파티클은 소수점으로 못나타내서 다음 프레임으로 누적
 		const float SpawnRate = std::max(0.0f, SpawnRateModule->Rate * SpawnRateModule->RateScale);
 		SpawnFraction += SpawnRate * DeltaTime;
 		const int32 SpawnCount = static_cast<int32>(SpawnFraction);
@@ -114,16 +172,16 @@ void FParticleEmitterInstance::Tick(float DeltaTime)
 
 bool FParticleEmitterInstance::SetCurrentLODIndex(int32 InLODIndex)
 {
-	if (!SpriteTemplate)
+	if (!EmitterTemplate)
 	{
 		return false;
 	}
 
-	UParticleLODLevel* NewLODLevel = SpriteTemplate->GetLODLevelForIndex(InLODIndex);
+	UParticleLODLevel* NewLODLevel = EmitterTemplate->GetLODLevelForIndex(InLODIndex);
 	if (!NewLODLevel)
 	{
 		Reset();
-		SpriteTemplate = nullptr;
+		EmitterTemplate = nullptr;
 		return false;
 	}
 
@@ -135,7 +193,11 @@ bool FParticleEmitterInstance::SetCurrentLODIndex(int32 InLODIndex)
 
 	CurrentLODLevel = NewLODLevel;
 	CurrentLODLevelIndex = NewLODIndex;
+
+	// LOD에 따른 모듈 별 메모리 배치 정보 빌드
 	BuildLODData(CurrentLODLevel);
+
+	// 배치된 메모리로 실제 allocate
 	AllocateParticleDataPreservingBaseParticles();
 	return true;
 }
@@ -154,7 +216,7 @@ void FParticleEmitterInstance::BuildLODData(UParticleLODLevel* LODLevel)
 	LODData.InstancePayloadSize = 0;
 	ParticleSize = LODData.ParticleSize;
 	ParticleStride = LODData.ParticleStride;
-	PayloadOffset = ParticleStride;
+	PayloadOffset = ParticleSize;
 	InstancePayloadSize = 0;
 
 	for (UParticleModule* Module : LODLevel->GetModules())
@@ -166,9 +228,16 @@ void FParticleEmitterInstance::BuildLODData(UParticleLODLevel* LODLevel)
 
 		FParticleModuleRuntimeCache RuntimeCache;
 		RuntimeCache.Module = Module;
-		RuntimeCache.Cache.ParticlePayloadOffset = LODData.ParticleStride;
 		RuntimeCache.Cache.ParticlePayloadSize = Module->GetParticlePayloadSize();
-		LODData.ParticleStride += FMath::AlignBytes(RuntimeCache.Cache.ParticlePayloadSize, 16);
+
+		// ParticlePayLoadOffset -> 현재 시작한 사이즈에서 파티클 사이즈 데이터 정렬
+		// ParticleSize -> 뒷부분 패딩을 제외한 데이터 크기
+		if (RuntimeCache.Cache.ParticlePayloadSize > 0)
+		{
+			LODData.ParticleSize = FMath::AlignBytes(LODData.ParticleSize, 16);
+			RuntimeCache.Cache.ParticlePayloadOffset = LODData.ParticleSize;
+			LODData.ParticleSize += RuntimeCache.Cache.ParticlePayloadSize;
+		}
 
 		RuntimeCache.Cache.InstancePayloadOffset = LODData.InstancePayloadSize;
 		RuntimeCache.Cache.InstancePayloadSize = Module->GetInstancePayloadSize();
@@ -177,7 +246,10 @@ void FParticleEmitterInstance::BuildLODData(UParticleLODLevel* LODLevel)
 		LODData.ModuleCaches.push_back(RuntimeCache);
 	}
 
+	LODData.ParticleStride = FMath::AlignBytes(LODData.ParticleSize, 16);
+	ParticleSize = LODData.ParticleSize;
 	ParticleStride = LODData.ParticleStride;
+	PayloadOffset = ParticleSize;
 	InstancePayloadSize = LODData.InstancePayloadSize;
 }
 
@@ -189,40 +261,28 @@ FDynamicEmitterDataBase* FParticleEmitterInstance::CreateDynamicData(int32 Emitt
 	}
 
 	const UParticleModuleRequired* RequiredModule = CurrentLODLevel->GetRequiredModule();
-	EParticleEmitterType EmitterType = RequiredModule ? RequiredModule->EmitterType : EParticleEmitterType::Sprite;
-	if (const UParticleModuleTypeDataBase* TypeData = CurrentLODLevel->GetTypeDataModule())
+	FDynamicEmitterDataBase* DynamicData = CreateDynamicEmitterData(RequiredModule);
+	if (!DynamicData)
 	{
-		EmitterType = TypeData->EmitterType;
-	}
-
-	FDynamicEmitterDataBase* DynamicData = nullptr;
-	if (EmitterType == EParticleEmitterType::Mesh)
-	{
-		DynamicData = new FDynamicMeshEmitterData(RequiredModule);
-	}
-	else
-	{
-		DynamicData = new FDynamicSpriteEmitterData(RequiredModule);
+		return nullptr;
 	}
 
 	DynamicData->EmitterIndex = EmitterIndex;
 
 	FDynamicEmitterReplayDataBase& Source = DynamicData->GetSource();
+	Source.EmitterType = GetDynamicEmitterType();
 	Source.ActiveParticleCount = ActiveParticles;
 	Source.ParticleStride = ParticleStride;
 	Source.Scale = Component ? Component->GetWorldScale() : FVector::OneVector;
 	const int32 ParticleDataBytes = MaxActiveParticles * ParticleStride;
 	Source.DataContainer.CopyFrom(ParticleData, ParticleDataBytes, ParticleIndices, ActiveParticles);
 
-	if (EmitterType == EParticleEmitterType::Beam)
-	{
-		Source.EmitterType = EDynamicEmitterType::Beam;
-	}
-	else if (EmitterType == EParticleEmitterType::Ribbon)
-	{
-		Source.EmitterType = EDynamicEmitterType::Ribbon;
-	}
 	return DynamicData;
+}
+
+FDynamicEmitterDataBase* FParticleEmitterInstance::CreateDynamicEmitterData(const UParticleModuleRequired* RequiredModule) const
+{
+	return new FDynamicSpriteEmitterData(RequiredModule);
 }
 
 const FTransform& FParticleEmitterInstance::GetComponentTransform() const
@@ -243,7 +303,7 @@ UObject* FParticleEmitterInstance::GetDistributionData() const
 
 FString FParticleEmitterInstance::GetTemplateName() const
 {
-	return SpriteTemplate ? SpriteTemplate->GetEmitterName().ToString() : FString();
+	return EmitterTemplate ? EmitterTemplate->GetEmitterName().ToString() : FString();
 }
 
 FString FParticleEmitterInstance::GetInstanceName() const
@@ -401,7 +461,7 @@ void FParticleEmitterInstance::PreSpawn(FBaseParticle* Particle, const FVector& 
 		return;
 	}
 
-	std::memset(Particle, 0, static_cast<size_t>(ParticleStride));
+	std::memset(Particle, 0, static_cast<size_t>(ParticleSize));
 	*Particle = FBaseParticle();
 	Particle->Flags |= STATE_Particle_JustSpawned;
 	Particle->Location = InitialLocation;
@@ -432,9 +492,10 @@ void FParticleEmitterInstance::KillParticle(int32 ActiveIndex)
 		return;
 	}
 
-	const int32 LastActiveIndex = ActiveParticles - 1;
-	std::swap(ParticleIndices[ActiveIndex], ParticleIndices[LastActiveIndex]);
-	--ActiveParticles;
+	const uint16 CurrentIndex = ParticleIndices[ActiveIndex];
+	ParticleIndices[ActiveIndex] = ParticleIndices[ActiveParticles - 1];
+	ParticleIndices[ActiveParticles - 1] = CurrentIndex;
+	ActiveParticles--;
 }
 
 void FParticleEmitterInstance::UpdateParticleLifetimesAndMovement(float DeltaTime)
@@ -460,4 +521,9 @@ void FParticleEmitterInstance::UpdateParticleLifetimesAndMovement(float DeltaTim
 		Particle->RotationRate = Particle->BaseRotationRate;
 		Particle->Rotation += Particle->RotationRate * DeltaTime;
 	}
+}
+
+FDynamicEmitterDataBase* FParticleMeshEmitterInstance::CreateDynamicEmitterData(const UParticleModuleRequired* RequiredModule) const
+{
+	return new FDynamicMeshEmitterData(RequiredModule);
 }

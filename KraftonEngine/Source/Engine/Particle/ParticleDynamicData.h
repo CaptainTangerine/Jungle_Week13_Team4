@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Math/MathUtils.h"
 #include "Particle/ParticleTypes.h"
@@ -14,6 +14,7 @@ enum class EDynamicEmitterType : uint8
 	Ribbon,
 };
 
+// 데이터 배치도 [ParticleData][ParticleIndices]
 struct FParticleDataContainer
 {
 	int32 MemBlockSize = 0;

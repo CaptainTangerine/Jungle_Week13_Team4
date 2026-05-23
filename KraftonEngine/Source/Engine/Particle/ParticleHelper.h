@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Particle/ParticleTypes.h"
 
@@ -32,8 +32,6 @@
 			} \
 			CurrentOffset = static_cast<uint32>(Offset); \
 		} \
-		(void)CurrentOffset; \
-		(void)DeltaTime; \
 	}
 
 #define CONTINUE_UPDATE_LOOP \
@@ -53,8 +51,10 @@
 	Type& Name = *reinterpret_cast<Type*>(reinterpret_cast<uint8*>(ParticleBase) + CurrentOffset); \
 	CurrentOffset += sizeof(Type);
 
-#define KILL_CURRENT_PARTICLE \
-	{ \
-		Context.Owner.KillParticle(i); \
-		continue; \
+
+#define KILL_CURRENT_PARTICLE																							\
+	{																													\
+		ParticleIndices[i]					= ParticleIndices[ActiveParticles-1];										\
+		ParticleIndices[ActiveParticles-1]	= CurrentIndex;																\
+		ActiveParticles--;																								\
 	}

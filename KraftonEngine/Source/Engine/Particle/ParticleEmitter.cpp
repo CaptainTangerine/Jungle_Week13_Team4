@@ -75,7 +75,7 @@ void UParticleEmitter::CacheEmitterModuleInfo()
 
 		LODLevel->RebuildModuleLists();
 
-		int32 LODParticleStride = FMath::AlignBytes(ParticleSize, 16);
+		int32 LODParticleSize = sizeof(FBaseParticle);
 		int32 LODInstancePayloadSize = 0;
 
 		for (UParticleModule* Module : LODLevel->GetModules())
@@ -85,10 +85,17 @@ void UParticleEmitter::CacheEmitterModuleInfo()
 				continue;
 			}
 
-			LODParticleStride += FMath::AlignBytes(Module->GetParticlePayloadSize(), 16);
+			const int32 ParticlePayloadSize = Module->GetParticlePayloadSize();
+			if (ParticlePayloadSize > 0)
+			{
+				LODParticleSize = FMath::AlignBytes(LODParticleSize, 16);
+				LODParticleSize += ParticlePayloadSize;
+			}
 			LODInstancePayloadSize += FMath::AlignBytes(Module->GetInstancePayloadSize(), 16);
 		}
 
+		const int32 LODParticleStride = FMath::AlignBytes(LODParticleSize, 16);
+		ParticleSize = std::max(ParticleSize, LODParticleSize);
 		ParticleStride = std::max(ParticleStride, LODParticleStride);
 		InstancePayloadSize = std::max(InstancePayloadSize, LODInstancePayloadSize);
 	}

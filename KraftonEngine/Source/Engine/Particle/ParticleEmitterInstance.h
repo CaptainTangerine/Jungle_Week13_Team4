@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Core/Types/CoreTypes.h"
 #include "Math/Transform.h"
@@ -9,6 +9,7 @@ class UObject;
 class UParticleEmitter;
 class UParticleLODLevel;
 class UParticleModule;
+class UParticleModuleRequired;
 class UParticleModuleSpawn;
 class UParticleSystemComponent;
 
@@ -31,23 +32,26 @@ struct FParticleLODLevelCompiledData
 struct FParticleEmitterInstance
 {
 	FParticleEmitterInstance() = default;
-	~FParticleEmitterInstance() = default;
+	virtual ~FParticleEmitterInstance() = default;
 
-	void Init(UParticleSystemComponent* InComponent, UParticleEmitter* InTemplate);
-	void Reset();
-	void Tick(float DeltaTime);
+	static FParticleEmitterInstance* Create(UParticleSystemComponent* InComponent, UParticleEmitter* InTemplate);
+
+	virtual EParticleEmitterType GetEmitterType() const = 0;
+	virtual void Init(UParticleSystemComponent* InComponent, UParticleEmitter* InTemplate);
+	virtual void Reset();
+	virtual void Tick(float DeltaTime);
 
 	bool SetCurrentLODIndex(int32 InLODIndex);
 	void BuildLODData(UParticleLODLevel* LODLevel);
 
 	void SpawnParticles(int32 Count, float StartTime, float Increment, const FVector& InitialLocation, const FVector& InitialVelocity);
-	void PreSpawn(FBaseParticle* Particle, const FVector& InitialLocation, const FVector& InitialVelocity);
-	void PostSpawn(FBaseParticle* Particle, float Interp, float SpawnTime);
+	virtual void PreSpawn(FBaseParticle* Particle, const FVector& InitialLocation, const FVector& InitialVelocity);
+	virtual void PostSpawn(FBaseParticle* Particle, float Interp, float SpawnTime);
 	void KillParticle(int32 ActiveIndex);
 
-	FDynamicEmitterDataBase* CreateDynamicData(int32 EmitterIndex) const;
+	virtual FDynamicEmitterDataBase* CreateDynamicData(int32 EmitterIndex) const;
 
-	UParticleEmitter* GetEmitterTemplate() const { return SpriteTemplate; }
+	UParticleEmitter* GetEmitterTemplate() const { return EmitterTemplate; }
 	UParticleLODLevel* GetCurrentLODLevel() const { return CurrentLODLevel; }
 	int32 GetCurrentLODIndex() const { return CurrentLODLevelIndex; }
 	int32 GetActiveParticleCount() const { return ActiveParticles; }
@@ -64,28 +68,48 @@ struct FParticleEmitterInstance
 	FString GetTemplateName() const;
 	FString GetInstanceName() const;
 
-	UParticleEmitter* SpriteTemplate = nullptr;
+	UParticleEmitter* EmitterTemplate = nullptr;
 	UParticleSystemComponent* Component = nullptr;
 	int32 CurrentLODLevelIndex = -1;
 	UParticleLODLevel* CurrentLODLevel = nullptr;
 
+	/** Pointer to the particle data array.                             */
 	uint8* ParticleData = nullptr;
+	/** Pointer to the particle index array.                            */
 	uint16* ParticleIndices = nullptr;
+	/** Pointer to the instance data array.                             */
 	uint8* InstanceData = nullptr;
+	/** The size of the Instance data array.                            */
 	int32 InstancePayloadSize = 0;
+	/** The offset to the particle data.                                */
 	int32 PayloadOffset = 0;
+	/** The total size of a particle (in bytes).                        */
 	int32 ParticleSize = sizeof(FBaseParticle);
+	/** The stride between particles in the ParticleData array.         */
 	int32 ParticleStride = sizeof(FBaseParticle);
+	/** The number of particles currently active in the emitter.        */
 	int32 ActiveParticles = 0;
+	/** Monotonically increasing counter. */
 	uint32 ParticleCounter = 0;
+	/** The maximum number of active particles that can be held in
+	 *  the particle data array.
+	 */
 	int32 MaxActiveParticles = 0;
+	// The fraction of time left over from spawning
 	float SpawnFraction = 0.0f;
 
+
+	// 실제 메모리 소유자 실제 Alloc / Free를 담당
+	// 위쪽의 ParticleData와 ParitcleIndices는 결국 메크로에서 편하게 사용하기 위해 빼놓은 정보
 	FParticleDataContainer DataContainer;
 	TArray<uint8> InstanceDataStorage;
 
 	float EmitterTime = 0.0f;
-	bool bBurstFired = false;
+	bool  bBurstFired = false;
+
+protected:
+	virtual EDynamicEmitterType GetDynamicEmitterType() const = 0;
+	virtual FDynamicEmitterDataBase* CreateDynamicEmitterData(const UParticleModuleRequired* RequiredModule) const;
 
 private:
 	UParticleModuleSpawn* GetSpawnRateModule() const;
@@ -97,4 +121,37 @@ private:
 	void UpdateParticleLifetimesAndMovement(float DeltaTime);
 
 	FParticleLODLevelCompiledData LODData;
+};
+
+struct FParticleSpriteEmitterInstance : public FParticleEmitterInstance
+{
+	EParticleEmitterType GetEmitterType() const override { return EParticleEmitterType::Sprite; }
+
+private:
+	EDynamicEmitterType GetDynamicEmitterType() const override { return EDynamicEmitterType::Sprite; }
+};
+
+struct FParticleMeshEmitterInstance : public FParticleEmitterInstance
+{
+	EParticleEmitterType GetEmitterType() const override { return EParticleEmitterType::Mesh; }
+
+private:
+	EDynamicEmitterType GetDynamicEmitterType() const override { return EDynamicEmitterType::Mesh; }
+	FDynamicEmitterDataBase* CreateDynamicEmitterData(const UParticleModuleRequired* RequiredModule) const override;
+};
+
+struct FParticleBeamEmitterInstance : public FParticleEmitterInstance
+{
+	EParticleEmitterType GetEmitterType() const override { return EParticleEmitterType::Beam; }
+
+private:
+	EDynamicEmitterType GetDynamicEmitterType() const override { return EDynamicEmitterType::Beam; }
+};
+
+struct FParticleRibbonEmitterInstance : public FParticleEmitterInstance
+{
+	EParticleEmitterType GetEmitterType() const override { return EParticleEmitterType::Ribbon; }
+
+private:
+	EDynamicEmitterType GetDynamicEmitterType() const override { return EDynamicEmitterType::Ribbon; }
 };

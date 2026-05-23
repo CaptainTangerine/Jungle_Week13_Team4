@@ -1,4 +1,4 @@
-#include "ParticleSystemComponent.h"
+﻿#include "ParticleSystemComponent.h"
 
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
@@ -107,9 +107,10 @@ void UParticleSystemComponent::RecreateEmitterInstances()
 			continue;
 		}
 
-		FParticleEmitterInstance* Instance = new FParticleEmitterInstance();
-		Instance->Init(this, Emitter);
-		EmitterInstances.push_back(Instance);
+		if (FParticleEmitterInstance* Instance = FParticleEmitterInstance::Create(this, Emitter))
+		{
+			EmitterInstances.push_back(Instance);
+		}
 	}
 }
 
