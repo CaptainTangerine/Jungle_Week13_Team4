@@ -77,7 +77,7 @@ void FParticleSystemSceneProxy::RebuildSpriteMeshForView(const FFrameContext& Fr
 {
 	CachedVertices.clear();
 	CachedIndices.clear();
-	//SectionDraws.clear(); // 머티리얼별(섹션별) 드로우 정보 초기화
+	SectionDraws.clear(); // 머티리얼별(섹션별) 드로우 정보 초기화
 
 	FVector ViewLocation = FVector(0.0f, 0.0f, 0.0f); // Frame.GetCameraLocation() 등으로 대체
 	FVector CameraRight = FVector(1.0f, 0.0f, 0.0f);  // Frame.GetCameraRight() 등으로 대체
@@ -94,11 +94,9 @@ void FParticleSystemSceneProxy::RebuildSpriteMeshForView(const FFrameContext& Fr
 				Particle.CameraDistanceSq = Diff.Dot(Diff);
 			}
 		}
-		SortParticlesForView(ViewLocation);
 	}
 
 	// 모든 이미터의 거리가 계산된 후 한 번에 정렬 수행
-	/*
 	SortParticlesForView(ViewLocation);
 
 	//머티리얼이 같은 파티클들끼리 모아서 별도의 FParticleSpriteRenderData로 분리하여 Proxy에 넘깁니다
@@ -120,7 +118,6 @@ void FParticleSystemSceneProxy::RebuildSpriteMeshForView(const FFrameContext& Fr
 			SectionDraws.push_back(Draw);
 		}
 	}
-	*/
 }
 
 void FParticleSystemSceneProxy::SortParticlesForView(const FVector& ViewLocation)
