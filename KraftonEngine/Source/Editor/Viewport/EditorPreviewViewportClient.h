@@ -21,4 +21,11 @@ public:
 	virtual const FViewportRenderOptions& GetRenderOptions() const = 0;
 
 	virtual void NotifyViewportResized(int32 NewWidth, int32 NewHeight) = 0;
+	virtual void GetClearColor(float OutClearColor[4]) const
+	{
+		OutClearColor[0] = 0.12f;
+		OutClearColor[1] = 0.12f;
+		OutClearColor[2] = 0.13f;
+		OutClearColor[3] = 1.0f;
+	}
 };

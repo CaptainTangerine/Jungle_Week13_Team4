@@ -366,7 +366,8 @@ void FEditorRenderPipeline::RenderPreviewViewport(IEditorPreviewViewportClient* 
 		VC->NotifyViewportResized(static_cast<int32>(VP->GetWidth()), static_cast<int32>(VP->GetHeight()));
 	}
 
-	const float ClearColor[4] = { 0.12f, 0.12f, 0.13f, 1.0f };
+	float ClearColor[4] = {};
+	VC->GetClearColor(ClearColor);
 	VP->BeginRender(Ctx, ClearColor);
 
 	FMinimalViewInfo POV;
