@@ -8,6 +8,9 @@
 #include "Render/Types/MinimalViewInfo.h"
 #include "Serialization/Archive.h"
 #include "Render/Proxy/ParticleSystemSceneProxy.h"
+#include "Materials/MaterialManager.h"
+#include "Particle/ParticleDynamicData.h"
+#include "Particle/ParticleModule.h"
 
 #include <cstring>
 
@@ -228,5 +231,52 @@ void UParticleSystemComponent::RebuildDynamicData()
 		{
 			DynamicEmitterDataArray.push_back(DynamicData);
 		}
+	}
+
+	if (FParticleSystemSceneProxy* Proxy = static_cast<FParticleSystemSceneProxy*>(GetSceneProxy()))
+	{
+		TArray<FParticleSpriteRenderData> ProxyDataArray;
+		ProxyDataArray.reserve(DynamicEmitterDataArray.size());
+
+		for (FDynamicEmitterDataBase* DynamicData : DynamicEmitterDataArray)
+		{
+			if (!DynamicData) continue;
+
+			const FDynamicEmitterReplayDataBase& Source = DynamicData->GetSource();
+			if (Source.EmitterType == EDynamicEmitterType::Sprite)
+			{
+				const FDynamicSpriteEmitterDataBase* SpriteData = static_cast<const FDynamicSpriteEmitterDataBase*>(DynamicData);
+				const FDynamicSpriteEmitterReplayDataBase& SpriteSource = static_cast<const FDynamicSpriteEmitterReplayDataBase&>(Source);
+
+				FParticleSpriteRenderData ProxyData;
+				ProxyData.bSortByCameraDistance = SpriteSource.RequiredModule && SpriteSource.RequiredModule->SortMode == EParticleSortMode::DistanceToCamera;
+
+				FString MaterialPath = SpriteSource.RequiredModule ? SpriteSource.RequiredModule->MaterialPath.ToString() : FString("None");
+				ProxyData.Material = FMaterialManager::Get().GetOrCreateMaterial(MaterialPath);
+
+				int32 ActiveCount = Source.ActiveParticleCount;
+				int32 Stride = Source.ParticleStride;
+				const uint8* ParticleDataBytes = Source.DataContainer.ParticleData;
+
+				ProxyData.Particles.reserve(ActiveCount);
+				for (int32 i = 0; i < ActiveCount; ++i)
+				{
+					const FBaseParticle* BaseParticle = reinterpret_cast<const FBaseParticle*>(ParticleDataBytes + i * Stride);
+
+					FParticleSpriteRenderData::FParticle Particle;
+					Particle.Position = BaseParticle->Location;
+					Particle.Velocity = BaseParticle->Velocity;
+					Particle.Color = BaseParticle->Color.ToFColor(true);
+					Particle.Rotation = BaseParticle->Rotation;
+
+					ProxyData.Particles.push_back(Particle);
+				}
+
+				ProxyDataArray.push_back(std::move(ProxyData));
+			}
+		}
+
+		Proxy->UpdateDynamicData(std::move(ProxyDataArray));
+		MarkProxyDirty(EDirtyFlag::Mesh);
 	}
 }

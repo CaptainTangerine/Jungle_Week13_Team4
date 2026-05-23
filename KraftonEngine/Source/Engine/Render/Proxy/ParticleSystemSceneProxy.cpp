@@ -62,6 +62,7 @@ void FParticleSystemSceneProxy::UpdateMesh()
 void FParticleSystemSceneProxy::UpdateDynamicData(TArray<FParticleSpriteRenderData>&& InSpriteEmitters)
 {
 	SpriteEmitters = std::move(InSpriteEmitters);
+	bDynamicMeshDirty = true;
 }
 
 void FParticleSystemSceneProxy::UpdatePerViewport(const FFrameContext& Frame)

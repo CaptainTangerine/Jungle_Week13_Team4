@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Core/Types/CoreTypes.h"
 #include "Math/Vector.h"
@@ -42,6 +42,29 @@ struct FLinearColor
 		: R(InR), G(InG), B(InB), A(InA) {}
 
 	FVector4 ToVector4() const { return FVector4(R, G, B, A); }
+
+	FColor ToFColor(bool bSRGB) const
+	{
+		float FloatR = (std::max)(0.0f, (std::min)(1.0f, R));
+		float FloatG = (std::max)(0.0f, (std::min)(1.0f, G));
+		float FloatB = (std::max)(0.0f, (std::min)(1.0f, B));
+		float FloatA = (std::max)(0.0f, (std::min)(1.0f, A));
+
+		if (bSRGB)
+		{
+			// Simple gamma correction approximation
+			FloatR = std::pow(FloatR, 1.0f / 2.2f);
+			FloatG = std::pow(FloatG, 1.0f / 2.2f);
+			FloatB = std::pow(FloatB, 1.0f / 2.2f);
+		}
+
+		return FColor(
+			static_cast<uint8>(FloatR * 255.0f),
+			static_cast<uint8>(FloatG * 255.0f),
+			static_cast<uint8>(FloatB * 255.0f),
+			static_cast<uint8>(FloatA * 255.0f)
+		);
+	}
 
 	static FLinearColor Black() { return FLinearColor(0.0f, 0.0f, 0.0f, 1.0f); }
 	static FLinearColor White() { return FLinearColor(1.0f, 1.0f, 1.0f, 1.0f); }
