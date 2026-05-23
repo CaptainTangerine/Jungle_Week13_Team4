@@ -1,4 +1,4 @@
-﻿#include "Editor/UI/Asset/Particle/ParticleSystemEditorWidget.h"
+#include "Editor/UI/Asset/Particle/ParticleSystemEditorWidget.h"
 
 #include "Asset/AssetRegistry.h"
 #include "Particle/ParticleSystem.h"
@@ -389,6 +389,11 @@ FParticleSystemEditorWidget::FParticleSystemEditorWidget()
 	WindowIdSuffix = "###ParticleSystemEditor_" + Id;
 }
 
+FParticleSystemEditorWidget::~FParticleSystemEditorWidget()
+{
+	ReleasePreviewResources(true);
+}
+
 void FParticleSystemEditorWidget::Open(UObject* Object)
 {
 	FAssetEditorWidget::Open(Object);
@@ -430,7 +435,11 @@ void FParticleSystemEditorWidget::Open(UObject* Object)
 void FParticleSystemEditorWidget::Close()
 {
 	FAssetEditorWidget::Close();
+	ReleasePreviewResources(false);
+}
 
+void FParticleSystemEditorWidget::ReleasePreviewResources(bool bReleaseViewport)
+{
 	if (UWorld* PreviewWorld = ViewportClient.GetPreviewWorld())
 	{
 		FScene& PreviewScene = PreviewWorld->GetScene();
@@ -443,7 +452,13 @@ void FParticleSystemEditorWidget::Close()
 	}
 
 	FSlateApplication::Get().UnregisterViewport(&ViewportClient);
-	ViewportClient.Release();
+	ViewportClient.SetPreviewWorld(nullptr);
+	ViewportClient.SetPreviewActor(nullptr);
+
+	if (bReleaseViewport)
+	{
+		ViewportClient.Release();
+	}
 }
 
 void FParticleSystemEditorWidget::Tick(float DeltaTime)

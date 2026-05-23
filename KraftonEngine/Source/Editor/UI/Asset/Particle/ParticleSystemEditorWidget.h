@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Editor/UI/Asset/AssetEditorWidget.h"
 #include "Editor/Viewport/Asset/ParticleEditorViewportClient.h"
@@ -8,6 +8,7 @@ class FParticleSystemEditorWidget : public FAssetEditorWidget
 {
 public:
 	FParticleSystemEditorWidget();
+	~FParticleSystemEditorWidget() override;
 
 	bool CanEdit(UObject* Object) const override;
 	void Open(UObject* Object) override;
@@ -18,6 +19,7 @@ public:
 	bool AllowsMultipleInstances() const override { return true; }
 
 private:
+	void ReleasePreviewResources(bool bReleaseViewport);
 	void RenderMenuBar(class UParticleSystem* ParticleSystem);
 	void RenderParticleAssetSearchPopup();
 	void RenderToolbar(class UParticleSystem* ParticleSystem);
