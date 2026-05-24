@@ -40,6 +40,42 @@ struct FParticleMeshRenderBatch
 	TArray<FMeshParticleInstanceVertex> Instances;
 };
 
+/*
+	ReplayData를 이번 view에서 실제 draw call로 제출할 단위로 변환한 결과입니다.
+	CPU-expanded sprite/mesh는 공용 DynamicParticleVB/IB에 geometry를 append하고,
+	packet은 그 버퍼 안에서 자신이 그릴 index range와 material/sort 정보를 보관합니다.
+	이후 mesh particle을 DrawIndexedInstanced 경로로 옮길 때도 packet type만 바꿔서 유지할 수 있습니다.
+*/
+enum class EParticleRenderPacketType : uint8
+{
+	CpuExpandedSprite,
+	CpuExpandedMesh,
+	InstancedMesh,
+};
+
+struct FParticleRenderPacket
+{
+	EDynamicEmitterType EmitterType = EDynamicEmitterType::Unknown;
+	EParticleRenderPacketType PacketType = EParticleRenderPacketType::CpuExpandedSprite;
+
+	UMaterial* Material = nullptr;
+	UStaticMesh* Mesh = nullptr;
+	FString MeshPath;
+	EParticleBlendMode BlendMode = EParticleBlendMode::AlphaBlend;
+
+	uint32 FirstIndex = 0;
+	uint32 IndexCount = 0;
+	uint32 BaseVertex = 0;
+
+	uint32 FirstInstance = 0;
+	uint32 InstanceCount = 0;
+
+	float SortDepth = 0.0f;
+	int32 TranslucencySortPriority = 0;
+
+	bool HasIndexRange() const { return IndexCount > 0; }
+};
+
 class FParticleSystemSceneProxy : public FPrimitiveSceneProxy
 {
 public:
@@ -79,6 +115,14 @@ private:
 	void BuildMeshVertices(const TArray<FParticleProxyParticle>& Particles, const TArray<FNormalVertex>& MeshVertices,
 		const TArray<uint32>& MeshIndices, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const;
 
+	FParticleRenderPacket MakeCpuExpandedPacket(EDynamicEmitterType EmitterType, EParticleRenderPacketType PacketType,
+		const FDynamicSpriteEmitterReplayDataBase& Source, uint32 FirstIndex, uint32 IndexCount,
+		const TArray<FParticleProxyParticle>& Particles, UStaticMesh* Mesh = nullptr) const;
+	void AddRenderPacket(const FParticleRenderPacket& Packet);
+	void SortRenderPacketsForView();
+	void RebuildSectionDrawsFromRenderPackets();
+	float ComputePacketSortDepth(const TArray<FParticleProxyParticle>& Particles) const;
+
 	UMaterial* ResolveParticleMaterial(const FDynamicSpriteEmitterReplayDataBase& Source) const;
 	UStaticMesh* ResolveParticleMesh(const FString& MeshPath) const;
 	FVector ApplyParticleScale(const FVector& Size, const FVector& Scale) const;
@@ -93,6 +137,10 @@ private:
 	// 기존 셰이더 입력과 맞는 FVertexPNCTT CPU-expanded geometry로 함께 유지한다.
 	TArray<FVertexPNCTT> CachedParticleVertices;
 	TArray<uint32> CachedParticleIndices;
+
+	// ReplayData에서 view-dependent geometry를 만든 뒤 draw unit 단위로 나눈 결과다.
+	// DrawCommandBuilder는 아직 FMeshSectionDraw를 읽기 때문에, RenderPackets를 SectionDraws로 동기화한다.
+	TArray<FParticleRenderPacket> RenderPackets;
 
 	// 현재 실제 렌더링은 CPU-expanded CachedParticleVertices/Indices 경로를 사용한다.
 	// CachedMeshBatches는 이후 DrawIndexedInstanced 경로로 전환할 때 소비할 bridge 데이터다.

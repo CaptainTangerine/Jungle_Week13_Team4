@@ -44,6 +44,35 @@ namespace
 	{
 		return FVector4(A.R * B.R, A.G * B.G, A.B * B.B, A.A * B.A);
 	}
+
+	bool IsTranslucentPacket(const FParticleRenderPacket& Packet)
+	{
+		return Packet.BlendMode != EParticleBlendMode::Opaque;
+	}
+
+	bool SortRenderPacketForDraw(const FParticleRenderPacket& A, const FParticleRenderPacket& B)
+	{
+		const bool bTranslucentA = IsTranslucentPacket(A);
+		const bool bTranslucentB = IsTranslucentPacket(B);
+
+		// 현재 DrawCommandBuilder는 proxy의 첫 section material로 pass를 결정한다.
+		// 그래서 opaque/translucent가 섞인 경우에는 기존 append 순서를 유지하고,
+		// 둘 다 translucent인 packet끼리만 back-to-front 정렬한다.
+		if (bTranslucentA && bTranslucentB)
+		{
+			if (A.TranslucencySortPriority != B.TranslucencySortPriority)
+			{
+				return A.TranslucencySortPriority < B.TranslucencySortPriority;
+			}
+
+			if (A.SortDepth != B.SortDepth)
+			{
+				return A.SortDepth > B.SortDepth;
+			}
+		}
+
+		return A.FirstIndex < B.FirstIndex;
+	}
 }
 
 FParticleSystemSceneProxy::FParticleSystemSceneProxy(UParticleSystemComponent* InComponent)
@@ -104,6 +133,7 @@ void FParticleSystemSceneProxy::ClearDynamicData()
 
 	CachedParticleVertices.clear();
 	CachedParticleIndices.clear();
+	RenderPackets.clear();
 	CachedMeshBatches.clear();
 	SectionDraws.clear();
 	bDynamicDataDirty = true;
@@ -121,6 +151,7 @@ void FParticleSystemSceneProxy::RebuildRenderDataForView(const FFrameContext& Fr
 {
 	CachedParticleVertices.clear();
 	CachedParticleIndices.clear();
+	RenderPackets.clear();
 	CachedMeshBatches.clear();
 	SectionDraws.clear();
 
@@ -128,6 +159,9 @@ void FParticleSystemSceneProxy::RebuildRenderDataForView(const FFrameContext& Fr
 	{
 		BuildEmitterForView(EmitterData, Frame);
 	}
+
+	SortRenderPacketsForView();
+	RebuildSectionDrawsFromRenderPackets();
 }
 
 void FParticleSystemSceneProxy::BuildEmitterForView(FDynamicEmitterDataBase* EmitterData, const FFrameContext& Frame)
@@ -180,11 +214,13 @@ void FParticleSystemSceneProxy::BuildSpriteEmitterForView(const FDynamicSpriteEm
 	const uint32 IndexCount = static_cast<uint32>(CachedParticleIndices.size()) - StartIndex;
 	if (IndexCount > 0)
 	{
-		FMeshSectionDraw Draw;
-		Draw.Material = ResolveParticleMaterial(Source);
-		Draw.FirstIndex = StartIndex;
-		Draw.IndexCount = IndexCount;
-		SectionDraws.push_back(Draw);
+		AddRenderPacket(MakeCpuExpandedPacket(
+			EDynamicEmitterType::Sprite,
+			EParticleRenderPacketType::CpuExpandedSprite,
+			Source,
+			StartIndex,
+			IndexCount,
+			Particles));
 	}
 }
 
@@ -242,11 +278,14 @@ void FParticleSystemSceneProxy::BuildMeshEmitterForView(const FDynamicMeshEmitte
 	const uint32 IndexCount = static_cast<uint32>(CachedParticleIndices.size()) - StartIndex;
 	if (IndexCount > 0)
 	{
-		FMeshSectionDraw Draw;
-		Draw.Material = ResolveParticleMaterial(Source);
-		Draw.FirstIndex = StartIndex;
-		Draw.IndexCount = IndexCount;
-		SectionDraws.push_back(Draw);
+		AddRenderPacket(MakeCpuExpandedPacket(
+			EDynamicEmitterType::Mesh,
+			EParticleRenderPacketType::CpuExpandedMesh,
+			Source,
+			StartIndex,
+			IndexCount,
+			Particles,
+			StaticMesh));
 	}
 }
 
@@ -388,6 +427,69 @@ void FParticleSystemSceneProxy::BuildMeshVertices(const TArray<FParticleProxyPar
 			OutIndices.push_back(BaseVertex + RawIndex);
 		}
 	}
+}
+
+FParticleRenderPacket FParticleSystemSceneProxy::MakeCpuExpandedPacket(EDynamicEmitterType EmitterType,
+	EParticleRenderPacketType PacketType, const FDynamicSpriteEmitterReplayDataBase& Source, uint32 FirstIndex,
+	uint32 IndexCount, const TArray<FParticleProxyParticle>& Particles, UStaticMesh* Mesh) const
+{
+	FParticleRenderPacket Packet;
+	Packet.EmitterType = EmitterType;
+	Packet.PacketType = PacketType;
+	Packet.Material = ResolveParticleMaterial(Source);
+	Packet.Mesh = Mesh;
+	Packet.MeshPath = Source.MeshPath;
+	Packet.BlendMode = Source.BlendMode;
+	Packet.FirstIndex = FirstIndex;
+	Packet.IndexCount = IndexCount;
+	Packet.BaseVertex = 0;
+	Packet.SortDepth = ComputePacketSortDepth(Particles);
+	return Packet;
+}
+
+void FParticleSystemSceneProxy::AddRenderPacket(const FParticleRenderPacket& Packet)
+{
+	if (!Packet.HasIndexRange())
+	{
+		return;
+	}
+
+	RenderPackets.push_back(Packet);
+}
+
+void FParticleSystemSceneProxy::SortRenderPacketsForView()
+{
+	std::stable_sort(RenderPackets.begin(), RenderPackets.end(), SortRenderPacketForDraw);
+}
+
+void FParticleSystemSceneProxy::RebuildSectionDrawsFromRenderPackets()
+{
+	SectionDraws.clear();
+	SectionDraws.reserve(RenderPackets.size());
+
+	for (const FParticleRenderPacket& Packet : RenderPackets)
+	{
+		if (!Packet.HasIndexRange())
+		{
+			continue;
+		}
+
+		FMeshSectionDraw Draw;
+		Draw.Material = Packet.Material;
+		Draw.FirstIndex = Packet.FirstIndex;
+		Draw.IndexCount = Packet.IndexCount;
+		SectionDraws.push_back(Draw);
+	}
+}
+
+float FParticleSystemSceneProxy::ComputePacketSortDepth(const TArray<FParticleProxyParticle>& Particles) const
+{
+	float SortDepth = 0.0f;
+	for (const FParticleProxyParticle& Particle : Particles)
+	{
+		SortDepth = std::max(SortDepth, Particle.CameraDistanceSq);
+	}
+	return SortDepth;
 }
 
 UMaterial* FParticleSystemSceneProxy::ResolveParticleMaterial(const FDynamicSpriteEmitterReplayDataBase& Source) const
