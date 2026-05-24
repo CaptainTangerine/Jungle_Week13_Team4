@@ -986,6 +986,10 @@ void FParticleSystemEditorWidget::AddParticleModule(UParticleSystem* ParticleSys
 	else if (UParticleModuleTypeDataBase* TypeDataModule = Cast<UParticleModuleTypeDataBase>(Module))
 	{
 		LODLevel->SetTypeDataModule(TypeDataModule);
+		if (UParticleModuleRequired* RequiredModule = LODLevel->GetRequiredModule())
+		{
+			RequiredModule->EmitterType = TypeDataModule->EmitterType;
+		}
 		SelectedModule = TypeDataModule;
 	}
 	else if (Cast<UParticleModuleSpawn>(Module))
@@ -1013,6 +1017,48 @@ void FParticleSystemEditorWidget::AddParticleModule(UParticleSystem* ParticleSys
 	ParticleSystem->CacheSystemModuleInfo();
 	ParticleSystem->BumpVersion();
 	MarkDirty();
+}
+
+void FParticleSystemEditorWidget::SyncTypeDataModuleForEmitterType(UParticleEmitter* Emitter)
+{
+	if (!Emitter)
+	{
+		return;
+	}
+
+	UParticleLODLevel* LODLevel = Emitter->GetLODLevel(0);
+	UParticleModuleRequired* RequiredModule = LODLevel ? LODLevel->GetRequiredModule() : nullptr;
+	if (!LODLevel || !RequiredModule)
+	{
+		return;
+	}
+
+	UParticleModuleTypeDataBase* TypeDataModule = LODLevel->GetTypeDataModule();
+	if (TypeDataModule && TypeDataModule->EmitterType == RequiredModule->EmitterType)
+	{
+		return;
+	}
+
+	UParticleModuleTypeDataBase* NewTypeDataModule = nullptr;
+	switch (RequiredModule->EmitterType)
+	{
+	case EParticleEmitterType::Mesh:
+		NewTypeDataModule = UObjectManager::Get().CreateObject<UParticleModuleTypeDataMesh>(LODLevel);
+		break;
+	case EParticleEmitterType::Beam:
+		NewTypeDataModule = UObjectManager::Get().CreateObject<UParticleModuleTypeDataBeam>(LODLevel);
+		break;
+	case EParticleEmitterType::Ribbon:
+		NewTypeDataModule = UObjectManager::Get().CreateObject<UParticleModuleTypeDataRibbon>(LODLevel);
+		break;
+	case EParticleEmitterType::Sprite:
+	default:
+		NewTypeDataModule = UObjectManager::Get().CreateObject<UParticleModuleTypeDataSprite>(LODLevel);
+		break;
+	}
+
+	LODLevel->SetTypeDataModule(NewTypeDataModule);
+	SelectedModule = NewTypeDataModule;
 }
 
 void FParticleSystemEditorWidget::MoveParticleModule(UParticleSystem* ParticleSystem, UParticleLODLevel* SourceLODLevel, UParticleLODLevel* TargetLODLevel, UParticleModule* Module, int32 TargetIndex)
@@ -1521,6 +1567,11 @@ void FParticleSystemEditorWidget::RenderDetailsPanel(UParticleSystem* ParticleSy
 
 	if (bChanged && ParticleSystem)
 	{
+		UParticleLODLevel* SelectedLODLevel = SelectedEmitter ? SelectedEmitter->GetLODLevel(0) : nullptr;
+		if (SelectedLODLevel && SelectedModule && SelectedModule == SelectedLODLevel->GetRequiredModule())
+		{
+			SyncTypeDataModuleForEmitterType(SelectedEmitter);
+		}
 		ParticleSystem->CacheSystemModuleInfo();
 		ParticleSystem->BumpVersion();
 		MarkDirty();

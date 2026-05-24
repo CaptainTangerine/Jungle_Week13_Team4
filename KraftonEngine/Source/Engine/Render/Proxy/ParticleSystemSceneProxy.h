@@ -8,9 +8,11 @@
 
 class UParticleSystemComponent;
 class UMaterial;
+class UStaticMesh;
 class FMeshBuffer;
 class FDynamicVertexBuffer;
 class FDynamicIndexBuffer;
+struct FNormalVertex;
 struct FFrameContext;
 struct FDrawCommandBuffer;
 
@@ -74,23 +76,26 @@ private:
 	void SortParticlesForView(TArray<FParticleProxyParticle>& Particles, const FVector& ViewLocation) const;
 	void BuildSpriteVertices(const TArray<FParticleProxyParticle>& Particles, const FVector& CameraRight,
 		const FVector& CameraUp, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const;
+	void BuildMeshVertices(const TArray<FParticleProxyParticle>& Particles, const TArray<FNormalVertex>& MeshVertices,
+		const TArray<uint32>& MeshIndices, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const;
 
 	UMaterial* ResolveParticleMaterial(const FDynamicSpriteEmitterReplayDataBase& Source) const;
+	UStaticMesh* ResolveParticleMesh(const FString& MeshPath) const;
 	FVector ApplyParticleScale(const FVector& Size, const FVector& Scale) const;
 
 private:
 	TArray<FDynamicEmitterDataBase*> DynamicEmitters;
 
-	FDynamicVertexBuffer* DynamicSpriteVB = nullptr;
-	FDynamicIndexBuffer* DynamicSpriteIB = nullptr;
+	FDynamicVertexBuffer* DynamicParticleVB = nullptr;
+	FDynamicIndexBuffer* DynamicParticleIB = nullptr;
 
-	// 현재 렌더러의 draw command는 하나의 VB/IB만 받을 수 있으므로 sprite는
-	// 기존 셰이더 입력과 맞는 FVertexPNCTT CPU-expanded quad로 유지한다.
-	TArray<FVertexPNCTT> CachedSpriteVertices;
-	TArray<uint32> CachedSpriteIndices;
+	// 현재 렌더러의 draw command는 하나의 VB/IB만 받을 수 있으므로 sprite와 mesh를
+	// 기존 셰이더 입력과 맞는 FVertexPNCTT CPU-expanded geometry로 함께 유지한다.
+	TArray<FVertexPNCTT> CachedParticleVertices;
+	TArray<uint32> CachedParticleIndices;
 
-	// Mesh particle은 아직 draw command/vertex factory가 없으므로 렌더링하지 않는다.
-	// 대신 replay data -> instance data 변환 지점을 proxy 안에 고정해 둔다.
+	// 현재 실제 렌더링은 CPU-expanded CachedParticleVertices/Indices 경로를 사용한다.
+	// CachedMeshBatches는 이후 DrawIndexedInstanced 경로로 전환할 때 소비할 bridge 데이터다.
 	TArray<FParticleMeshRenderBatch> CachedMeshBatches;
 
 	bool bDynamicDataDirty = true;

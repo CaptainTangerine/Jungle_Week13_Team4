@@ -1,10 +1,14 @@
 ﻿#include "Render/Proxy/ParticleSystemSceneProxy.h"
 #include "Component/Primitive/ParticleSystemComponent.h"
 #include "Materials/MaterialManager.h"
+#include "Mesh/MeshManager.h"
+#include "Mesh/Static/StaticMesh.h"
+#include "Mesh/Static/StaticMeshAsset.h"
 #include "Particle/ParticleModule.h"
 #include "Render/Command/DrawCommand.h"
 #include "Render/Resource/Buffer.h"
 #include "Render/Types/FrameContext.h"
+#include "Runtime/Engine.h"
 
 #include <algorithm>
 #include <cmath>
@@ -20,25 +24,45 @@ namespace
 	{
 		return Path.empty() || Path == "None";
 	}
+
+	FVector RotateZ(const FVector& Value, float Rotation)
+	{
+		const float C = std::cos(Rotation);
+		const float S = std::sin(Rotation);
+		return FVector(
+			C * Value.X - S * Value.Y,
+			S * Value.X + C * Value.Y,
+			Value.Z);
+	}
+
+	FVector MultiplyVector(const FVector& A, const FVector& B)
+	{
+		return FVector(A.X * B.X, A.Y * B.Y, A.Z * B.Z);
+	}
+
+	FVector4 MultiplyColor(const FVector4& A, const FLinearColor& B)
+	{
+		return FVector4(A.R * B.R, A.G * B.G, A.B * B.B, A.A * B.A);
+	}
 }
 
 FParticleSystemSceneProxy::FParticleSystemSceneProxy(UParticleSystemComponent* InComponent)
 	: FPrimitiveSceneProxy(InComponent)
 {
 	ProxyFlags |= EPrimitiveProxyFlags::PerViewportUpdate | EPrimitiveProxyFlags::NeverCull;
-	DynamicSpriteVB = new FDynamicVertexBuffer();
-	DynamicSpriteIB = new FDynamicIndexBuffer();
+	DynamicParticleVB = new FDynamicVertexBuffer();
+	DynamicParticleIB = new FDynamicIndexBuffer();
 }
 
 FParticleSystemSceneProxy::~FParticleSystemSceneProxy()
 {
 	ClearDynamicData();
 
-	delete DynamicSpriteVB;
-	DynamicSpriteVB = nullptr;
+	delete DynamicParticleVB;
+	DynamicParticleVB = nullptr;
 
-	delete DynamicSpriteIB;
-	DynamicSpriteIB = nullptr;
+	delete DynamicParticleIB;
+	DynamicParticleIB = nullptr;
 }
 
 void FParticleSystemSceneProxy::UpdateTransform()
@@ -78,8 +102,8 @@ void FParticleSystemSceneProxy::ClearDynamicData()
 	}
 	DynamicEmitters.clear();
 
-	CachedSpriteVertices.clear();
-	CachedSpriteIndices.clear();
+	CachedParticleVertices.clear();
+	CachedParticleIndices.clear();
 	CachedMeshBatches.clear();
 	SectionDraws.clear();
 	bDynamicDataDirty = true;
@@ -95,8 +119,8 @@ void FParticleSystemSceneProxy::UpdatePerViewport(const FFrameContext& Frame)
 
 void FParticleSystemSceneProxy::RebuildRenderDataForView(const FFrameContext& Frame)
 {
-	CachedSpriteVertices.clear();
-	CachedSpriteIndices.clear();
+	CachedParticleVertices.clear();
+	CachedParticleIndices.clear();
 	CachedMeshBatches.clear();
 	SectionDraws.clear();
 
@@ -150,10 +174,10 @@ void FParticleSystemSceneProxy::BuildSpriteEmitterForView(const FDynamicSpriteEm
 		SortParticlesForView(Particles, Frame.CameraPosition);
 	}
 
-	const uint32 StartIndex = static_cast<uint32>(CachedSpriteIndices.size());
-	BuildSpriteVertices(Particles, Frame.CameraRight, Frame.CameraUp, CachedSpriteVertices, CachedSpriteIndices);
+	const uint32 StartIndex = static_cast<uint32>(CachedParticleIndices.size());
+	BuildSpriteVertices(Particles, Frame.CameraRight, Frame.CameraUp, CachedParticleVertices, CachedParticleIndices);
 
-	const uint32 IndexCount = static_cast<uint32>(CachedSpriteIndices.size()) - StartIndex;
+	const uint32 IndexCount = static_cast<uint32>(CachedParticleIndices.size()) - StartIndex;
 	if (IndexCount > 0)
 	{
 		FMeshSectionDraw Draw;
@@ -171,12 +195,20 @@ void FParticleSystemSceneProxy::BuildMeshEmitterForView(const FDynamicMeshEmitte
 	{
 		return;
 	}
+	if (IsNonePath(Source.MeshPath))
+	{
+		return;
+	}
 
 	TArray<FParticleProxyParticle> Particles;
 	GatherParticles(Source, Frame, Particles);
 	if (Particles.empty())
 	{
 		return;
+	}
+	if (Source.SortMode == EParticleSortMode::DistanceToCamera || Source.SortMode == EParticleSortMode::ViewDepth)
+	{
+		SortParticlesForView(Particles, Frame.CameraPosition);
 	}
 
 	FParticleMeshRenderBatch MeshBatch;
@@ -195,10 +227,27 @@ void FParticleSystemSceneProxy::BuildMeshEmitterForView(const FDynamicMeshEmitte
 		MeshBatch.Instances.push_back(Instance);
 	}
 
-	// 여기서 바로 그리지 않는 이유:
-	// 현재 FDrawCommandBuffer는 VB/IB 한 세트만 넘길 수 있어 static mesh VB + particle instance VB를 동시에 바인딩할 수 없다.
-	// 이후 DrawIndexedInstanced 경로를 추가하면 CachedMeshBatches를 소비하면 된다.
 	CachedMeshBatches.push_back(std::move(MeshBatch));
+
+	UStaticMesh* StaticMesh = ResolveParticleMesh(Source.MeshPath);
+	FStaticMesh* MeshAsset = StaticMesh ? StaticMesh->GetStaticMeshAsset() : nullptr;
+	if (!MeshAsset || MeshAsset->Vertices.empty() || MeshAsset->Indices.empty())
+	{
+		return;
+	}
+
+	const uint32 StartIndex = static_cast<uint32>(CachedParticleIndices.size());
+	BuildMeshVertices(Particles, MeshAsset->Vertices, MeshAsset->Indices, CachedParticleVertices, CachedParticleIndices);
+
+	const uint32 IndexCount = static_cast<uint32>(CachedParticleIndices.size()) - StartIndex;
+	if (IndexCount > 0)
+	{
+		FMeshSectionDraw Draw;
+		Draw.Material = ResolveParticleMaterial(Source);
+		Draw.FirstIndex = StartIndex;
+		Draw.IndexCount = IndexCount;
+		SectionDraws.push_back(Draw);
+	}
 }
 
 void FParticleSystemSceneProxy::GatherParticles(const FDynamicEmitterReplayDataBase& Source, const FFrameContext& Frame,
@@ -295,6 +344,52 @@ void FParticleSystemSceneProxy::BuildSpriteVertices(const TArray<FParticleProxyP
 	}
 }
 
+void FParticleSystemSceneProxy::BuildMeshVertices(const TArray<FParticleProxyParticle>& Particles,
+	const TArray<FNormalVertex>& MeshVertices, const TArray<uint32>& MeshIndices,
+	TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const
+{
+	if (Particles.empty() || MeshVertices.empty() || MeshIndices.empty())
+	{
+		return;
+	}
+
+	for (const uint32 RawIndex : MeshIndices)
+	{
+		if (RawIndex >= static_cast<uint32>(MeshVertices.size()))
+		{
+			return;
+		}
+	}
+
+	OutVertices.reserve(OutVertices.size() + Particles.size() * MeshVertices.size());
+	OutIndices.reserve(OutIndices.size() + Particles.size() * MeshIndices.size());
+
+	for (const FParticleProxyParticle& Particle : Particles)
+	{
+		const uint32 BaseVertex = static_cast<uint32>(OutVertices.size());
+
+		for (const FNormalVertex& RawVert : MeshVertices)
+		{
+			const FVector ScaledPosition = MultiplyVector(RawVert.pos, Particle.Size);
+			const FVector RotatedNormal = RotateZ(RawVert.normal, Particle.Rotation).Normalized();
+			const FVector RotatedTangent = RotateZ(FVector(RawVert.tangent.X, RawVert.tangent.Y, RawVert.tangent.Z), Particle.Rotation);
+
+			FVertexPNCTT Vertex;
+			Vertex.Position = Particle.Position + RotateZ(ScaledPosition, Particle.Rotation);
+			Vertex.Normal = RotatedNormal;
+			Vertex.Color = MultiplyColor(RawVert.color, Particle.Color);
+			Vertex.UV = RawVert.tex;
+			Vertex.Tangent = FVector4(RotatedTangent, RawVert.tangent.W);
+			OutVertices.push_back(Vertex);
+		}
+
+		for (const uint32 RawIndex : MeshIndices)
+		{
+			OutIndices.push_back(BaseVertex + RawIndex);
+		}
+	}
+}
+
 UMaterial* FParticleSystemSceneProxy::ResolveParticleMaterial(const FDynamicSpriteEmitterReplayDataBase& Source) const
 {
 	FString MaterialPath = Source.MaterialPath;
@@ -303,6 +398,22 @@ UMaterial* FParticleSystemSceneProxy::ResolveParticleMaterial(const FDynamicSpri
 		MaterialPath = ParticleDefaults::DefaultSpriteMaterialPath;
 	}
 	return FMaterialManager::Get().GetOrCreateMaterial(MaterialPath);
+}
+
+UStaticMesh* FParticleSystemSceneProxy::ResolveParticleMesh(const FString& MeshPath) const
+{
+	if (IsNonePath(MeshPath) || !GEngine)
+	{
+		return nullptr;
+	}
+
+	ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
+	if (!Device)
+	{
+		return nullptr;
+	}
+
+	return FMeshManager::LoadStaticMesh(MeshPath, Device);
 }
 
 FVector FParticleSystemSceneProxy::ApplyParticleScale(const FVector& Size, const FVector& Scale) const
@@ -315,46 +426,46 @@ FVector FParticleSystemSceneProxy::ApplyParticleScale(const FVector& Size, const
 
 bool FParticleSystemSceneProxy::PrepareDrawBuffer(ID3D11Device* Device, ID3D11DeviceContext* Context, FDrawCommandBuffer& OutBuffer) const
 {
-	if (CachedSpriteVertices.empty() || CachedSpriteIndices.empty())
+	if (CachedParticleVertices.empty() || CachedParticleIndices.empty())
 	{
 		return false;
 	}
 
-	if (!DynamicSpriteVB || !DynamicSpriteIB)
+	if (!DynamicParticleVB || !DynamicParticleIB)
 	{
 		return false;
 	}
 
-	const uint32 RequiredVertexCount = static_cast<uint32>(CachedSpriteVertices.size());
-	const uint32 RequiredIndexCount = static_cast<uint32>(CachedSpriteIndices.size());
+	const uint32 RequiredVertexCount = static_cast<uint32>(CachedParticleVertices.size());
+	const uint32 RequiredIndexCount = static_cast<uint32>(CachedParticleIndices.size());
 
-	if (DynamicSpriteVB->GetMaxCount() == 0)
+	if (DynamicParticleVB->GetMaxCount() == 0)
 	{
 		const uint32 InitialVertexCount = std::max(256u, RequiredVertexCount);
-		DynamicSpriteVB->Create(Device, InitialVertexCount, sizeof(FVertexPNCTT));
+		DynamicParticleVB->Create(Device, InitialVertexCount, sizeof(FVertexPNCTT));
 	}
 	else
 	{
-		DynamicSpriteVB->EnsureCapacity(Device, RequiredVertexCount);
+		DynamicParticleVB->EnsureCapacity(Device, RequiredVertexCount);
 	}
 
-	if (DynamicSpriteIB->GetMaxCount() == 0)
+	if (DynamicParticleIB->GetMaxCount() == 0)
 	{
 		const uint32 InitialIndexCount = std::max(256u, RequiredIndexCount);
-		DynamicSpriteIB->Create(Device, InitialIndexCount);
+		DynamicParticleIB->Create(Device, InitialIndexCount);
 	}
 	else
 	{
-		DynamicSpriteIB->EnsureCapacity(Device, RequiredIndexCount);
+		DynamicParticleIB->EnsureCapacity(Device, RequiredIndexCount);
 	}
 
-	DynamicSpriteVB->Update(Context, CachedSpriteVertices.data(), RequiredVertexCount);
-	DynamicSpriteIB->Update(Context, CachedSpriteIndices.data(), RequiredIndexCount);
+	DynamicParticleVB->Update(Context, CachedParticleVertices.data(), RequiredVertexCount);
+	DynamicParticleIB->Update(Context, CachedParticleIndices.data(), RequiredIndexCount);
 
 	OutBuffer = {};
-	OutBuffer.VB = DynamicSpriteVB->GetBuffer();
-	OutBuffer.VBStride = DynamicSpriteVB->GetStride();
-	OutBuffer.IB = DynamicSpriteIB->GetBuffer();
+	OutBuffer.VB = DynamicParticleVB->GetBuffer();
+	OutBuffer.VBStride = DynamicParticleVB->GetStride();
+	OutBuffer.IB = DynamicParticleIB->GetBuffer();
 	OutBuffer.IndexCount = RequiredIndexCount;
 	OutBuffer.VertexCount = RequiredVertexCount;
 	OutBuffer.FirstIndex = 0;
