@@ -70,12 +70,16 @@ FDynamicSpriteEmitterReplayDataBase::FDynamicSpriteEmitterReplayDataBase(const U
 	if (!RequiredModule)
 	{
 		EmitterType = EDynamicEmitterType::Sprite;
+		MaterialPath = ParticleDefaults::DefaultSpriteMaterialPath;
+		BlendMode = EParticleBlendMode::AlphaBlend;
 		return;
 	}
 
 	EmitterType = ToDynamicEmitterType(RequiredModule->EmitterType);
 	SortMode = RequiredModule->SortMode;
 	bUseLocalSpace = RequiredModule->bUseLocalSpace;
+	MaterialPath = RequiredModule->MaterialPath.ToString();
+	BlendMode = RequiredModule->BlendMode;
 }
 
 FDynamicSpriteEmitterDataBase::FDynamicSpriteEmitterDataBase(const UParticleModuleRequired* RequiredModule)

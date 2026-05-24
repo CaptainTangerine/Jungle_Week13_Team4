@@ -70,6 +70,9 @@ struct FDynamicSpriteEmitterReplayDataBase : public FDynamicEmitterReplayDataBas
 	explicit FDynamicSpriteEmitterReplayDataBase(const UParticleModuleRequired* RequiredModule = nullptr);
 
 	const UParticleModuleRequired* RequiredModule = nullptr;
+	FString MaterialPath;
+	FString MeshPath;
+	EParticleBlendMode BlendMode = EParticleBlendMode::AlphaBlend;
 };
 
 struct FDynamicEmitterDataBase

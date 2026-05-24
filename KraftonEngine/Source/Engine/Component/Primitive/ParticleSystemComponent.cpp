@@ -236,59 +236,10 @@ void UParticleSystemComponent::RebuildDynamicData()
 
 	if (FParticleSystemSceneProxy* Proxy = static_cast<FParticleSystemSceneProxy*>(GetSceneProxy()))
 	{
-		TArray<FParticleSpriteRenderData> ProxyDataArray;
-		ProxyDataArray.reserve(DynamicEmitterDataArray.size());
-
-		for (FDynamicEmitterDataBase* DynamicData : DynamicEmitterDataArray)
-		{
-			if (!DynamicData) continue;
-
-			const FDynamicEmitterReplayDataBase& Source = DynamicData->GetSource();
-			if (Source.EmitterType == EDynamicEmitterType::Sprite)
-			{
-				const FDynamicSpriteEmitterDataBase* SpriteData = static_cast<const FDynamicSpriteEmitterDataBase*>(DynamicData);
-				const FDynamicSpriteEmitterReplayDataBase& SpriteSource = static_cast<const FDynamicSpriteEmitterReplayDataBase&>(Source);
-
-				FParticleSpriteRenderData ProxyData;
-				ProxyData.bSortByCameraDistance = SpriteSource.RequiredModule && SpriteSource.RequiredModule->SortMode == EParticleSortMode::DistanceToCamera;
-
-				FString MaterialPath = SpriteSource.RequiredModule ? SpriteSource.RequiredModule->MaterialPath.ToString() : FString();
-				if (MaterialPath.empty() || MaterialPath == "None")
-				{
-					MaterialPath = ParticleDefaults::DefaultSpriteMaterialPath;
-				}
-				ProxyData.Material = FMaterialManager::Get().GetOrCreateMaterial(MaterialPath);
-
-				int32 ActiveCount = Source.ActiveParticleCount;
-				int32 Stride = Source.ParticleStride;
-				const uint8* ParticleDataBytes = Source.DataContainer.ParticleData;
-				const uint16* ParticleIndices = Source.DataContainer.ParticleIndices;
-				if (!ParticleDataBytes || Stride <= 0)
-				{
-					continue;
-				}
-
-				ProxyData.Particles.reserve(ActiveCount);
-				for (int32 i = 0; i < ActiveCount; ++i)
-				{
-					const int32 ParticleIndex = ParticleIndices ? ParticleIndices[i] : i;
-					const FBaseParticle* BaseParticle = reinterpret_cast<const FBaseParticle*>(ParticleDataBytes + ParticleIndex * Stride);
-
-					FParticleSpriteRenderData::FParticle Particle;
-					Particle.Position = BaseParticle->Location;
-					Particle.Velocity = BaseParticle->Velocity;
-					Particle.Size = BaseParticle->Size;
-					Particle.Color = BaseParticle->Color.ToFColor(true);
-					Particle.Rotation = BaseParticle->Rotation;
-
-					ProxyData.Particles.push_back(Particle);
-				}
-
-				ProxyDataArray.push_back(std::move(ProxyData));
-			}
-		}
-
-		Proxy->UpdateDynamicData(std::move(ProxyDataArray));
+		// 확장성을 고려해 소유권을 proxy로 넘깁니다.
+		// PSC는 simulation/instance 소유, proxy는 render snapshot 소유만 담당한다.
+		Proxy->UpdateDynamicData(std::move(DynamicEmitterDataArray));
+		DynamicEmitterDataArray.clear();
 		MarkProxyDirty(EDirtyFlag::Mesh);
 	}
 }

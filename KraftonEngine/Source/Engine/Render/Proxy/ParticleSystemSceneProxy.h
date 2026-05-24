@@ -15,38 +15,29 @@ struct FFrameContext;
 struct FDrawCommandBuffer;
 
 /*
-	임시로 만들어둔 코드이므로 ai는 이 코드를 읽고 급발진하지 말도록
+	View-dependent 한 particle 렌더링 snapshot으로 scene proxy 내부에서만 사용합니다.
+	PSC가  FDynamicEmitterDataBase/ReplayData의 소유권을 넘겨주면, 프록시는
+	스프라이트 이미터를 뷰포트별 동적 버텍스로 변환해 줍니다. 나중에 추가될 mesh imitter는 
+	instance 데이터로 유지되므로 vertex factory가 추가되어도 동일한 proxy를 사용할 수 있을 겁니다.
 */
-
-// ParticleSpriteVertexFactory로 발전하기 전까지는 이 전용 vertex layout을 쓰지 않는다.
-// 임시 렌더 경로는 기존 셰이더 입력과 맞는 FVertexPNCTT로 CPU-expanded quad를 보낸다.
-// 이미 Particle/ParticleDynamicData.h 에 정의되어 있어 해당 구조체를 사용하기 위해 아래는 주석처리
-//struct FParticleSpriteVertex
-//{
-//	FVector Position;
-//	float UV[2];
-//	FColor Color;
-//	float Rotation;
-//};
-
-//particle 데이터를 렌더러 쪽에 넘기기 위한 snapshot
-//proxy는 매 프레임 이걸 업데이트해서 DrawCommandBuilder에 넘긴다.
-struct FParticleSpriteRenderData
+struct FParticleProxyParticle
 {
-	UMaterial* Material;
-	struct FParticle
-	{
-		FVector Position;
-		FVector Velocity;
-		FVector Size = FVector::OneVector;
-		FColor Color;
-		float Rotation = 0.0f;
-		float CameraDistanceSq = 0.0f;
-	};
-
-	TArray<FParticle> Particles;
-	bool bSortByCameraDistance = true;
+	FVector Position = FVector::ZeroVector;
+	FVector Velocity = FVector::ZeroVector;
+	FVector Size = FVector::OneVector;
+	FLinearColor Color = FLinearColor::White();
+	float Rotation = 0.0f;
+	float CameraDistanceSq = 0.0f;
 };
+
+struct FParticleMeshRenderBatch
+{
+	UMaterial* Material = nullptr;
+	FString MeshPath;
+	EParticleBlendMode BlendMode = EParticleBlendMode::AlphaBlend;
+	TArray<FMeshParticleInstanceVertex> Instances;
+};
+
 class FParticleSystemSceneProxy : public FPrimitiveSceneProxy
 {
 public:
@@ -58,9 +49,13 @@ public:
 	virtual void UpdateVisibility() override;
 	virtual void UpdateMaterial() override;
 	virtual void UpdateMesh() override;
-	// PSC가 Tick 이후에 렌더용 데이터를 새로 만들어서 넘겨주는 함수.
-	// 언리얼의 FParticleSystemSceneProxy::UpdateData(...)에 해당하는 단순 버전.
-	void UpdateDynamicData(TArray<FParticleSpriteRenderData>&& InSpriteEmitters);
+
+	// PSC가 Tick 이후에 만든 emitter replay data의 소유권을 proxy로 넘긴다.
+	// 이 함수의 입력은 Sprite/Mesh/Beam/Ribbon 등 emitter type을 유지하므로,
+	// proxy 내부에서 타입별 렌더 경로로 분기할 수 있다.
+	void UpdateDynamicData(TArray<FDynamicEmitterDataBase*>&& InEmitterData);
+	void ClearDynamicData();
+
 	virtual void UpdatePerViewport(const FFrameContext& Frame) override;
 
 	virtual bool PrepareDrawBuffer(ID3D11Device* Device,
@@ -69,22 +64,35 @@ public:
 private:
 	UParticleSystemComponent* GetParticleComponent() const;
 
-	void RebuildSpriteMeshForView(const FFrameContext& Frame);
-	void SortParticlesForView(const FVector& ViewLocation);
-	void BuildSpriteVertices(const FParticleSpriteRenderData& Emitter, const FVector& CameraRight,
-		const FVector& CameraUp, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices);
+	void RebuildRenderDataForView(const FFrameContext& Frame);
+	void BuildEmitterForView(FDynamicEmitterDataBase* EmitterData, const FFrameContext& Frame);
+	void BuildSpriteEmitterForView(const FDynamicSpriteEmitterDataBase& EmitterData, const FFrameContext& Frame);
+	void BuildMeshEmitterForView(const FDynamicMeshEmitterData& EmitterData, const FFrameContext& Frame);
+
+	void GatherParticles(const FDynamicEmitterReplayDataBase& Source, const FFrameContext& Frame,
+		TArray<FParticleProxyParticle>& OutParticles) const;
+	void SortParticlesForView(TArray<FParticleProxyParticle>& Particles, const FVector& ViewLocation) const;
+	void BuildSpriteVertices(const TArray<FParticleProxyParticle>& Particles, const FVector& CameraRight,
+		const FVector& CameraUp, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const;
+
+	UMaterial* ResolveParticleMaterial(const FDynamicSpriteEmitterReplayDataBase& Source) const;
+	FVector ApplyParticleScale(const FVector& Size, const FVector& Scale) const;
 
 private:
-	TArray<FParticleSpriteRenderData> SpriteEmitters;
+	TArray<FDynamicEmitterDataBase*> DynamicEmitters;
 
 	FDynamicVertexBuffer* DynamicSpriteVB = nullptr;
 	FDynamicIndexBuffer* DynamicSpriteIB = nullptr;
 
-	// 임시적으로 FVertexPNCTT로 변경해서 테스트
-	// 추후 FParticleSpriteVertex로 변경해야함
-	TArray<FVertexPNCTT> CachedVertices;
-	TArray<uint32> CachedIndices;
+	// 현재 렌더러의 draw command는 하나의 VB/IB만 받을 수 있으므로 sprite는
+	// 기존 셰이더 입력과 맞는 FVertexPNCTT CPU-expanded quad로 유지한다.
+	TArray<FVertexPNCTT> CachedSpriteVertices;
+	TArray<uint32> CachedSpriteIndices;
 
-	bool bDynamicMeshDirty = true;
+	// Mesh particle은 아직 draw command/vertex factory가 없으므로 렌더링하지 않는다.
+	// 대신 replay data -> instance data 변환 지점을 proxy 안에 고정해 둔다.
+	TArray<FParticleMeshRenderBatch> CachedMeshBatches;
+
+	bool bDynamicDataDirty = true;
 };
 

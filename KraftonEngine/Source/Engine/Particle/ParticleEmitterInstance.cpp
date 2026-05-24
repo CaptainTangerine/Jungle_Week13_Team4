@@ -274,6 +274,16 @@ FDynamicEmitterDataBase* FParticleEmitterInstance::CreateDynamicData(int32 Emitt
 	Source.ActiveParticleCount = ActiveParticles;
 	Source.ParticleStride = ParticleStride;
 	Source.Scale = Component ? Component->GetWorldScale() : FVector::OneVector;
+
+	if (Source.EmitterType == EDynamicEmitterType::Sprite || Source.EmitterType == EDynamicEmitterType::Mesh)
+	{
+		FDynamicSpriteEmitterReplayDataBase& SpriteSource = static_cast<FDynamicSpriteEmitterReplayDataBase&>(Source);
+		if (const UParticleModuleTypeDataMesh* MeshTypeData = Cast<UParticleModuleTypeDataMesh>(CurrentLODLevel->GetTypeDataModule()))
+		{
+			SpriteSource.MeshPath = MeshTypeData->MeshPath.ToString();
+		}
+	}
+
 	const int32 ParticleDataBytes = MaxActiveParticles * ParticleStride;
 	Source.DataContainer.CopyFrom(ParticleData, ParticleDataBytes, ParticleIndices, ActiveParticles);
 
