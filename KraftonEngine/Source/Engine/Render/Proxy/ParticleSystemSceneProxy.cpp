@@ -81,6 +81,7 @@ FParticleSystemSceneProxy::FParticleSystemSceneProxy(UParticleSystemComponent* I
 	ProxyFlags |= EPrimitiveProxyFlags::PerViewportUpdate | EPrimitiveProxyFlags::NeverCull;
 	DynamicParticleVB = new FDynamicVertexBuffer();
 	DynamicParticleIB = new FDynamicIndexBuffer();
+	DynamicMeshInstanceVB = new FDynamicVertexBuffer();
 }
 
 FParticleSystemSceneProxy::~FParticleSystemSceneProxy()
@@ -92,6 +93,9 @@ FParticleSystemSceneProxy::~FParticleSystemSceneProxy()
 
 	delete DynamicParticleIB;
 	DynamicParticleIB = nullptr;
+
+	delete DynamicMeshInstanceVB;
+	DynamicMeshInstanceVB = nullptr;
 }
 
 void FParticleSystemSceneProxy::UpdateTransform()
@@ -133,6 +137,7 @@ void FParticleSystemSceneProxy::ClearDynamicData()
 
 	CachedParticleVertices.clear();
 	CachedParticleIndices.clear();
+	CachedMeshInstances.clear();
 	RenderPackets.clear();
 	CachedMeshBatches.clear();
 	SectionDraws.clear();
@@ -151,6 +156,7 @@ void FParticleSystemSceneProxy::RebuildRenderDataForView(const FFrameContext& Fr
 {
 	CachedParticleVertices.clear();
 	CachedParticleIndices.clear();
+	CachedMeshInstances.clear();
 	RenderPackets.clear();
 	CachedMeshBatches.clear();
 	SectionDraws.clear();
@@ -272,6 +278,31 @@ void FParticleSystemSceneProxy::BuildMeshEmitterForView(const FDynamicMeshEmitte
 		return;
 	}
 
+	FMeshBuffer* MeshBuffer = StaticMesh->GetLODMeshBuffer(0);
+	if (MeshBuffer && MeshBuffer->IsValid() && MeshBuffer->GetIndexBuffer().GetBuffer())
+	{
+		const uint32 FirstInstance = static_cast<uint32>(CachedMeshInstances.size());
+		CachedMeshInstances.reserve(CachedMeshInstances.size() + Particles.size());
+		for (const FParticleProxyParticle& Particle : Particles)
+		{
+			FMeshParticleInstanceVertex Instance;
+			Instance.Location = Particle.Position;
+			Instance.Size = Particle.Size;
+			Instance.Color = Particle.Color;
+			Instance.Rotation = Particle.Rotation;
+			CachedMeshInstances.push_back(Instance);
+		}
+
+		AddRenderPacket(MakeInstancedMeshPacket(
+			Source,
+			StaticMesh,
+			FirstInstance,
+			static_cast<uint32>(Particles.size()),
+			MeshBuffer->GetIndexBuffer().GetIndexCount(),
+			Particles));
+		return;
+	}
+
 	const uint32 StartIndex = static_cast<uint32>(CachedParticleIndices.size());
 	BuildMeshVertices(Particles, MeshAsset->Vertices, MeshAsset->Indices, CachedParticleVertices, CachedParticleIndices);
 
@@ -287,6 +318,26 @@ void FParticleSystemSceneProxy::BuildMeshEmitterForView(const FDynamicMeshEmitte
 			Particles,
 			StaticMesh));
 	}
+}
+
+FParticleRenderPacket FParticleSystemSceneProxy::MakeInstancedMeshPacket(const FDynamicSpriteEmitterReplayDataBase& Source,
+	UStaticMesh* Mesh, uint32 FirstInstance, uint32 InstanceCount, uint32 IndexCount,
+	const TArray<FParticleProxyParticle>& Particles) const
+{
+	FParticleRenderPacket Packet;
+	Packet.EmitterType = EDynamicEmitterType::Mesh;
+	Packet.PacketType = EParticleRenderPacketType::InstancedMesh;
+	Packet.Material = ResolveParticleMaterial(Source);
+	Packet.Mesh = Mesh;
+	Packet.MeshPath = Source.MeshPath;
+	Packet.BlendMode = Source.BlendMode;
+	Packet.FirstIndex = 0;
+	Packet.IndexCount = IndexCount;
+	Packet.BaseVertex = 0;
+	Packet.FirstInstance = FirstInstance;
+	Packet.InstanceCount = InstanceCount;
+	Packet.SortDepth = ComputePacketSortDepth(Particles);
+	return Packet;
 }
 
 void FParticleSystemSceneProxy::GatherParticles(const FDynamicEmitterReplayDataBase& Source, const FFrameContext& Frame,
@@ -478,6 +529,24 @@ void FParticleSystemSceneProxy::RebuildSectionDrawsFromRenderPackets()
 		Draw.Material = Packet.Material;
 		Draw.FirstIndex = Packet.FirstIndex;
 		Draw.IndexCount = Packet.IndexCount;
+		if (Packet.PacketType == EParticleRenderPacketType::InstancedMesh && Packet.Mesh)
+		{
+			FMeshBuffer* MeshBuffer = Packet.Mesh->GetLODMeshBuffer(0);
+			if (!MeshBuffer || !MeshBuffer->IsValid() || !MeshBuffer->GetIndexBuffer().GetBuffer()
+				|| Packet.InstanceCount == 0)
+			{
+				continue;
+			}
+
+			Draw.bInstanced = true;
+			Draw.VertexBuffer = MeshBuffer->GetVertexBuffer().GetBuffer();
+			Draw.VertexStride = MeshBuffer->GetVertexBuffer().GetStride();
+			Draw.IndexBuffer = MeshBuffer->GetIndexBuffer().GetBuffer();
+			Draw.InstanceBuffer = DynamicMeshInstanceVB ? DynamicMeshInstanceVB->GetBuffer() : nullptr;
+			Draw.InstanceStride = sizeof(FMeshParticleInstanceVertex);
+			Draw.InstanceCount = Packet.InstanceCount;
+			Draw.StartInstance = Packet.FirstInstance;
+		}
 		SectionDraws.push_back(Draw);
 	}
 }
@@ -528,50 +597,96 @@ FVector FParticleSystemSceneProxy::ApplyParticleScale(const FVector& Size, const
 
 bool FParticleSystemSceneProxy::PrepareDrawBuffer(ID3D11Device* Device, ID3D11DeviceContext* Context, FDrawCommandBuffer& OutBuffer) const
 {
-	if (CachedParticleVertices.empty() || CachedParticleIndices.empty())
+	if ((CachedParticleVertices.empty() || CachedParticleIndices.empty()) && CachedMeshInstances.empty())
 	{
 		return false;
 	}
 
-	if (!DynamicParticleVB || !DynamicParticleIB)
+	if ((!CachedParticleVertices.empty() && (!DynamicParticleVB || !DynamicParticleIB))
+		|| (!CachedMeshInstances.empty() && !DynamicMeshInstanceVB))
 	{
 		return false;
 	}
-
-	const uint32 RequiredVertexCount = static_cast<uint32>(CachedParticleVertices.size());
-	const uint32 RequiredIndexCount = static_cast<uint32>(CachedParticleIndices.size());
-
-	if (DynamicParticleVB->GetMaxCount() == 0)
-	{
-		const uint32 InitialVertexCount = std::max(256u, RequiredVertexCount);
-		DynamicParticleVB->Create(Device, InitialVertexCount, sizeof(FVertexPNCTT));
-	}
-	else
-	{
-		DynamicParticleVB->EnsureCapacity(Device, RequiredVertexCount);
-	}
-
-	if (DynamicParticleIB->GetMaxCount() == 0)
-	{
-		const uint32 InitialIndexCount = std::max(256u, RequiredIndexCount);
-		DynamicParticleIB->Create(Device, InitialIndexCount);
-	}
-	else
-	{
-		DynamicParticleIB->EnsureCapacity(Device, RequiredIndexCount);
-	}
-
-	DynamicParticleVB->Update(Context, CachedParticleVertices.data(), RequiredVertexCount);
-	DynamicParticleIB->Update(Context, CachedParticleIndices.data(), RequiredIndexCount);
 
 	OutBuffer = {};
-	OutBuffer.VB = DynamicParticleVB->GetBuffer();
-	OutBuffer.VBStride = DynamicParticleVB->GetStride();
-	OutBuffer.IB = DynamicParticleIB->GetBuffer();
-	OutBuffer.IndexCount = RequiredIndexCount;
-	OutBuffer.VertexCount = RequiredVertexCount;
-	OutBuffer.FirstIndex = 0;
-	OutBuffer.BaseVertex = 0;
+
+	if (!CachedParticleVertices.empty() && !CachedParticleIndices.empty())
+	{
+		const uint32 RequiredVertexCount = static_cast<uint32>(CachedParticleVertices.size());
+		const uint32 RequiredIndexCount = static_cast<uint32>(CachedParticleIndices.size());
+
+		if (DynamicParticleVB->GetMaxCount() == 0)
+		{
+			const uint32 InitialVertexCount = std::max(256u, RequiredVertexCount);
+			DynamicParticleVB->Create(Device, InitialVertexCount, sizeof(FVertexPNCTT));
+		}
+		else
+		{
+			DynamicParticleVB->EnsureCapacity(Device, RequiredVertexCount);
+		}
+
+		if (DynamicParticleIB->GetMaxCount() == 0)
+		{
+			const uint32 InitialIndexCount = std::max(256u, RequiredIndexCount);
+			DynamicParticleIB->Create(Device, InitialIndexCount);
+		}
+		else
+		{
+			DynamicParticleIB->EnsureCapacity(Device, RequiredIndexCount);
+		}
+
+		if (!DynamicParticleVB->Update(Context, CachedParticleVertices.data(), RequiredVertexCount)
+			|| !DynamicParticleIB->Update(Context, CachedParticleIndices.data(), RequiredIndexCount))
+		{
+			return false;
+		}
+
+		OutBuffer.VB = DynamicParticleVB->GetBuffer();
+		OutBuffer.VBStride = DynamicParticleVB->GetStride();
+		OutBuffer.IB = DynamicParticleIB->GetBuffer();
+		OutBuffer.IndexCount = RequiredIndexCount;
+		OutBuffer.VertexCount = RequiredVertexCount;
+		OutBuffer.FirstIndex = 0;
+		OutBuffer.BaseVertex = 0;
+	}
+
+	if (!CachedMeshInstances.empty())
+	{
+		const uint32 RequiredInstanceCount = static_cast<uint32>(CachedMeshInstances.size());
+		if (DynamicMeshInstanceVB->GetMaxCount() == 0)
+		{
+			const uint32 InitialInstanceCount = std::max(256u, RequiredInstanceCount);
+			DynamicMeshInstanceVB->Create(Device, InitialInstanceCount, sizeof(FMeshParticleInstanceVertex));
+		}
+		else
+		{
+			DynamicMeshInstanceVB->EnsureCapacity(Device, RequiredInstanceCount);
+		}
+
+		if (!DynamicMeshInstanceVB->Update(Context, CachedMeshInstances.data(), RequiredInstanceCount))
+		{
+			return OutBuffer.VB != nullptr && OutBuffer.IB != nullptr;
+		}
+
+		ID3D11Buffer* InstanceBuffer = DynamicMeshInstanceVB->GetBuffer();
+		TArray<FMeshSectionDraw>& MutableDraws = const_cast<TArray<FMeshSectionDraw>&>(SectionDraws);
+		for (FMeshSectionDraw& Draw : MutableDraws)
+		{
+			if (Draw.bInstanced)
+			{
+				Draw.InstanceBuffer = InstanceBuffer;
+				if (!OutBuffer.VB)
+				{
+					OutBuffer.VB = Draw.VertexBuffer;
+					OutBuffer.VBStride = Draw.VertexStride;
+					OutBuffer.IB = Draw.IndexBuffer;
+					OutBuffer.IndexCount = Draw.IndexCount;
+					OutBuffer.FirstIndex = Draw.FirstIndex;
+					OutBuffer.BaseVertex = 0;
+				}
+			}
+		}
+	}
 
 	return OutBuffer.VB != nullptr && OutBuffer.IB != nullptr;
 }

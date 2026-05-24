@@ -115,6 +115,8 @@ private:
 	void BuildMeshVertices(const TArray<FParticleProxyParticle>& Particles, const TArray<FNormalVertex>& MeshVertices,
 		const TArray<uint32>& MeshIndices, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const;
 
+	FParticleRenderPacket MakeInstancedMeshPacket(const FDynamicSpriteEmitterReplayDataBase& Source, UStaticMesh* Mesh,
+		uint32 FirstInstance, uint32 InstanceCount, uint32 IndexCount, const TArray<FParticleProxyParticle>& Particles) const;
 	FParticleRenderPacket MakeCpuExpandedPacket(EDynamicEmitterType EmitterType, EParticleRenderPacketType PacketType,
 		const FDynamicSpriteEmitterReplayDataBase& Source, uint32 FirstIndex, uint32 IndexCount,
 		const TArray<FParticleProxyParticle>& Particles, UStaticMesh* Mesh = nullptr) const;
@@ -132,11 +134,13 @@ private:
 
 	FDynamicVertexBuffer* DynamicParticleVB = nullptr;
 	FDynamicIndexBuffer* DynamicParticleIB = nullptr;
+	FDynamicVertexBuffer* DynamicMeshInstanceVB = nullptr;
 
 	// 현재 렌더러의 draw command는 하나의 VB/IB만 받을 수 있으므로 sprite와 mesh를
 	// 기존 셰이더 입력과 맞는 FVertexPNCTT CPU-expanded geometry로 함께 유지한다.
 	TArray<FVertexPNCTT> CachedParticleVertices;
 	TArray<uint32> CachedParticleIndices;
+	TArray<FMeshParticleInstanceVertex> CachedMeshInstances;
 
 	// ReplayData에서 view-dependent geometry를 만든 뒤 draw unit 단위로 나눈 결과다.
 	// DrawCommandBuilder는 아직 FMeshSectionDraw를 읽기 때문에, RenderPackets를 SectionDraws로 동기화한다.

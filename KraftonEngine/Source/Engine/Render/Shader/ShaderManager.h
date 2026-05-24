@@ -152,6 +152,7 @@ namespace EUberLitDefines
 	{
 		inline constexpr const char* StaticMeshVS = "VS_StaticMesh";
 		inline constexpr const char* SkeletalMeshVS = "VS_SkeletalMesh";
+		inline constexpr const char* MeshParticleInstancedVS = "VS_MeshParticleInstanced";
 		inline constexpr const char* PS = "PS";
 	}
 
@@ -168,6 +169,7 @@ namespace EUberLitDefines
 	{
 		StaticMesh,
 		SkeletalMesh,
+		MeshParticleInstanced,
 	};
 
 	inline const D3D_SHADER_MACRO Default[] = { {"LIGHTING_MODEL_PHONG", "1"}, {nullptr, nullptr} };
@@ -244,9 +246,15 @@ namespace EUberLitDefines
 
 	inline FShaderKey MakePermutationKey(ELightingModel LightingModel, EVertexFactory VertexFactory, bool bWeightBoneHeatMap = false, bool bColorOnly = false)
 	{
-		const char* VSEntryPoint = VertexFactory == EVertexFactory::SkeletalMesh
-			? EntryPoint::SkeletalMeshVS
-			: EntryPoint::StaticMeshVS;
+		const char* VSEntryPoint = EntryPoint::StaticMeshVS;
+		if (VertexFactory == EVertexFactory::SkeletalMesh)
+		{
+			VSEntryPoint = EntryPoint::SkeletalMeshVS;
+		}
+		else if (VertexFactory == EVertexFactory::MeshParticleInstanced)
+		{
+			VSEntryPoint = EntryPoint::MeshParticleInstancedVS;
+		}
 		return FShaderKey(EShaderPath::UberLit, GetDefines(LightingModel, VertexFactory, bWeightBoneHeatMap, bColorOnly), VSEntryPoint, EntryPoint::PS);
 	}
 }

@@ -5,6 +5,8 @@
 #include "Materials/Material.h"
 #include "Core/Logging/Log.h"
 #include "Core/Logging/Notification.h"
+#include <cctype>
+#include <cstring>
 #include <iostream>
 #pragma comment(lib, "dxguid.lib")
 #pragma comment(lib, "d3dcompiler.lib")
@@ -221,6 +223,34 @@ void FShader::Bind(ID3D11DeviceContext* InDeviceContext) const
 
 namespace
 {
+	bool StartsWithInsensitive(const char* Text, const char* Prefix)
+	{
+		if (!Text || !Prefix)
+		{
+			return false;
+		}
+
+		while (*Prefix)
+		{
+			if (*Text == '\0')
+			{
+				return false;
+			}
+			if (std::tolower(static_cast<unsigned char>(*Text)) != std::tolower(static_cast<unsigned char>(*Prefix)))
+			{
+				return false;
+			}
+			++Text;
+			++Prefix;
+		}
+		return true;
+	}
+
+	bool IsInstanceSemantic(const char* SemanticName)
+	{
+		return StartsWithInsensitive(SemanticName, "INSTANCE");
+	}
+
 	DXGI_FORMAT MaskToFormat(D3D_REGISTER_COMPONENT_TYPE ComponentType, BYTE Mask)
 	{
 		// Mask 비트 수 세기 (사용되는 컴포넌트 개수)
@@ -289,10 +319,11 @@ void FShader::CreateInputLayoutFromReflection(ID3D11Device* InDevice, ID3DBlob* 
 		Elem.SemanticName = ParamDesc.SemanticName;
 		Elem.SemanticIndex = ParamDesc.SemanticIndex;
 		Elem.Format = MaskToFormat(ParamDesc.ComponentType, ParamDesc.Mask);
-		Elem.InputSlot = 0;
+		const bool bInstanceSemantic = IsInstanceSemantic(ParamDesc.SemanticName);
+		Elem.InputSlot = bInstanceSemantic ? 1 : 0;
 		Elem.AlignedByteOffset = D3D11_APPEND_ALIGNED_ELEMENT;
-		Elem.InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
-		Elem.InstanceDataStepRate = 0;
+		Elem.InputSlotClass = bInstanceSemantic ? D3D11_INPUT_PER_INSTANCE_DATA : D3D11_INPUT_PER_VERTEX_DATA;
+		Elem.InstanceDataStepRate = bInstanceSemantic ? 1 : 0;
 
 		Elements.push_back(Elem);
 	}

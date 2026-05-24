@@ -330,6 +330,7 @@ struct FConstantBufferBinding
 };
 
 class UMaterial;
+struct ID3D11Buffer;
 
 // 섹션별 드로우 정보 — 머티리얼 포인터 + 인덱스 범위만 보관
 struct FMeshSectionDraw
@@ -337,5 +338,14 @@ struct FMeshSectionDraw
 	UMaterial* Material = nullptr;
 	uint32 FirstIndex = 0;
 	uint32 IndexCount = 0;
+
+	bool bInstanced = false;
+	ID3D11Buffer* VertexBuffer = nullptr;
+	uint32 VertexStride = 0;
+	ID3D11Buffer* IndexBuffer = nullptr;
+	ID3D11Buffer* InstanceBuffer = nullptr;
+	uint32 InstanceStride = 0;
+	uint32 InstanceCount = 0;
+	uint32 StartInstance = 0;
 };
 

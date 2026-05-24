@@ -205,11 +205,24 @@ void FDrawCommandList::SubmitCommand(const FDrawCommand& Cmd,
 	// --- Geometry (VB + IB) ---
 	if (Cmd.Buffer.HasBuffers())
 	{
-		if (bForce || Cmd.Buffer.VB != Cache.Buffer.VB || Cmd.Buffer.VBStride != Cache.Buffer.VBStride)
+		if (Cmd.Buffer.bInstanced)
 		{
-			uint32 Offset = 0;
-			Ctx->IASetVertexBuffers(0, 1, &Cmd.Buffer.VB, &Cmd.Buffer.VBStride, &Offset);
+			if (!Cmd.Buffer.InstanceBuffer || Cmd.Buffer.InstanceCount == 0)
+			{
+				return;
+			}
+
+			ID3D11Buffer* Buffers[2] = { Cmd.Buffer.VB, Cmd.Buffer.InstanceBuffer };
+			uint32 Strides[2] = { Cmd.Buffer.VBStride, Cmd.Buffer.InstanceStride };
+			uint32 Offsets[2] = { Cmd.Buffer.VBOffset, Cmd.Buffer.InstanceOffset };
+			Ctx->IASetVertexBuffers(0, 2, Buffers, Strides, Offsets);
 		}
+		else if (bForce || Cmd.Buffer.bInstanced != Cache.Buffer.bInstanced || Cmd.Buffer.VB != Cache.Buffer.VB
+			|| Cmd.Buffer.VBStride != Cache.Buffer.VBStride || Cmd.Buffer.VBOffset != Cache.Buffer.VBOffset)
+		{
+			Ctx->IASetVertexBuffers(0, 1, &Cmd.Buffer.VB, &Cmd.Buffer.VBStride, &Cmd.Buffer.VBOffset);
+		}
+
 		if (bForce || Cmd.Buffer.IB != Cache.Buffer.IB)
 		{
 			if (Cmd.Buffer.IB)
@@ -281,7 +294,22 @@ void FDrawCommandList::SubmitCommand(const FDrawCommand& Cmd,
 	// --- Draw ---
 	if (Cmd.Buffer.IndexCount > 0)
 	{
-		Ctx->DrawIndexed(Cmd.Buffer.IndexCount, Cmd.Buffer.FirstIndex, Cmd.Buffer.BaseVertex);
+		if (Cmd.Buffer.bInstanced)
+		{
+			if (Cmd.Buffer.InstanceBuffer && Cmd.Buffer.InstanceCount > 0)
+			{
+				Ctx->DrawIndexedInstanced(
+					Cmd.Buffer.IndexCount,
+					Cmd.Buffer.InstanceCount,
+					Cmd.Buffer.FirstIndex,
+					Cmd.Buffer.BaseVertex,
+					Cmd.Buffer.StartInstance);
+			}
+		}
+		else
+		{
+			Ctx->DrawIndexed(Cmd.Buffer.IndexCount, Cmd.Buffer.FirstIndex, Cmd.Buffer.BaseVertex);
+		}
 	}
 	else if (Cmd.Buffer.VertexCount > 0)
 	{

@@ -102,14 +102,21 @@ void FDrawCommandBuilder::BeginCollect(const FFrameContext& Frame)
 // ============================================================
 // SelectEffectiveShader — ViewMode에 따른 UberLit 셰이더 변형 선택
 // ============================================================
-FShader* FDrawCommandBuilder::SelectEffectiveShader(FShader* ProxyShader, ERenderPass Pass, EViewMode ViewMode, bool bUseSkeletalVertexFactory, bool bWeightBoneHeatMap)
+FShader* FDrawCommandBuilder::SelectEffectiveShader(FShader* ProxyShader, ERenderPass Pass, EViewMode ViewMode,
+	bool bUseSkeletalVertexFactory, bool bWeightBoneHeatMap, bool bUseMeshParticleInstancing)
 {
 	if (ProxyShader != FShaderManager::Get().GetOrCreate(EShaderPath::UberLit))
 		return ProxyShader;
 
-	const EUberLitDefines::EVertexFactory VertexFactory = bUseSkeletalVertexFactory
-		? EUberLitDefines::EVertexFactory::SkeletalMesh
-		: EUberLitDefines::EVertexFactory::StaticMesh;
+	EUberLitDefines::EVertexFactory VertexFactory = EUberLitDefines::EVertexFactory::StaticMesh;
+	if (bUseSkeletalVertexFactory)
+	{
+		VertexFactory = EUberLitDefines::EVertexFactory::SkeletalMesh;
+	}
+	else if (bUseMeshParticleInstancing)
+	{
+		VertexFactory = EUberLitDefines::EVertexFactory::MeshParticleInstanced;
+	}
 	const bool bColorOnly = (Pass == ERenderPass::AlphaBlend);
 
 	switch (ViewMode)
@@ -124,7 +131,7 @@ FShader* FDrawCommandBuilder::SelectEffectiveShader(FShader* ProxyShader, ERende
 	case EViewMode::LightCulling:
 		return FShaderManager::Get().GetOrCreateUberLitPermutation(EUberLitDefines::ELightingModel::Phong, VertexFactory, EShaderErrorMode::Notification, bWeightBoneHeatMap, bColorOnly);
 	default:
-		return bUseSkeletalVertexFactory || bColorOnly
+		return bUseSkeletalVertexFactory || bUseMeshParticleInstancing || bColorOnly
 			? FShaderManager::Get().GetOrCreateUberLitPermutation(EUberLitDefines::ELightingModel::Default, VertexFactory, EShaderErrorMode::Notification, bWeightBoneHeatMap, bColorOnly)
 			: ProxyShader;
 	}
@@ -192,16 +199,19 @@ void FDrawCommandBuilder::BuildCommandForProxy(FScene& Scene, const FPrimitiveSc
 	const bool bDepthOnly = (Pass == ERenderPass::PreDepth);
 
 	// 섹션당 1개 커맨드 (per-section 셰이더)
- 	for (const FMeshSectionDraw& Section : Proxy.GetSectionDraws())
+	for (const FMeshSectionDraw& Section : Proxy.GetSectionDraws())
 	{
 		if (Section.IndexCount == 0) continue;
 		if (!ProxyBuffer.IB) continue;
+		if (Section.bInstanced && (!Section.VertexBuffer || !Section.IndexBuffer || !Section.InstanceBuffer || Section.InstanceCount == 0))
+			continue;
 
 		// Section Material이 셰이더를 가지면 사용, 없으면 Proxy 폴백
 		FShader* SectionShader = (Section.Material && Section.Material->GetShader())
 			? Section.Material->GetShader()
 			: Proxy.GetShader();
-		FShader* EffectiveShader = SelectEffectiveShader(SectionShader, Pass, CollectViewMode, bGPUSkinning, bWeightBoneHeatMap);
+		FShader* EffectiveShader = SelectEffectiveShader(SectionShader, Pass, CollectViewMode,
+			bGPUSkinning, bWeightBoneHeatMap, Section.bInstanced);
 
 		FDrawCommand& Cmd = DrawCommandList.AddCommand();
 		Cmd.Pass = Pass;
@@ -213,6 +223,23 @@ void FDrawCommandBuilder::BuildCommandForProxy(FScene& Scene, const FPrimitiveSc
 		Cmd.bIsGpuSkinned = bGPUSkinning;
 		Cmd.Buffer.FirstIndex = Section.FirstIndex;
 		Cmd.Buffer.IndexCount = Section.IndexCount;
+		if (Section.bInstanced)
+		{
+			Cmd.Buffer = {};
+			Cmd.Buffer.VB = Section.VertexBuffer;
+			Cmd.Buffer.VBStride = Section.VertexStride;
+			Cmd.Buffer.IB = Section.IndexBuffer;
+			Cmd.Buffer.FirstIndex = Section.FirstIndex;
+			Cmd.Buffer.IndexCount = Section.IndexCount;
+			Cmd.Buffer.BaseVertex = 0;
+			Cmd.Buffer.bInstanced = true;
+			Cmd.Buffer.InstanceBuffer = Section.InstanceBuffer;
+			Cmd.Buffer.InstanceStride = Section.InstanceStride;
+			Cmd.Buffer.InstanceOffset = 0;
+			Cmd.Buffer.InstanceCount = Section.InstanceCount;
+			// IA slot 1 offset은 0으로 두고 DrawIndexedInstanced의 StartInstanceLocation만 사용한다.
+			Cmd.Buffer.StartInstance = Section.StartInstance;
+		}
 		Cmd.Bindings.SkinMatrixSRV = bGPUSkinning && SkeletalProxy
 			? SkeletalProxy->GetSkinMatrixSRV(CachedDevice, Ctx)
 			: nullptr;

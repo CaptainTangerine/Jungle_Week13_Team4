@@ -104,6 +104,60 @@ UberVS_Output VS_StaticMesh(VS_Input_PNCTT input)
     return output;
 }
 
+UberVS_Output VS_MeshParticleInstanced(VS_Input_PNCTT_InstancedParticle input)
+{
+    UberVS_Output output;
+
+    float S, C;
+    sincos(input.instanceRotation, S, C);
+
+    float3 scaled = input.position * input.instanceSize;
+    float3 rotatedPosition = float3(
+        scaled.x * C - scaled.y * S,
+        scaled.x * S + scaled.y * C,
+        scaled.z);
+    float3 worldPos = input.instanceLocation + rotatedPosition;
+
+    float3 rotatedNormal = normalize(float3(
+        input.normal.x * C - input.normal.y * S,
+        input.normal.x * S + input.normal.y * C,
+        input.normal.z));
+    float3 rotatedTangent = normalize(float3(
+        input.tangent.x * C - input.tangent.y * S,
+        input.tangent.x * S + input.tangent.y * C,
+        input.tangent.z));
+
+    output.worldPos = worldPos;
+    output.position = mul(mul(float4(worldPos, 1.0f), View), Projection);
+    output.normal = rotatedNormal;
+    output.color = input.color * input.instanceColor * SectionColor;
+    output.texcoord = input.texcoord;
+    output.selectedBoneWeight = 0.0f;
+
+    float3 T = normalize(rotatedTangent - output.normal * dot(output.normal, rotatedTangent));
+    output.tangent = float4(T, input.tangent.w);
+
+#if defined(LIGHTING_MODEL_GOURAUD) && LIGHTING_MODEL_GOURAUD
+    float3 N = output.normal;
+
+    if (HasNormalMap > 0.5f)
+    {
+        float3 B = normalize(cross(N, T) * input.tangent.w);
+        float3x3 TBN = float3x3(T, B, N);
+
+        float3 tangentNormal = NormalTexture.SampleLevel(LinearWrapSampler, input.texcoord, 0).xyz * 2.0f - 1.0f;
+
+        N = normalize(mul(tangentNormal, TBN));
+    }
+
+    float3 V = normalize(CameraWorldPos - output.worldPos);
+    output.litDiffuse = AccumulateDiffuseVS(output.worldPos, N);
+    output.litSpecular = AccumulateSpecularVS(output.worldPos, N, V, g_DefaultShininess);
+#endif
+
+    return output;
+}
+
 // GPU Skinning
 UberVS_Output VS_SkeletalMesh(VS_Input_PNCTTBB input)
 {
