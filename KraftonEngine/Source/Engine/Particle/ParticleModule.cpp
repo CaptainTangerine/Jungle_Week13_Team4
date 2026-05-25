@@ -135,6 +135,13 @@ void UParticleModuleVelocity::Spawn(const FSpawnContext& Context)
 	Context.ParticleBase->BaseVelocity = SpawnVelocity;
 }
 
+void UParticleModuleAccelerationConstant::Update(const FUpdateContext& Context)
+{
+	BEGIN_UPDATE_LOOP
+		Particle.BaseVelocity += Acceleration * DeltaTime;
+	END_UPDATE_LOOP
+}
+
 int32 UParticleModuleSpawnPerUnit::GetInstancePayloadSize() const
 {
 	return sizeof(FSpawnPerUnitInstancePayload);
