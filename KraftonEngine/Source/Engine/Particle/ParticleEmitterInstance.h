@@ -57,6 +57,12 @@ struct FParticleEmitterInstance
 	int32 GetActiveParticleCount() const { return ActiveParticles; }
 	int32 GetMaxActiveParticleCount() const { return MaxActiveParticles; }
 	int32 GetParticleStride() const { return ParticleStride; }
+	float GetEmitterTime() const { return EmitterTime; }
+	uint64 GetAllocatedMemoryBytes() const
+	{
+		return static_cast<uint64>(DataContainer.MemBlockSize)
+			+ static_cast<uint64>(InstanceDataStorage.size());
+	}
 	uint8* GetParticleData() { return ParticleData; }
 	const uint8* GetParticleData() const { return ParticleData; }
 	uint16* GetParticleIndices() { return ParticleIndices; }

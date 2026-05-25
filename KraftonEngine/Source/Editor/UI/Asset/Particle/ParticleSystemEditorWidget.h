@@ -27,9 +27,12 @@ private:
 	void RenderEmitterPanel(class UParticleSystem* ParticleSystem, const struct ImVec2& Size);
 	void RenderDetailsPanel(class UParticleSystem* ParticleSystem, const struct ImVec2& Size);
 	void RenderViewportPanel(const struct ImVec2& Size);
+	void RenderViewportMenus();
 	void RenderVerticalSplitter(const char* Id, float Height, float& InOutRatio, float UsableWidth);
 	void RenderHorizontalSplitter(const char* Id, float Width, float& InOutRatio, float UsableHeight);
 	void DrawViewportAxisOverlay(struct ImDrawList* DrawList, const struct ImVec2& ViewportPos, const struct ImVec2& ViewportSize) const;
+	void DrawViewportStatsOverlay(struct ImDrawList* DrawList, const struct ImVec2& ViewportPos, const struct ImVec2& ViewportSize) const;
+	float CalculatePreviewDuration() const;
 	void AddParticleEmitter(class UParticleSystem* ParticleSystem);
 	void InsertParticleEmitter(class UParticleSystem* ParticleSystem, int32 Index);
 	void DeleteParticleEmitter(class UParticleSystem* ParticleSystem, int32 Index);
@@ -39,7 +42,19 @@ private:
 	bool RenderObjectPropertiesInline(class UObject* Object);
 
 private:
+	struct FPreviewPlaybackState
+	{
+		bool bPaused = false;
+		bool bLooping = true;
+		bool bComplete = false;
+		float PlayRate = 1.0f;
+		float Duration = 0.0f;
+		float CurrentTime = 0.0f;
+		float AccumulatedTime = 0.0f;
+	};
+
 	FParticleEditorViewportClient ViewportClient;
+	class UParticleSystemComponent* PreviewParticleComponent = nullptr;
 	uint32 InstanceId = 0;
 	FName PreviewWorldHandle = FName::None;
 	FString WindowIdSuffix;
@@ -53,4 +68,9 @@ private:
 
 	bool bOpenParticleAssetSearchPopup = false;
 	char ParticleAssetSearchBuffer[128] = {};
+
+	bool bShowParticleCount = false;
+	bool bShowParticleTime = false;
+	bool bShowParticleMemory = false;
+	FPreviewPlaybackState PreviewPlayback;
 };

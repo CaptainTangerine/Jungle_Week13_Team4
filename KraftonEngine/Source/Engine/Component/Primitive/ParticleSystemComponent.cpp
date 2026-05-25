@@ -94,6 +94,64 @@ void UParticleSystemComponent::ResetSystem()
 	RecreateEmitterInstances();
 }
 
+uint64 UParticleSystemComponent::GetTemplateMemoryBytes() const
+{
+	if (!Template)
+	{
+		return 0;
+	}
+
+	uint64 Bytes = static_cast<uint64>(Template->GetClass()->GetSize());
+	for (const UParticleEmitter* Emitter : Template->GetEmitters())
+	{
+		if (!Emitter)
+		{
+			continue;
+		}
+
+		Bytes += static_cast<uint64>(Emitter->GetClass()->GetSize());
+		for (const UParticleLODLevel* LODLevel : Emitter->GetLODLevels())
+		{
+			if (!LODLevel)
+			{
+				continue;
+			}
+
+			Bytes += static_cast<uint64>(LODLevel->GetClass()->GetSize());
+			if (const UParticleModule* Required = LODLevel->GetRequiredModule())
+			{
+				Bytes += static_cast<uint64>(Required->GetClass()->GetSize());
+			}
+			if (const UParticleModule* TypeData = LODLevel->GetTypeDataModule())
+			{
+				Bytes += static_cast<uint64>(TypeData->GetClass()->GetSize());
+			}
+			for (const UParticleModule* Module : LODLevel->GetModules())
+			{
+				if (Module)
+				{
+					Bytes += static_cast<uint64>(Module->GetClass()->GetSize());
+				}
+			}
+		}
+	}
+	return Bytes;
+}
+
+uint64 UParticleSystemComponent::GetInstanceMemoryBytes() const
+{
+	uint64 Bytes = static_cast<uint64>(GetClass()->GetSize());
+	for (const FParticleEmitterInstance* Instance : EmitterInstances)
+	{
+		if (Instance)
+		{
+			Bytes += sizeof(FParticleEmitterInstance);
+			Bytes += Instance->GetAllocatedMemoryBytes();
+		}
+	}
+	return Bytes;
+}
+
 void UParticleSystemComponent::RecreateEmitterInstances()
 {
 	ClearDynamicData();
@@ -156,7 +214,11 @@ FString UParticleSystemComponent::GetInstanceNameForParticles() const
 void UParticleSystemComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
 {
 	UPrimitiveComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	AdvanceSimulation(DeltaTime);
+}
 
+void UParticleSystemComponent::AdvanceSimulation(float DeltaTime)
+{
 	if (!IsActive() || !Template)
 	{
 		return;

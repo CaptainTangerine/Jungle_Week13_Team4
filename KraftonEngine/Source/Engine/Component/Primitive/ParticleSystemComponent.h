@@ -32,11 +32,14 @@ public:
 	void RecreateEmitterInstances();
 	void ClearEmitterInstances();
 	void ClearDynamicData();
+	void AdvanceSimulation(float DeltaTime);
 
 	int32 GetCurrentLODIndex() const { return CurrentLODIndex; }
 	float GetLastLODDistance() const { return LastLODDistance; }
 	const TArray<FParticleEmitterInstance*>& GetEmitterInstances() const { return EmitterInstances; }
 	const TArray<FDynamicEmitterDataBase*>& GetDynamicEmitterDataArray() const { return DynamicEmitterDataArray; }
+	uint64 GetTemplateMemoryBytes() const;
+	uint64 GetInstanceMemoryBytes() const;
 
 	const FTransform& GetComponentTransformForParticles() const { return GetRelativeTransform(); }
 	FString GetInstanceNameForParticles() const;
