@@ -2,6 +2,7 @@
 
 #include "Object/Object.h"
 #include "Object/Ptr/SoftObjectPtr.h"
+#include "Object/FName.h"
 #include "Particle/ParticleTypes.h"
 #include "Engine/Math/Transform.h"
 #include "Source/Engine/Particle/ParticleModule.generated.h"
@@ -108,6 +109,11 @@ public:
 
 	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="Use SubUV")
 	bool bUseSubUV = false;
+
+	// Optional atlas resource managed by FResourceManager.
+	// When set, particle sprites bind this atlas SRV directly and use its Columns/Rows as the SubUV grid.
+	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="SubUV Resource", AssetType="SubUVResource")
+	FName SubUVResourceName;
 
 	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="Sub Images X", Min=1.0f, Max=64.0f, Speed=1.0f)
 	int32 SubImagesX = 1;

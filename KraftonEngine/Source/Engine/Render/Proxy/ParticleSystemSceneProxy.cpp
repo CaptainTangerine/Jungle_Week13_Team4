@@ -1,10 +1,13 @@
 ﻿#include "Render/Proxy/ParticleSystemSceneProxy.h"
 #include "Component/Primitive/ParticleSystemComponent.h"
+#include "Materials/Material.h"
 #include "Materials/MaterialManager.h"
 #include "Mesh/MeshManager.h"
 #include "Mesh/Static/StaticMesh.h"
 #include "Mesh/Static/StaticMeshAsset.h"
 #include "Particle/ParticleModule.h"
+#include "Object/Reflection/ObjectFactory.h"
+#include "Resource/ResourceManager.h"
 #include "Render/Command/DrawCommand.h"
 #include "Render/Resource/Buffer.h"
 #include "Render/Types/FrameContext.h"
@@ -45,15 +48,16 @@ namespace
 		return FVector4(A.R * B.R, A.G * B.G, A.B * B.B, A.A * B.A);
 	}
 
-	FVector2 BuildSubUV(const FDynamicSpriteEmitterReplayDataBase& Source, const FParticleProxyParticle& Particle, float U, float V)
+	FVector2 BuildSubUV(const FDynamicSpriteEmitterReplayDataBase& Source, const FParticleProxyParticle& Particle, float U, float V,
+		int32 ResolvedSubImagesX, int32 ResolvedSubImagesY)
 	{
 		if (!Source.bUseSubUV)
 		{
 			return FVector2(U, V);
 		}
 
-		const int32 SubImagesX = std::max(1, Source.SubImagesX);
-		const int32 SubImagesY = std::max(1, Source.SubImagesY);
+		const int32 SubImagesX = std::max(1, ResolvedSubImagesX);
+		const int32 SubImagesY = std::max(1, ResolvedSubImagesY);
 		const int32 TotalFrames = SubImagesX * SubImagesY;
 		if (TotalFrames <= 1)
 		{
@@ -124,6 +128,15 @@ FParticleSystemSceneProxy::~FParticleSystemSceneProxy()
 
 	delete DynamicMeshInstanceVB;
 	DynamicMeshInstanceVB = nullptr;
+
+	for (auto& Pair : SubUVAtlasMaterialCache)
+	{
+		if (Pair.second)
+		{
+			UObjectManager::Get().DestroyObject(Pair.second);
+		}
+	}
+	SubUVAtlasMaterialCache.clear();
 }
 
 void FParticleSystemSceneProxy::UpdateTransform()
@@ -242,8 +255,17 @@ void FParticleSystemSceneProxy::BuildSpriteEmitterForView(const FDynamicSpriteEm
 		SortParticlesForView(Particles, Frame.CameraPosition);
 	}
 
+	int32 ResolvedSubImagesX = Source.SubImagesX;
+	int32 ResolvedSubImagesY = Source.SubImagesY;
+	if (const FTextureAtlasResource* SubUVResource = ResolveSubUVResource(Source))
+	{
+		ResolvedSubImagesX = static_cast<int32>(std::max(1u, SubUVResource->Columns));
+		ResolvedSubImagesY = static_cast<int32>(std::max(1u, SubUVResource->Rows));
+	}
+
 	const uint32 StartIndex = static_cast<uint32>(CachedParticleIndices.size());
-	BuildSpriteVertices(Source, Particles, Frame.CameraRight, Frame.CameraUp, CachedParticleVertices, CachedParticleIndices);
+	BuildSpriteVertices(Source, Particles, Frame.CameraRight, Frame.CameraUp, ResolvedSubImagesX, ResolvedSubImagesY,
+		CachedParticleVertices, CachedParticleIndices);
 
 	const uint32 IndexCount = static_cast<uint32>(CachedParticleIndices.size()) - StartIndex;
 	if (IndexCount > 0)
@@ -419,7 +441,7 @@ void FParticleSystemSceneProxy::SortParticlesForView(TArray<FParticleProxyPartic
 }
 
 void FParticleSystemSceneProxy::BuildSpriteVertices(const FDynamicSpriteEmitterReplayDataBase& Source, const TArray<FParticleProxyParticle>& Particles, const FVector& CameraRight,
-	const FVector& CameraUp, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const
+	const FVector& CameraUp, int32 ResolvedSubImagesX, int32 ResolvedSubImagesY, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const
 {
 	const FVector Normal = CameraUp.Cross(CameraRight).Normalized();
 	const FVector4 Tangent(CameraRight, 1.0f);
@@ -444,10 +466,10 @@ void FParticleSystemSceneProxy::BuildSpriteVertices(const FDynamicSpriteEmitterR
 		const FVector4 Color = Particle.Color.ToVector4();
 
 		FVertexPNCTT V0, V1, V2, V3;
-		V0.Position = P0; V0.Normal = Normal; V0.Color = Color; V0.UV = BuildSubUV(Source, Particle, 0.0f, 0.0f); V0.Tangent = Tangent;
-		V1.Position = P1; V1.Normal = Normal; V1.Color = Color; V1.UV = BuildSubUV(Source, Particle, 1.0f, 0.0f); V1.Tangent = Tangent;
-		V2.Position = P2; V2.Normal = Normal; V2.Color = Color; V2.UV = BuildSubUV(Source, Particle, 0.0f, 1.0f); V2.Tangent = Tangent;
-		V3.Position = P3; V3.Normal = Normal; V3.Color = Color; V3.UV = BuildSubUV(Source, Particle, 1.0f, 1.0f); V3.Tangent = Tangent;
+		V0.Position = P0; V0.Normal = Normal; V0.Color = Color; V0.UV = BuildSubUV(Source, Particle, 0.0f, 0.0f, ResolvedSubImagesX, ResolvedSubImagesY); V0.Tangent = Tangent;
+		V1.Position = P1; V1.Normal = Normal; V1.Color = Color; V1.UV = BuildSubUV(Source, Particle, 1.0f, 0.0f, ResolvedSubImagesX, ResolvedSubImagesY); V1.Tangent = Tangent;
+		V2.Position = P2; V2.Normal = Normal; V2.Color = Color; V2.UV = BuildSubUV(Source, Particle, 0.0f, 1.0f, ResolvedSubImagesX, ResolvedSubImagesY); V2.Tangent = Tangent;
+		V3.Position = P3; V3.Normal = Normal; V3.Color = Color; V3.UV = BuildSubUV(Source, Particle, 1.0f, 1.0f, ResolvedSubImagesX, ResolvedSubImagesY); V3.Tangent = Tangent;
 
 		OutVertices.push_back(V0);
 		OutVertices.push_back(V1);
@@ -597,7 +619,63 @@ UMaterial* FParticleSystemSceneProxy::ResolveParticleMaterial(const FDynamicSpri
 	{
 		MaterialPath = ParticleDefaults::DefaultSpriteMaterialPath;
 	}
-	return FMaterialManager::Get().GetOrCreateMaterial(MaterialPath);
+
+	UMaterial* BaseMaterial = FMaterialManager::Get().GetOrCreateMaterial(MaterialPath);
+	if (const FTextureAtlasResource* SubUVResource = ResolveSubUVResource(Source))
+	{
+		return GetOrCreateSubUVAtlasMaterial(Source, BaseMaterial, SubUVResource);
+	}
+
+	return BaseMaterial;
+}
+
+const FTextureAtlasResource* FParticleSystemSceneProxy::ResolveSubUVResource(const FDynamicSpriteEmitterReplayDataBase& Source) const
+{
+	if (!Source.bUseSubUV || IsNonePath(Source.SubUVResourceName))
+	{
+		return nullptr;
+	}
+
+	const FTextureAtlasResource* Resource = FResourceManager::Get().FindSubUVResource(FName(Source.SubUVResourceName.c_str()));
+	if (!Resource || !Resource->IsLoaded())
+	{
+		return nullptr;
+	}
+
+	return Resource;
+}
+
+UMaterial* FParticleSystemSceneProxy::GetOrCreateSubUVAtlasMaterial(const FDynamicSpriteEmitterReplayDataBase& Source, UMaterial* BaseMaterial,
+	const FTextureAtlasResource* Resource) const
+{
+	if (!BaseMaterial || !Resource || !Resource->IsLoaded())
+	{
+		return BaseMaterial;
+	}
+
+	const FString CacheKey = Source.MaterialPath + "|SubUVAtlas|" + Resource->Name.ToString();
+	auto It = SubUVAtlasMaterialCache.find(CacheKey);
+	UMaterial* AtlasMaterial = It != SubUVAtlasMaterialCache.end() ? It->second : nullptr;
+	if (!AtlasMaterial)
+	{
+		AtlasMaterial = UMaterial::CreateTransient(
+			BaseMaterial->GetRenderPass(),
+			BaseMaterial->GetBlendState(),
+			BaseMaterial->GetDepthStencilState(),
+			BaseMaterial->GetRasterizerState(),
+			BaseMaterial->GetShader());
+		AtlasMaterial->SetAssetPathFileName(CacheKey);
+		SubUVAtlasMaterialCache[CacheKey] = AtlasMaterial;
+	}
+
+	// Keep non-diffuse slots in sync with the base material, then override Diffuse with the atlas SRV.
+	const ID3D11ShaderResourceView* const* BaseSRVs = BaseMaterial->GetCachedSRVs();
+	for (int32 Slot = 0; Slot < static_cast<int32>(EMaterialTextureSlot::Max); ++Slot)
+	{
+		AtlasMaterial->SetCachedSRV(static_cast<EMaterialTextureSlot>(Slot), const_cast<ID3D11ShaderResourceView*>(BaseSRVs[Slot]));
+	}
+	AtlasMaterial->SetCachedSRV(EMaterialTextureSlot::Diffuse, Resource->SRV);
+	return AtlasMaterial;
 }
 
 UStaticMesh* FParticleSystemSceneProxy::ResolveParticleMesh(const FString& MeshPath) const

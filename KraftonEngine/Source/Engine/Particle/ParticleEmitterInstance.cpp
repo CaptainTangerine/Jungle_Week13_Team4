@@ -281,6 +281,7 @@ FDynamicEmitterDataBase* FParticleEmitterInstance::CreateDynamicData(int32 Emitt
 		if (const UParticleModuleTypeDataSprite* SpriteTypeData = Cast<UParticleModuleTypeDataSprite>(CurrentLODLevel->GetTypeDataModule()))
 		{
 			SpriteSource.bUseSubUV = SpriteTypeData->bUseSubUV;
+			SpriteSource.SubUVResourceName = SpriteTypeData->SubUVResourceName.ToString();
 			SpriteSource.SubImagesX = std::max(1, SpriteTypeData->SubImagesX);
 			SpriteSource.SubImagesY = std::max(1, SpriteTypeData->SubImagesY);
 			SpriteSource.SubUVFrameRate = std::max(0.0f, SpriteTypeData->SubUVFrameRate);

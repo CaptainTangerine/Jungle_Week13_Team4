@@ -3,6 +3,7 @@
 #include "PrimitiveSceneProxy.h"
 #include "Math/MathUtils.h"
 #include "Math/Vector.h"
+#include "Core/Types/ResourceTypes.h"
 #include "Particle/ParticleDynamicData.h"
 #include "Render/Types/VertexTypes.h"
 
@@ -112,7 +113,7 @@ private:
 		TArray<FParticleProxyParticle>& OutParticles) const;
 	void SortParticlesForView(TArray<FParticleProxyParticle>& Particles, const FVector& ViewLocation) const;
 	void BuildSpriteVertices(const FDynamicSpriteEmitterReplayDataBase& Source, const TArray<FParticleProxyParticle>& Particles, const FVector& CameraRight,
-		const FVector& CameraUp, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const;
+		const FVector& CameraUp, int32 ResolvedSubImagesX, int32 ResolvedSubImagesY, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const;
 	void BuildMeshVertices(const TArray<FParticleProxyParticle>& Particles, const TArray<FNormalVertex>& MeshVertices,
 		const TArray<uint32>& MeshIndices, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const;
 
@@ -127,6 +128,9 @@ private:
 	float ComputePacketSortDepth(const TArray<FParticleProxyParticle>& Particles) const;
 
 	UMaterial* ResolveParticleMaterial(const FDynamicSpriteEmitterReplayDataBase& Source) const;
+	const FTextureAtlasResource* ResolveSubUVResource(const FDynamicSpriteEmitterReplayDataBase& Source) const;
+	UMaterial* GetOrCreateSubUVAtlasMaterial(const FDynamicSpriteEmitterReplayDataBase& Source, UMaterial* BaseMaterial,
+		const FTextureAtlasResource* Resource) const;
 	UStaticMesh* ResolveParticleMesh(const FString& MeshPath) const;
 	FVector ApplyParticleScale(const FVector& Size, const FVector& Scale) const;
 
@@ -150,6 +154,11 @@ private:
 	// 현재 실제 렌더링은 CPU-expanded CachedParticleVertices/Indices 경로를 사용한다.
 	// CachedMeshBatches는 이후 DrawIndexedInstanced 경로로 전환할 때 소비할 bridge 데이터다.
 	TArray<FParticleMeshRenderBatch> CachedMeshBatches;
+
+	// SubUVResource atlas를 particle material에 직접 바인딩하기 위한 proxy-local material cache.
+	// 원본 material의 CachedSRV를 덮어쓰면 같은 material을 쓰는 다른 emitter가 마지막 atlas로 오염되므로
+	// atlas별 transient material을 따로 둔다.
+	mutable TMap<FString, UMaterial*> SubUVAtlasMaterialCache;
 
 	bool bDynamicDataDirty = true;
 };
