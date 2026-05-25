@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Core/Types/CoreTypes.h"
 
@@ -61,6 +61,7 @@ struct FShowFlags
 	bool bVisualize25DCulling = false;
 	bool bShowShadowFrustum = false;
 	bool bCollision = true;
+	bool bParticle = true;
 	bool bShowCollisionShape = false;	// PIE/Game에서 콘솔로 콜리전 shape 와이어프레임 강제 표시
 };
 

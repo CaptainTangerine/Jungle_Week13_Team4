@@ -392,6 +392,25 @@ public:
 };
 
 UCLASS()
+class UParticleModuleAccelerationBase : public UParticleModule
+{
+public:
+	GENERATED_BODY()
+	bool IsUpdateModule() const override { return true; }
+};
+
+UCLASS()
+class UParticleModuleAccelerationConstant : public UParticleModuleAccelerationBase
+{
+public:
+	GENERATED_BODY()
+	void Update(const FUpdateContext& Context) override;
+
+	UPROPERTY(Edit, Save, Category="Acceleration", DisplayName="Acceleration")
+	FVector Acceleration = FVector(0.0f, 0.0f, -9.8f);
+};
+
+UCLASS()
 class UParticleModuleColor : public UParticleModule
 {
 public:

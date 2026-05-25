@@ -1,4 +1,4 @@
-#include "ViewportToolbar.h"
+﻿#include "ViewportToolbar.h"
 #include "Component/Debug/GizmoComponent.h"
 #include "Editor/UI/Util/EditorTextureManager.h"
 #include "Render/Pipeline/Renderer.h"
@@ -601,6 +601,7 @@ void FViewportToolbar::RenderShowFlags(const FToolbarRenderState& State)
 		ImGui::Checkbox("Debug Draw", &RenderOptions.ShowFlags.bDebugDraw);
 		ImGui::Checkbox("Octree", &RenderOptions.ShowFlags.bOctree);
 		ImGui::Checkbox("Fog", &RenderOptions.ShowFlags.bFog);
+		ImGui::Checkbox("Particle", &RenderOptions.ShowFlags.bParticle);
 		ImGui::Checkbox("FXAA", &RenderOptions.ShowFlags.bFXAA);
 		ImGui::Checkbox("Gamma Correction", &RenderOptions.ShowFlags.bGammaCorrection);
 		ImGui::Checkbox("View Light Culling", &RenderOptions.ShowFlags.bViewLightCulling);
