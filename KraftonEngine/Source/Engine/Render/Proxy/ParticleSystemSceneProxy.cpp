@@ -27,6 +27,11 @@ FParticleSystemSceneProxy::~FParticleSystemSceneProxy()
 void FParticleSystemSceneProxy::UpdateTransform()
 {
 	FPrimitiveSceneProxy::UpdateTransform();
+	
+	// Particle vertices are generated in world space by the CPU builders.
+	// We override the Model matrix to Identity to prevent transforming them twice.
+	PerObjectConstants = FPerObjectConstants::FromWorldMatrix(FMatrix::Identity);
+	
 	bDynamicDataDirty = true;
 }
 
