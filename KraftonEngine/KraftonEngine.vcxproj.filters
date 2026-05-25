@@ -295,6 +295,9 @@
     <Filter Include="Source\Engine\Render\Proxy">
       <UniqueIdentifier>{29fc5be6-2892-6e33-da8a-420028aade0e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Engine\Render\Proxy\Particle">
+      <UniqueIdentifier>{7a6b5e45-8bb7-4f3d-a7f4-c73cf78f1f3a}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source\Engine\Render\RenderPass">
       <UniqueIdentifier>{3504742f-0df4-b673-e936-9c953baf72bd}</UniqueIdentifier>
     </Filter>
@@ -1366,6 +1369,21 @@
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\Proxy\GizmoSceneProxy.cpp">
       <Filter>Source\Engine\Render\Proxy</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleDrawBufferCache.cpp">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleMaterialCache.cpp">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleMeshBuilder.cpp">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleRenderUtils.cpp">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleSpriteBuilder.cpp">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\Proxy\ParticleSystemSceneProxy.cpp">
       <Filter>Source\Engine\Render\Proxy</Filter>
@@ -2539,6 +2557,24 @@
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Proxy\GizmoSceneProxy.h">
       <Filter>Source\Engine\Render\Proxy</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleDrawBufferCache.h">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleMaterialCache.h">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleMeshBuilder.h">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleRenderTypes.h">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleRenderUtils.h">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleSpriteBuilder.h">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Proxy\ParticleSystemSceneProxy.h">
       <Filter>Source\Engine\Render\Proxy</Filter>

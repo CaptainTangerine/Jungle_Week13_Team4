@@ -654,6 +654,11 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Engine\Render\Proxy\CylindricalBillboardSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\DecalSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\GizmoSceneProxy.cpp" />
+    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleDrawBufferCache.cpp" />
+    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleMaterialCache.cpp" />
+    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleMeshBuilder.cpp" />
+    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleRenderUtils.cpp" />
+    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleSpriteBuilder.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\ParticleSystemSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\PrimitiveSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\ShapeSceneProxy.cpp" />
@@ -1047,6 +1052,12 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Engine\Render\Proxy\DecalSceneProxy.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\DirtyFlag.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\GizmoSceneProxy.h" />
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleDrawBufferCache.h" />
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleMaterialCache.h" />
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleMeshBuilder.h" />
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleRenderTypes.h" />
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleRenderUtils.h" />
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleSpriteBuilder.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\ParticleSystemSceneProxy.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\PrimitiveSceneProxy.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\ShapeSceneProxy.h" />
