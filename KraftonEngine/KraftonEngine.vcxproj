@@ -628,6 +628,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Engine\Particle\ParticleEvent.cpp" />
     <ClCompile Include="Source\Engine\Particle\ParticleLODLevel.cpp" />
     <ClCompile Include="Source\Engine\Particle\ParticleModule.cpp" />
+    <ClCompile Include="Source\Engine\Particle\ParticleModuleCollision.cpp" />
     <ClCompile Include="Source\Engine\Particle\ParticleModuleEvent.cpp" />
     <ClCompile Include="Source\Engine\Particle\ParticleSystem.cpp" />
     <ClCompile Include="Source\Engine\Particle\Asset\ParticleSystemManager.cpp" />
@@ -1024,6 +1025,8 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Engine\Particle\ParticleHelper.h" />
     <ClInclude Include="Source\Engine\Particle\ParticleLODLevel.h" />
     <ClInclude Include="Source\Engine\Particle\ParticleModule.h" />
+    <ClInclude Include="Source\Engine\Particle\ParticleModuleCollision.h" />
+    <ClInclude Include="Source\Engine\Particle\ParticleModuleCollisionBase.h" />
     <ClInclude Include="Source\Engine\Particle\ParticleModuleEvent.h" />
     <ClInclude Include="Source\Engine\Particle\ParticleSystem.h" />
     <ClInclude Include="Source\Engine\Particle\ParticleTypes.h" />

@@ -6,6 +6,8 @@
 #include "Distributions/DistributionVector.h"
 #include "Particle/ParticleSystem.h"
 #include "Particle/Asset/ParticleSystemManager.h"
+#include "Particle/ParticleModuleCollision.h"
+#include "Particle/ParticleModuleCollisionBase.h"
 #include "Particle/ParticleModuleEvent.h"
 #include "Editor/EditorEngine.h"
 #include "Editor/UI/Util/EditorTextureManager.h"
@@ -152,6 +154,7 @@ namespace
 		UClass* AbstractTypeDataBase = UParticleModuleTypeDataBase::StaticClass();
 		UClass* AbstractBeamBase = UParticleModuleBeamBase::StaticClass();
 		UClass* AbstractTrailBase = UParticleModuleTrailBase::StaticClass();
+		UClass* AbstractCollisionBase = UParticleModuleCollisionBase::StaticClass();
 		UClass* AbstractEventBase = UParticleModuleEventBase::StaticClass();
 		UClass* AbstractEventReceiverBase = UParticleModuleEventReceiverBase::StaticClass();
 		for (UClass* Class : UClass::GetAllClasses())
@@ -161,6 +164,7 @@ namespace
 				|| Class == AbstractTypeDataBase
 				|| Class == AbstractBeamBase
 				|| Class == AbstractTrailBase
+				|| Class == AbstractCollisionBase
 				|| Class == AbstractEventBase
 				|| Class == AbstractEventReceiverBase)
 			{
@@ -205,6 +209,10 @@ namespace
 		{
 			return EParticleModuleType::Event;
 		}
+		if (Class->IsA(UParticleModuleCollisionBase::StaticClass()))
+		{
+			return EParticleModuleType::Collision;
+		}
 		if (Class->IsA(UParticleModuleSpawn::StaticClass()) || Class->IsA(UParticleModuleSpawnPerUnit::StaticClass()))
 		{
 			return EParticleModuleType::Spawn;
@@ -228,6 +236,8 @@ namespace
 			return "Emitter";
 		case EParticleModuleType::Event:
 			return "Event";
+		case EParticleModuleType::Collision:
+			return "Collision";
 		case EParticleModuleType::Light:
 			return "Light";
 		case EParticleModuleType::SubUV:

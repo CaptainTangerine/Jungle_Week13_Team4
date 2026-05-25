@@ -698,6 +698,11 @@ void FParticleEmitterInstance::UpdateParticleLifetimesAndMovement(float DeltaTim
 			continue;
 		}
 
+		if ((Particle->Flags & STATE_Particle_Freeze) != 0)
+		{
+			continue;
+		}
+
 		Particle->RelativeTime += DeltaTime * Particle->OneOverMaxLifetime;
 		if (Particle->RelativeTime >= 1.0f)
 		{
@@ -707,9 +712,15 @@ void FParticleEmitterInstance::UpdateParticleLifetimesAndMovement(float DeltaTim
 
 		Particle->OldLocation = Particle->Location;
 		Particle->Velocity = Particle->BaseVelocity;
-		Particle->Location += Particle->Velocity * DeltaTime;
+		if ((Particle->Flags & STATE_Particle_FreezeTranslation) == 0)
+		{
+			Particle->Location += Particle->Velocity * DeltaTime;
+		}
 		Particle->RotationRate = Particle->BaseRotationRate;
-		Particle->Rotation += Particle->RotationRate * DeltaTime;
+		if ((Particle->Flags & STATE_Particle_FreezeRotation) == 0)
+		{
+			Particle->Rotation += Particle->RotationRate * DeltaTime;
+		}
 	}
 }
 

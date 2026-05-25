@@ -26,6 +26,7 @@ enum class EParticleModuleType : uint8
 	Event,
 	Light,
 	SubUV,
+	Collision,
 };
 
 UENUM()
