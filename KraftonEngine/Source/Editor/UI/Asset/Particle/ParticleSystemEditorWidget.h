@@ -36,7 +36,6 @@ private:
 	void MoveParticleEmitter(class UParticleSystem* ParticleSystem, int32 SourceIndex, int32 TargetIndex);
 	void AddParticleModule(class UParticleSystem* ParticleSystem, class UParticleEmitter* Emitter, class UClass* ModuleClass);
 	void MoveParticleModule(class UParticleSystem* ParticleSystem, class UParticleLODLevel* SourceLODLevel, class UParticleLODLevel* TargetLODLevel, class UParticleModule* Module, int32 TargetIndex);
-	void SyncTypeDataModuleForEmitterType(class UParticleEmitter* Emitter);
 	bool RenderObjectPropertiesInline(class UObject* Object);
 
 private:

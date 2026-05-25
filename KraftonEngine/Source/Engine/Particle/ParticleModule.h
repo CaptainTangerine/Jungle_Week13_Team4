@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Object/Object.h"
 #include "Object/Ptr/SoftObjectPtr.h"
@@ -94,9 +94,7 @@ public:
 	GENERATED_BODY()
 	bool IsTypeDataModule() const override { return true; }
 	EParticleModuleType GetModuleType() const override { return EParticleModuleType::TypeData; }
-
-	UPROPERTY(Edit, Save, Category="TypeData", DisplayName="Emitter Type", Enum=EParticleEmitterType)
-	EParticleEmitterType EmitterType = EParticleEmitterType::Sprite;
+	virtual EParticleEmitterType GetEmitterType() const { return EParticleEmitterType::Sprite; }
 };
 
 UCLASS()
@@ -105,6 +103,7 @@ class UParticleModuleTypeDataSprite : public UParticleModuleTypeDataBase
 public:
 	GENERATED_BODY()
 	UParticleModuleTypeDataSprite();
+	EParticleEmitterType GetEmitterType() const override { return EParticleEmitterType::Sprite; }
 
 	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="Screen Alignment", Enum=EParticleScreenAlignment)
 	EParticleScreenAlignment ScreenAlignment = EParticleScreenAlignment::FacingCameraPosition;
@@ -122,6 +121,7 @@ class UParticleModuleTypeDataMesh : public UParticleModuleTypeDataBase
 public:
 	GENERATED_BODY()
 	UParticleModuleTypeDataMesh();
+	EParticleEmitterType GetEmitterType() const override { return EParticleEmitterType::Mesh; }
 
 	UPROPERTY(Edit, Save, Category="Mesh", DisplayName="Mesh", AssetType="StaticMesh")
 	FSoftObjectPtr MeshPath = "None";
@@ -133,6 +133,7 @@ class UParticleModuleTypeDataBeam : public UParticleModuleTypeDataBase
 public:
 	GENERATED_BODY()
 	UParticleModuleTypeDataBeam();
+	EParticleEmitterType GetEmitterType() const override { return EParticleEmitterType::Beam; }
 
 	UPROPERTY(Edit, Save, Category="Beam", DisplayName="Max Beam Count", Min=1.0f, Max=1024.0f, Speed=1.0f)
 	int32 MaxBeamCount = 1;
@@ -150,6 +151,7 @@ class UParticleModuleTypeDataRibbon : public UParticleModuleTypeDataBase
 public:
 	GENERATED_BODY()
 	UParticleModuleTypeDataRibbon();
+	EParticleEmitterType GetEmitterType() const override { return EParticleEmitterType::Ribbon; }
 
 	UPROPERTY(Edit, Save, Category="Ribbon", DisplayName="Max Trail Count", Min=1.0f, Max=1024.0f, Speed=1.0f)
 	int32 MaxTrailCount = 1;
@@ -249,9 +251,6 @@ class UParticleModuleRequired : public UParticleModule
 public:
 	GENERATED_BODY()
 	EParticleModuleType GetModuleType() const override { return EParticleModuleType::Required; }
-
-	UPROPERTY(Edit, Save, Category="Required", DisplayName="Emitter Type", Enum=EParticleEmitterType)
-	EParticleEmitterType EmitterType = EParticleEmitterType::Sprite;
 
 	UPROPERTY(Edit, Save, Category="Required", DisplayName="Material", AssetType="Material")
 	FSoftObjectPtr MaterialPath = ParticleDefaults::DefaultSpriteMaterialPath;

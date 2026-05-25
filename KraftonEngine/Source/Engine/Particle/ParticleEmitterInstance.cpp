@@ -21,11 +21,7 @@ namespace
 
 		if (const UParticleModuleTypeDataBase* TypeData = LODLevel->GetTypeDataModule())
 		{
-			return TypeData->EmitterType;
-		}
-		if (const UParticleModuleRequired* RequiredModule = LODLevel->GetRequiredModule())
-		{
-			return RequiredModule->EmitterType;
+			return TypeData->GetEmitterType();
 		}
 		return EParticleEmitterType::Sprite;
 	}

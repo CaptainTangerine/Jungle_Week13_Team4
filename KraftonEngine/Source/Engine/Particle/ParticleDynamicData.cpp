@@ -5,21 +5,6 @@
 #include <algorithm>
 #include <cstring>
 
-namespace
-{
-	EDynamicEmitterType ToDynamicEmitterType(EParticleEmitterType Type)
-	{
-		switch (Type)
-		{
-		case EParticleEmitterType::Sprite: return EDynamicEmitterType::Sprite;
-		case EParticleEmitterType::Mesh: return EDynamicEmitterType::Mesh;
-		case EParticleEmitterType::Beam: return EDynamicEmitterType::Beam;
-		case EParticleEmitterType::Ribbon: return EDynamicEmitterType::Ribbon;
-		default: return EDynamicEmitterType::Unknown;
-		}
-	}
-}
-
 void FParticleDataContainer::Alloc(int32 InParticleDataNumBytes, int32 InParticleIndicesNumShorts)
 {
 	Free();
@@ -67,15 +52,15 @@ void FParticleDataContainer::CopyFrom(const uint8* InParticleData, int32 InParti
 FDynamicSpriteEmitterReplayDataBase::FDynamicSpriteEmitterReplayDataBase(const UParticleModuleRequired* InRequiredModule)
 	: RequiredModule(InRequiredModule)
 {
+	EmitterType = EDynamicEmitterType::Sprite;
+
 	if (!RequiredModule)
 	{
-		EmitterType = EDynamicEmitterType::Sprite;
 		MaterialPath = ParticleDefaults::DefaultSpriteMaterialPath;
 		BlendMode = EParticleBlendMode::AlphaBlend;
 		return;
 	}
 
-	EmitterType = ToDynamicEmitterType(RequiredModule->EmitterType);
 	SortMode = RequiredModule->SortMode;
 	bUseLocalSpace = RequiredModule->bUseLocalSpace;
 	MaterialPath = RequiredModule->MaterialPath.ToString();
