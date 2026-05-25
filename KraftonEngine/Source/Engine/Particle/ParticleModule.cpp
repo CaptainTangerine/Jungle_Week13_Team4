@@ -19,14 +19,45 @@ namespace
 		float bInitialized = 0.0f;
 	};
 
-	FVector Midpoint(const FVector& Min, const FVector& Max)
+	template<typename TDistribution>
+	TDistribution* NewDistribution(UObject* Outer)
 	{
-		return FVector::Lerp(Min, Max, 0.5f);
+		return UObjectManager::Get().CreateObject<TDistribution>(Outer);
 	}
 
-	FLinearColor ToLinearColor(const FVector4& Color)
+	UDistributionFloatConstant* NewFloatConstant(UObject* Outer, float Value)
 	{
-		return FLinearColor(Color.R, Color.G, Color.B, Color.A);
+		UDistributionFloatConstant* Distribution = NewDistribution<UDistributionFloatConstant>(Outer);
+		Distribution->Constant = Value;
+		return Distribution;
+	}
+
+	UDistributionFloatUniform* NewFloatUniform(UObject* Outer, float Min, float Max)
+	{
+		UDistributionFloatUniform* Distribution = NewDistribution<UDistributionFloatUniform>(Outer);
+		Distribution->Min = Min;
+		Distribution->Max = Max;
+		return Distribution;
+	}
+
+	UDistributionVectorConstant* NewVectorConstant(UObject* Outer, const FVector& Value)
+	{
+		UDistributionVectorConstant* Distribution = NewDistribution<UDistributionVectorConstant>(Outer);
+		Distribution->Constant = Value;
+		return Distribution;
+	}
+
+	UDistributionVectorUniform* NewVectorUniform(UObject* Outer, const FVector& Min, const FVector& Max)
+	{
+		UDistributionVectorUniform* Distribution = NewDistribution<UDistributionVectorUniform>(Outer);
+		Distribution->Min = Min;
+		Distribution->Max = Max;
+		return Distribution;
+	}
+
+	FLinearColor ToLinearColor(const FVector& Color, float Alpha)
+	{
+		return FLinearColor(Color.R, Color.G, Color.B, Alpha);
 	}
 
 	FLinearColor LerpColor(const FLinearColor& A, const FLinearColor& B, float Alpha)
@@ -96,6 +127,47 @@ UParticleModuleTypeDataRibbon::UParticleModuleTypeDataRibbon()
 {
 }
 
+UParticleModuleSpawn::UParticleModuleSpawn()
+{
+	Rate.SetDistribution(NewFloatConstant(this, 10.0f));
+	RateScale.SetDistribution(NewFloatConstant(this, 1.0f));
+	BurstCount.SetDistribution(NewFloatConstant(this, 0.0f));
+}
+
+UParticleModuleSpawnPerUnit::UParticleModuleSpawnPerUnit()
+{
+	SpawnPerUnit.SetDistribution(NewFloatConstant(this, 1.0f));
+}
+
+UParticleModuleLifetime::UParticleModuleLifetime()
+{
+	Lifetime.SetDistribution(NewFloatUniform(this, 1.0f, 1.0f));
+}
+
+UParticleModuleLocation::UParticleModuleLocation()
+{
+	StartLocation.SetDistribution(NewVectorUniform(this, FVector::ZeroVector, FVector::ZeroVector));
+}
+
+UParticleModuleVelocity::UParticleModuleVelocity()
+{
+	StartVelocity.SetDistribution(NewVectorUniform(this, FVector(0.0f, 0.0f, 100.0f), FVector(0.0f, 0.0f, 100.0f)));
+}
+
+UParticleModuleColor::UParticleModuleColor()
+{
+	StartColor.SetDistribution(NewVectorConstant(this, FVector(1.0f, 1.0f, 1.0f)));
+	StartAlpha.SetDistribution(NewFloatConstant(this, 1.0f));
+	EndColor.SetDistribution(NewVectorConstant(this, FVector(1.0f, 1.0f, 1.0f)));
+	EndAlpha.SetDistribution(NewFloatConstant(this, 0.0f));
+}
+
+UParticleModuleSize::UParticleModuleSize()
+{
+	StartSize.SetDistribution(NewVectorUniform(this, FVector::OneVector, FVector::OneVector));
+	EndSize.SetDistribution(NewVectorConstant(this, FVector::OneVector));
+}
+
 void UParticleModuleLifetime::Spawn(const FSpawnContext& Context)
 {
 	if (!Context.ParticleBase)
@@ -103,12 +175,10 @@ void UParticleModuleLifetime::Spawn(const FSpawnContext& Context)
 		return;
 	}
 
-	const float MinValue = MinLifetime < 0.01f ? 0.01f : MinLifetime;
-	const float MaxValue = MaxLifetime < MinValue ? MinValue : MaxLifetime;
-	const float Lifetime = FMath::Lerp(MinValue, MaxValue, 0.5f);
+	const float LifetimeValue = std::max(0.01f, Lifetime.GetValue(Context.SpawnTime, Context.GetDistributionData()));
 
 	Context.ParticleBase->RelativeTime = 0.0f;
-	Context.ParticleBase->OneOverMaxLifetime = Lifetime > 0.0f ? 1.0f / Lifetime : 1.0f;
+	Context.ParticleBase->OneOverMaxLifetime = LifetimeValue > 0.0f ? 1.0f / LifetimeValue : 1.0f;
 }
 
 void UParticleModuleLocation::Spawn(const FSpawnContext& Context)
@@ -118,7 +188,7 @@ void UParticleModuleLocation::Spawn(const FSpawnContext& Context)
 		return;
 	}
 
-	const FVector SpawnLocation = Midpoint(StartLocationMin, StartLocationMax);
+	const FVector SpawnLocation = StartLocation.GetValue(Context.SpawnTime, Context.GetDistributionData());
 	Context.ParticleBase->Location += SpawnLocation;
 	Context.ParticleBase->OldLocation = Context.ParticleBase->Location;
 }
@@ -130,7 +200,7 @@ void UParticleModuleVelocity::Spawn(const FSpawnContext& Context)
 		return;
 	}
 
-	const FVector SpawnVelocity = Midpoint(StartVelocityMin, StartVelocityMax);
+	const FVector SpawnVelocity = StartVelocity.GetValue(Context.SpawnTime, Context.GetDistributionData());
 	Context.ParticleBase->Velocity = SpawnVelocity;
 	Context.ParticleBase->BaseVelocity = SpawnVelocity;
 }
@@ -142,7 +212,8 @@ int32 UParticleModuleSpawnPerUnit::GetInstancePayloadSize() const
 
 void UParticleModuleSpawnPerUnit::Update(const FUpdateContext& Context)
 {
-	if (!Context.Owner.InstanceData || UnitScalar <= 0.0f || SpawnPerUnit <= 0.0f)
+	const float SpawnPerUnitValue = SpawnPerUnit.GetValue(Context.Owner.EmitterTime, Context.GetDistributionData());
+	if (!Context.Owner.InstanceData || UnitScalar <= 0.0f || SpawnPerUnitValue <= 0.0f)
 	{
 		return;
 	}
@@ -183,7 +254,7 @@ void UParticleModuleSpawnPerUnit::Update(const FUpdateContext& Context)
 		return;
 	}
 
-	float SpawnFloat = Payload->SpawnRemainder + (Distance / std::max(0.001f, UnitScalar)) * SpawnPerUnit;
+	float SpawnFloat = Payload->SpawnRemainder + (Distance / std::max(0.001f, UnitScalar)) * SpawnPerUnitValue;
 	int32 SpawnCount = static_cast<int32>(std::floor(SpawnFloat));
 	Payload->SpawnRemainder = SpawnFloat - static_cast<float>(SpawnCount);
 
@@ -215,7 +286,9 @@ void UParticleModuleColor::Spawn(const FSpawnContext& Context)
 		return;
 	}
 
-	const FLinearColor InitialColor = ToLinearColor(StartColor);
+	const FVector ColorValue = StartColor.GetValue(Context.SpawnTime, Context.GetDistributionData());
+	const float AlphaValue = StartAlpha.GetValue(Context.SpawnTime, Context.GetDistributionData());
+	const FLinearColor InitialColor = ToLinearColor(ColorValue, AlphaValue);
 	Context.ParticleBase->Color = InitialColor;
 	Context.ParticleBase->BaseColor = InitialColor;
 }
@@ -227,10 +300,13 @@ void UParticleModuleColor::Update(const FUpdateContext& Context)
 		return;
 	}
 
-	const FLinearColor InitialColor = ToLinearColor(StartColor);
-	const FLinearColor FinalColor = ToLinearColor(EndColor);
+	UObject* DistributionData = Context.GetDistributionData();
 	BEGIN_UPDATE_LOOP
-		Particle.Color = LerpColor(InitialColor, FinalColor, FMath::Clamp(Particle.RelativeTime, 0.0f, 1.0f));
+		const float RelativeTime = FMath::Clamp(Particle.RelativeTime, 0.0f, 1.0f);
+		const FVector EndColorValue = EndColor.GetValue(RelativeTime, DistributionData);
+		const float EndAlphaValue = EndAlpha.GetValue(RelativeTime, DistributionData);
+		const FLinearColor FinalColor = ToLinearColor(EndColorValue, EndAlphaValue);
+		Particle.Color = LerpColor(Particle.BaseColor, FinalColor, RelativeTime);
 	END_UPDATE_LOOP
 }
 
@@ -241,7 +317,7 @@ void UParticleModuleSize::Spawn(const FSpawnContext& Context)
 		return;
 	}
 
-	const FVector InitialSize = Midpoint(StartSizeMin, StartSizeMax);
+	const FVector InitialSize = StartSize.GetValue(Context.SpawnTime, Context.GetDistributionData());
 	Context.ParticleBase->Size = InitialSize;
 	Context.ParticleBase->BaseSize = InitialSize;
 }
@@ -254,6 +330,8 @@ void UParticleModuleSize::Update(const FUpdateContext& Context)
 	}
 
 	BEGIN_UPDATE_LOOP
-		Particle.Size = Particle.BaseSize + (EndSize - Particle.BaseSize) * FMath::Clamp(Particle.RelativeTime, 0.0f, 1.0f);
+		const float RelativeTime = FMath::Clamp(Particle.RelativeTime, 0.0f, 1.0f);
+		const FVector EndSizeValue = EndSize.GetValue(RelativeTime, Context.GetDistributionData());
+		Particle.Size = Particle.BaseSize + (EndSizeValue - Particle.BaseSize) * RelativeTime;
 	END_UPDATE_LOOP
 }

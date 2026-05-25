@@ -193,6 +193,9 @@
     <Filter Include="Source\Engine\Debug">
       <UniqueIdentifier>{94a820a1-1cf9-b142-f9b6-735eff25a3ee}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Engine\Distributions">
+      <UniqueIdentifier>{ada6b7fb-5123-35b0-e82d-e8e1630a7b2a}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source\Engine\FloatCurve">
       <UniqueIdentifier>{de49fb56-b8a9-9a15-719d-7136fdb8ccd8}</UniqueIdentifier>
     </Filter>
@@ -1075,6 +1078,18 @@
     </ClCompile>
     <ClCompile Include="Source\Engine\Debug\DrawDebugHelpers.cpp">
       <Filter>Source\Engine\Debug</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Distributions\Distribution.cpp">
+      <Filter>Source\Engine\Distributions</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Distributions\DistributionFloat.cpp">
+      <Filter>Source\Engine\Distributions</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Distributions\DistributionVector.cpp">
+      <Filter>Source\Engine\Distributions</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Distributions\Distributions.cpp">
+      <Filter>Source\Engine\Distributions</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\FloatCurve\FloatCurveAsset.cpp">
       <Filter>Source\Engine\FloatCurve</Filter>
@@ -2179,6 +2194,18 @@
     </ClInclude>
     <ClInclude Include="Source\Engine\Debug\DrawDebugHelpers.h">
       <Filter>Source\Engine\Debug</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Distributions\Distribution.h">
+      <Filter>Source\Engine\Distributions</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Distributions\DistributionFloat.h">
+      <Filter>Source\Engine\Distributions</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Distributions\DistributionVector.h">
+      <Filter>Source\Engine\Distributions</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Distributions\Distributions.h">
+      <Filter>Source\Engine\Distributions</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\FloatCurve\FloatCurveAsset.h">
       <Filter>Source\Engine\FloatCurve</Filter>

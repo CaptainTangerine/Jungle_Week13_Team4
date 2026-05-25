@@ -211,6 +211,66 @@ FString UParticleSystemComponent::GetInstanceNameForParticles() const
 	return FString();
 }
 
+bool UParticleSystemComponent::GetFloatParameter(FName Name, float& OutValue) const
+{
+	for (const FParticleFloatParameter& Parameter : FloatParameters)
+	{
+		if (Parameter.Name == Name)
+		{
+			OutValue = Parameter.Value;
+			return true;
+		}
+	}
+	return false;
+}
+
+bool UParticleSystemComponent::GetVectorParameter(FName Name, FVector& OutValue) const
+{
+	for (const FParticleVectorParameter& Parameter : VectorParameters)
+	{
+		if (Parameter.Name == Name)
+		{
+			OutValue = Parameter.Value;
+			return true;
+		}
+	}
+	return false;
+}
+
+void UParticleSystemComponent::SetFloatParameter(FName Name, float Value)
+{
+	for (FParticleFloatParameter& Parameter : FloatParameters)
+	{
+		if (Parameter.Name == Name)
+		{
+			Parameter.Value = Value;
+			return;
+		}
+	}
+
+	FParticleFloatParameter Parameter;
+	Parameter.Name = Name;
+	Parameter.Value = Value;
+	FloatParameters.push_back(Parameter);
+}
+
+void UParticleSystemComponent::SetVectorParameter(FName Name, const FVector& Value)
+{
+	for (FParticleVectorParameter& Parameter : VectorParameters)
+	{
+		if (Parameter.Name == Name)
+		{
+			Parameter.Value = Value;
+			return;
+		}
+	}
+
+	FParticleVectorParameter Parameter;
+	Parameter.Name = Name;
+	Parameter.Value = Value;
+	VectorParameters.push_back(Parameter);
+}
+
 void UParticleSystemComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
 {
 	UPrimitiveComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);

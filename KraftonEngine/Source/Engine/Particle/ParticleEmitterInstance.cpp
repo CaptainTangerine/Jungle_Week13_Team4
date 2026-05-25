@@ -8,6 +8,7 @@
 #include "Particle/ParticleModule.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace
@@ -147,16 +148,21 @@ void FParticleEmitterInstance::Tick(float DeltaTime)
 			}
 		}
 
+		UObject* DistributionData = GetDistributionData();
+
 		// 버스트
-		if (!bBurstFired && SpawnRateModule->BurstCount > 0 && PreviousEmitterTime <= SpawnRateModule->BurstTime && EmitterTime >= SpawnRateModule->BurstTime)
+		const int32 BurstCount = std::max(0, static_cast<int32>(std::floor(SpawnRateModule->BurstCount.GetValue(SpawnRateModule->BurstTime, DistributionData) + 0.5f)));
+		if (!bBurstFired && BurstCount > 0 && PreviousEmitterTime <= SpawnRateModule->BurstTime && EmitterTime >= SpawnRateModule->BurstTime)
 		{
-			SpawnParticles(SpawnRateModule->BurstCount, SpawnRateModule->BurstTime, 0.0f, InitialLocation, FVector::ZeroVector);
+			SpawnParticles(BurstCount, SpawnRateModule->BurstTime, 0.0f, InitialLocation, FVector::ZeroVector);
 			bBurstFired = true;
 		}
 
 		// 초당 얼마나 생성할지 따져서 현재 프레임에 생성할 파티클의 개수 결정
 		// 소수점의 경우가 있을 수 있고 파티클은 소수점으로 못나타내서 다음 프레임으로 누적
-		const float SpawnRate = std::max(0.0f, SpawnRateModule->Rate * SpawnRateModule->RateScale);
+		const float Rate = SpawnRateModule->Rate.GetValue(EmitterTime, DistributionData);
+		const float RateScale = SpawnRateModule->RateScale.GetValue(EmitterTime, DistributionData);
+		const float SpawnRate = std::max(0.0f, Rate * RateScale);
 		SpawnFraction += SpawnRate * DeltaTime;
 		const int32 SpawnCount = static_cast<int32>(SpawnFraction);
 		SpawnFraction -= static_cast<float>(SpawnCount);
@@ -417,7 +423,7 @@ const uint8* FParticleEmitterInstance::GetModuleInstanceData(const UParticleModu
 
 UObject* FParticleEmitterInstance::GetDistributionData() const
 {
-	return nullptr;
+	return Component;
 }
 
 FString FParticleEmitterInstance::GetTemplateName() const

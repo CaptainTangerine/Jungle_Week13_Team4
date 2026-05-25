@@ -2,12 +2,15 @@
 
 #include "Asset/AssetRegistry.h"
 #include "Component/Primitive/ParticleSystemComponent.h"
+#include "Distributions/DistributionFloat.h"
+#include "Distributions/DistributionVector.h"
 #include "Particle/ParticleSystem.h"
 #include "Particle/Asset/ParticleSystemManager.h"
 #include "Editor/EditorEngine.h"
 #include "Editor/UI/Util/EditorTextureManager.h"
 #include "Component/Light/DirectionalLightComponent.h"
 #include "Core/Property/ArrayProperty.h"
+#include "Core/Property/ObjectProperty.h"
 #include "Editor/Slate/SlateApplication.h"
 #include "GameFramework/Actor/StaticMeshActor.h"
 #include "GameFramework/Light/DirectionalLightActor.h"
@@ -1834,14 +1837,78 @@ bool FParticleSystemEditorWidget::RenderObjectPropertiesInline(UObject* Object)
 			}
 			case EPropertyType::ObjectRef:
 			{
-				UObject** Value = static_cast<UObject**>(Prop.GetValuePtr());
-				if (Value && *Value)
+				const FObjectProperty* ObjectValueProperty = Prop.Property ? Prop.Property->AsObjectProperty() : nullptr;
+				if (!ObjectValueProperty)
 				{
-					ImGui::TextUnformatted((*Value)->GetName().c_str());
+					ImGui::TextDisabled("None");
+					break;
+				}
+
+				UObject* Current = ObjectValueProperty->GetObjectValue(Prop.ContainerPtr);
+				const FObjectPropertyBase* ObjectProperty = Prop.Property ? Prop.Property->AsObjectPropertyBase() : nullptr;
+				UClass* AllowedClass = ObjectProperty ? ObjectProperty->GetAllowedClassType() : nullptr;
+				const bool bDistributionObject = AllowedClass
+					&& (AllowedClass->IsA(UDistributionFloat::StaticClass()) || AllowedClass->IsA(UDistributionVector::StaticClass()));
+
+				if (bDistributionObject)
+				{
+					FString Preview = Current ? Current->GetClass()->GetName() : FString("None");
+					if (ImGui::BeginCombo("##v", Preview.c_str()))
+					{
+						for (UClass* CandidateClass : UClass::GetAllClasses())
+						{
+							if (!CandidateClass || !CandidateClass->IsA(AllowedClass) || CandidateClass == AllowedClass)
+							{
+								continue;
+							}
+							if (CandidateClass == UDistribution::StaticClass())
+							{
+								continue;
+							}
+
+							const bool bSelected = Current && Current->GetClass() == CandidateClass;
+							if (ImGui::Selectable(CandidateClass->GetName(), bSelected))
+							{
+								UObject* NewObject = FObjectFactory::Get().Create(CandidateClass->GetName(), Object);
+								if (NewObject)
+								{
+									if (Current && Current != NewObject)
+									{
+										UObjectManager::Get().DestroyObject(Current);
+									}
+									ObjectValueProperty->SetObjectValue(Prop.ContainerPtr, NewObject);
+									Current = NewObject;
+									bChanged = true;
+								}
+							}
+							if (bSelected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+						}
+						ImGui::EndCombo();
+					}
+
+					if (Current)
+					{
+						ImGui::Indent(8.0f);
+						if (RenderObjectPropertiesInline(Current))
+						{
+							bChanged = true;
+						}
+						ImGui::Unindent(8.0f);
+					}
 				}
 				else
 				{
-					ImGui::TextDisabled("None");
+					if (Current)
+					{
+						ImGui::TextUnformatted(Current->GetName().c_str());
+					}
+					else
+					{
+						ImGui::TextDisabled("None");
+					}
 				}
 				break;
 			}

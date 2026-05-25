@@ -8,6 +8,30 @@
 
 class UParticleSystem;
 
+USTRUCT()
+struct FParticleFloatParameter
+{
+	GENERATED_BODY()
+
+	UPROPERTY(Edit, Save, Category="Particle Parameter", DisplayName="Name")
+	FName Name;
+
+	UPROPERTY(Edit, Save, Category="Particle Parameter", DisplayName="Value")
+	float Value = 0.0f;
+};
+
+USTRUCT()
+struct FParticleVectorParameter
+{
+	GENERATED_BODY()
+
+	UPROPERTY(Edit, Save, Category="Particle Parameter", DisplayName="Name")
+	FName Name;
+
+	UPROPERTY(Edit, Save, Category="Particle Parameter", DisplayName="Value")
+	FVector Value = FVector::ZeroVector;
+};
+
 UCLASS()
 class UParticleSystemComponent : public UPrimitiveComponent
 {
@@ -43,6 +67,10 @@ public:
 
 	const FTransform& GetComponentTransformForParticles() const { return GetRelativeTransform(); }
 	FString GetInstanceNameForParticles() const;
+	bool GetFloatParameter(FName Name, float& OutValue) const;
+	bool GetVectorParameter(FName Name, FVector& OutValue) const;
+	void SetFloatParameter(FName Name, float Value);
+	void SetVectorParameter(FName Name, const FVector& Value);
 
 protected:
 	void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction) override;
@@ -55,6 +83,12 @@ private:
 
 	UPROPERTY(Edit, Save, Category="Particles", DisplayName="Particle System", AssetType="UParticleSystem")
 	FSoftObjectPtr TemplatePath = "None";
+
+	UPROPERTY(Edit, Save, Category="Particles", DisplayName="Float Parameters", Type=Array, Struct=FParticleFloatParameter)
+	TArray<FParticleFloatParameter> FloatParameters;
+
+	UPROPERTY(Edit, Save, Category="Particles", DisplayName="Vector Parameters", Type=Array, Struct=FParticleVectorParameter)
+	TArray<FParticleVectorParameter> VectorParameters;
 
 	UParticleSystem* Template = nullptr;
 	TArray<FParticleEmitterInstance*> EmitterInstances;

@@ -3,6 +3,8 @@
 #include "Object/Object.h"
 #include "Object/Ptr/SoftObjectPtr.h"
 #include "Object/FName.h"
+#include "Distributions/DistributionFloat.h"
+#include "Distributions/DistributionVector.h"
 #include "Particle/ParticleTypes.h"
 #include "Engine/Math/Transform.h"
 #include "Source/Engine/Particle/ParticleModule.generated.h"
@@ -293,17 +295,21 @@ class UParticleModuleSpawn : public UParticleModule
 {
 public:
 	GENERATED_BODY()
+	UParticleModuleSpawn();
 	bool IsSpawnModule() const override { return true; }
 	EParticleModuleType GetModuleType() const override { return EParticleModuleType::Spawn; }
 
-	UPROPERTY(Edit, Save, Category="Spawn", DisplayName="Rate", Min=0.0f, Max=100000.0f, Speed=1.0f)
-	float Rate = 10.0f;
+	UPROPERTY(Edit, Save, Instanced, Category="Spawn", DisplayName="Rate", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=Rate.Distribution, CppType=UDistributionFloat*)
+	;
+	FRawDistributionFloat Rate;
 
-	UPROPERTY(Edit, Save, Category="Spawn", DisplayName="Rate Scale", Min=0.0f, Max=100.0f, Speed=0.1f)
-	float RateScale = 1.0f;
+	UPROPERTY(Edit, Save, Instanced, Category="Spawn", DisplayName="Rate Scale", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=RateScale.Distribution, CppType=UDistributionFloat*)
+	;
+	FRawDistributionFloat RateScale;
 
-	UPROPERTY(Edit, Save, Category="Spawn", DisplayName="Burst Count", Min=0.0f, Max=100000.0f, Speed=1.0f)
-	int32 BurstCount = 0;
+	UPROPERTY(Edit, Save, Instanced, Category="Spawn", DisplayName="Burst Count", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=BurstCount.Distribution, CppType=UDistributionFloat*)
+	;
+	FRawDistributionFloat BurstCount;
 
 	UPROPERTY(Edit, Save, Category="Spawn", DisplayName="Burst Time", Min=0.0f, Max=1000.0f, Speed=0.01f)
 	float BurstTime = 0.0f;
@@ -314,6 +320,7 @@ class UParticleModuleSpawnPerUnit : public UParticleModule
 {
 public:
 	GENERATED_BODY()
+	UParticleModuleSpawnPerUnit();
 	bool IsUpdateModule() const override { return true; }
 	EParticleModuleType GetModuleType() const override { return EParticleModuleType::Spawn; }
 	int32 GetInstancePayloadSize() const override;
@@ -322,8 +329,9 @@ public:
 	UPROPERTY(Edit, Save, Category="Spawn Per Unit", DisplayName="Unit Scalar", Min=0.001f, Max=100000.0f, Speed=1.0f)
 	float UnitScalar = 50.0f;
 
-	UPROPERTY(Edit, Save, Category="Spawn Per Unit", DisplayName="Spawn Per Unit", Min=0.0f, Max=1000.0f, Speed=0.1f)
-	float SpawnPerUnit = 1.0f;
+	UPROPERTY(Edit, Save, Instanced, Category="Spawn Per Unit", DisplayName="Spawn Per Unit", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=SpawnPerUnit.Distribution, CppType=UDistributionFloat*)
+	;
+	FRawDistributionFloat SpawnPerUnit;
 
 	UPROPERTY(Edit, Save, Category="Spawn Per Unit", DisplayName="Movement Tolerance", Min=0.0f, Max=10000.0f, Speed=0.1f)
 	float MovementTolerance = 0.1f;
@@ -340,14 +348,13 @@ class UParticleModuleLifetime : public UParticleModule
 {
 public:
 	GENERATED_BODY()
+	UParticleModuleLifetime();
 	bool IsSpawnModule() const override { return true; }
 	void Spawn(const FSpawnContext& Context) override;
 
-	UPROPERTY(Edit, Save, Category="Lifetime", DisplayName="Min Lifetime", Min=0.01f, Max=1000.0f, Speed=0.1f)
-	float MinLifetime = 1.0f;
-
-	UPROPERTY(Edit, Save, Category="Lifetime", DisplayName="Max Lifetime", Min=0.01f, Max=1000.0f, Speed=0.1f)
-	float MaxLifetime = 1.0f;
+	UPROPERTY(Edit, Save, Instanced, Category="Lifetime", DisplayName="Lifetime", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=Lifetime.Distribution, CppType=UDistributionFloat*)
+	;
+	FRawDistributionFloat Lifetime;
 };
 
 UCLASS()
@@ -355,14 +362,13 @@ class UParticleModuleLocation : public UParticleModule
 {
 public:
 	GENERATED_BODY()
+	UParticleModuleLocation();
 	bool IsSpawnModule() const override { return true; }
 	void Spawn(const FSpawnContext& Context) override;
 
-	UPROPERTY(Edit, Save, Category="Location", DisplayName="Start Location Min")
-	FVector StartLocationMin = FVector(0.0f, 0.0f, 0.0f);
-
-	UPROPERTY(Edit, Save, Category="Location", DisplayName="Start Location Max")
-	FVector StartLocationMax = FVector(0.0f, 0.0f, 0.0f);
+	UPROPERTY(Edit, Save, Instanced, Category="Location", DisplayName="Start Location", Type=ObjectRef, AllowedClass=UDistributionVector, Member=StartLocation.Distribution, CppType=UDistributionVector*)
+	;
+	FRawDistributionVector StartLocation;
 };
 
 UCLASS()
@@ -370,14 +376,13 @@ class UParticleModuleVelocity : public UParticleModule
 {
 public:
 	GENERATED_BODY()
+	UParticleModuleVelocity();
 	bool IsSpawnModule() const override { return true; }
 	void Spawn(const FSpawnContext& Context) override;
 
-	UPROPERTY(Edit, Save, Category="Velocity", DisplayName="Start Velocity Min")
-	FVector StartVelocityMin = FVector(0.0f, 0.0f, 100.0f);
-
-	UPROPERTY(Edit, Save, Category="Velocity", DisplayName="Start Velocity Max")
-	FVector StartVelocityMax = FVector(0.0f, 0.0f, 100.0f);
+	UPROPERTY(Edit, Save, Instanced, Category="Velocity", DisplayName="Start Velocity", Type=ObjectRef, AllowedClass=UDistributionVector, Member=StartVelocity.Distribution, CppType=UDistributionVector*)
+	;
+	FRawDistributionVector StartVelocity;
 
 	UPROPERTY(Edit, Save, Category="Velocity", DisplayName="Inherit Owner Velocity")
 	bool bInheritOwnerVelocity = false;
@@ -391,16 +396,27 @@ class UParticleModuleColor : public UParticleModule
 {
 public:
 	GENERATED_BODY()
+	UParticleModuleColor();
 	bool IsSpawnModule() const override { return true; }
 	bool IsUpdateModule() const override { return bColorOverLife; }
 	void Spawn(const FSpawnContext& Context) override;
 	void Update(const FUpdateContext& Context) override;
 
-	UPROPERTY(Edit, Save, Category="Color", DisplayName="Start Color", Type=Color4)
-	FVector4 StartColor = FVector4(1.0f, 1.0f, 1.0f, 1.0f);
+	UPROPERTY(Edit, Save, Instanced, Category="Color", DisplayName="Start Color", Type=ObjectRef, AllowedClass=UDistributionVector, Member=StartColor.Distribution, CppType=UDistributionVector*)
+	;
+	FRawDistributionVector StartColor;
 
-	UPROPERTY(Edit, Save, Category="Color", DisplayName="End Color", Type=Color4)
-	FVector4 EndColor = FVector4(1.0f, 1.0f, 1.0f, 0.0f);
+	UPROPERTY(Edit, Save, Instanced, Category="Color", DisplayName="Start Alpha", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=StartAlpha.Distribution, CppType=UDistributionFloat*)
+	;
+	FRawDistributionFloat StartAlpha;
+
+	UPROPERTY(Edit, Save, Instanced, Category="Color", DisplayName="End Color", Type=ObjectRef, AllowedClass=UDistributionVector, Member=EndColor.Distribution, CppType=UDistributionVector*)
+	;
+	FRawDistributionVector EndColor;
+
+	UPROPERTY(Edit, Save, Instanced, Category="Color", DisplayName="End Alpha", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=EndAlpha.Distribution, CppType=UDistributionFloat*)
+	;
+	FRawDistributionFloat EndAlpha;
 
 	UPROPERTY(Edit, Save, Category="Color", DisplayName="Color Over Life")
 	bool bColorOverLife = true;
@@ -411,19 +427,19 @@ class UParticleModuleSize : public UParticleModule
 {
 public:
 	GENERATED_BODY()
+	UParticleModuleSize();
 	bool IsSpawnModule() const override { return true; }
 	bool IsUpdateModule() const override { return bSizeOverLife; }
 	void Spawn(const FSpawnContext& Context) override;
 	void Update(const FUpdateContext& Context) override;
 
-	UPROPERTY(Edit, Save, Category="Size", DisplayName="Start Size Min")
-	FVector StartSizeMin = FVector(1.0f, 1.0f, 1.0f);
+	UPROPERTY(Edit, Save, Instanced, Category="Size", DisplayName="Start Size", Type=ObjectRef, AllowedClass=UDistributionVector, Member=StartSize.Distribution, CppType=UDistributionVector*)
+	;
+	FRawDistributionVector StartSize;
 
-	UPROPERTY(Edit, Save, Category="Size", DisplayName="Start Size Max")
-	FVector StartSizeMax = FVector(1.0f, 1.0f, 1.0f);
-
-	UPROPERTY(Edit, Save, Category="Size", DisplayName="End Size")
-	FVector EndSize = FVector(1.0f, 1.0f, 1.0f);
+	UPROPERTY(Edit, Save, Instanced, Category="Size", DisplayName="End Size", Type=ObjectRef, AllowedClass=UDistributionVector, Member=EndSize.Distribution, CppType=UDistributionVector*)
+	;
+	FRawDistributionVector EndSize;
 
 	UPROPERTY(Edit, Save, Category="Size", DisplayName="Size Over Life")
 	bool bSizeOverLife = false;
