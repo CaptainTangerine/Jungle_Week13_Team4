@@ -145,9 +145,11 @@ namespace
 		TArray<UClass*> Classes;
 		UClass* BaseClass = UParticleModule::StaticClass();
 		UClass* AbstractTypeDataBase = UParticleModuleTypeDataBase::StaticClass();
+		UClass* AbstractBeamBase = UParticleModuleBeamBase::StaticClass();
+		UClass* AbstractTrailBase = UParticleModuleTrailBase::StaticClass();
 		for (UClass* Class : UClass::GetAllClasses())
 		{
-			if (!Class || Class == BaseClass || Class == AbstractTypeDataBase)
+			if (!Class || Class == BaseClass || Class == AbstractTypeDataBase || Class == AbstractBeamBase || Class == AbstractTrailBase)
 			{
 				continue;
 			}
@@ -164,29 +166,64 @@ namespace
 		return Classes;
 	}
 
-	const char* GetParticleModuleCategory(UClass* Class)
+	EParticleModuleType GetParticleModuleType(UClass* Class)
 	{
 		if (!Class)
 		{
-			return "Module";
+			return EParticleModuleType::General;
 		}
 		if (Class->IsA(UParticleModuleTypeDataBase::StaticClass()))
 		{
-			return "Type Data";
+			return EParticleModuleType::TypeData;
 		}
 		if (Class->IsA(UParticleModuleRequired::StaticClass()))
 		{
-			return "Emitter";
+			return EParticleModuleType::Required;
 		}
+		if (Class->IsA(UParticleModuleBeamBase::StaticClass()))
+		{
+			return EParticleModuleType::Beam;
+		}
+		if (Class->IsA(UParticleModuleTrailBase::StaticClass()))
+		{
+			return EParticleModuleType::Trail;
+		}
+		if (Class->IsA(UParticleModuleSpawn::StaticClass()) || Class->IsA(UParticleModuleSpawnPerUnit::StaticClass()))
+		{
+			return EParticleModuleType::Spawn;
+		}
+		return EParticleModuleType::General;
+	}
 
-		const char* Name = Class->GetName();
-		if (std::strstr(Name, "Spawn")) return "Spawn";
-		if (std::strstr(Name, "Lifetime")) return "Lifetime";
-		if (std::strstr(Name, "Location")) return "Location";
-		if (std::strstr(Name, "Velocity")) return "Velocity";
-		if (std::strstr(Name, "Color")) return "Color";
-		if (std::strstr(Name, "Size")) return "Size";
-		return "Module";
+	const char* GetParticleModuleCategoryName(EParticleModuleType ModuleType)
+	{
+		switch (ModuleType)
+		{
+		case EParticleModuleType::TypeData:
+			return "Type Data";
+		case EParticleModuleType::Beam:
+			return "Beam";
+		case EParticleModuleType::Trail:
+			return "Trail";
+		case EParticleModuleType::Spawn:
+			return "Spawn";
+		case EParticleModuleType::Required:
+			return "Emitter";
+		case EParticleModuleType::Event:
+			return "Event";
+		case EParticleModuleType::Light:
+			return "Light";
+		case EParticleModuleType::SubUV:
+			return "SubUV";
+		case EParticleModuleType::General:
+		default:
+			return "Module";
+		}
+	}
+
+	const char* GetParticleModuleCategory(UClass* Class)
+	{
+		return GetParticleModuleCategoryName(GetParticleModuleType(Class));
 	}
 
 	std::string GetParticleModuleDisplayName(UClass* Class)
@@ -1227,7 +1264,7 @@ void FParticleSystemEditorWidget::RenderEmitterPanel(UParticleSystem* ParticleSy
 				ImGui::Separator();
 
 				TArray<UClass*> ModuleClasses = EnumerateParticleModuleClasses();
-				const char* Categories[] = { "Emitter", "Type Data", "Spawn", "Lifetime", "Location", "Velocity", "Color", "Size", "Module" };
+				const char* Categories[] = { "Emitter", "Type Data", "Beam", "Trail", "Spawn", "Module" };
 				for (const char* Category : Categories)
 				{
 					bool bHasCategory = false;
@@ -1611,6 +1648,10 @@ bool FParticleSystemEditorWidget::RenderObjectPropertiesInline(UObject* Object)
 			continue;
 		}
 		if (Object->IsA<UParticleEmitter>() && Property->Name && std::strcmp(Property->Name, "bEnabled") == 0)
+		{
+			continue;
+		}
+		if (Object->IsA<UParticleModuleTypeDataBase>() && Property->Name && std::strcmp(Property->Name, "EmitterType") == 0)
 		{
 			continue;
 		}

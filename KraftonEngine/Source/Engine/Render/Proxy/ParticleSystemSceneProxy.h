@@ -24,11 +24,13 @@ struct FDrawCommandBuffer;
 */
 struct FParticleProxyParticle
 {
+	FVector OldPosition = FVector::ZeroVector;
 	FVector Position = FVector::ZeroVector;
 	FVector Velocity = FVector::ZeroVector;
 	FVector Size = FVector::OneVector;
 	FLinearColor Color = FLinearColor::White();
 	float Rotation = 0.0f;
+	float RelativeTime = 0.0f;
 	float CameraDistanceSq = 0.0f;
 };
 
@@ -70,6 +72,8 @@ private:
 	void BuildEmitterForView(FDynamicEmitterDataBase* EmitterData, const FFrameContext& Frame);
 	void BuildSpriteEmitterForView(const FDynamicSpriteEmitterDataBase& EmitterData, const FFrameContext& Frame);
 	void BuildMeshEmitterForView(const FDynamicMeshEmitterData& EmitterData, const FFrameContext& Frame);
+	void BuildBeamEmitterForView(const FDynamicBeamEmitterData& EmitterData, const FFrameContext& Frame);
+	void BuildRibbonEmitterForView(const FDynamicRibbonEmitterData& EmitterData, const FFrameContext& Frame);
 
 	void GatherParticles(const FDynamicEmitterReplayDataBase& Source, const FFrameContext& Frame,
 		TArray<FParticleProxyParticle>& OutParticles) const;
@@ -78,6 +82,12 @@ private:
 		const FVector& CameraUp, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const;
 	void BuildMeshVertices(const TArray<FParticleProxyParticle>& Particles, const TArray<FNormalVertex>& MeshVertices,
 		const TArray<uint32>& MeshIndices, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const;
+	void BuildBeamVertices(const TArray<FParticleProxyParticle>& Particles, const FDynamicBeamEmitterReplayData& Source,
+		const FFrameContext& Frame,
+		TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const;
+	void BuildRibbonTrailVertices(const TArray<FParticleProxyParticle>& Points, int32 StartIndex, int32 PointCount,
+		const FDynamicRibbonEmitterReplayData& Source, const FFrameContext& Frame,
+		TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const;
 
 	UMaterial* ResolveParticleMaterial(const FDynamicSpriteEmitterReplayDataBase& Source) const;
 	UStaticMesh* ResolveParticleMesh(const FString& MeshPath) const;

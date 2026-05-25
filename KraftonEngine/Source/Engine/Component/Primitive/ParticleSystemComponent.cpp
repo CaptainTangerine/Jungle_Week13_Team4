@@ -101,10 +101,12 @@ void UParticleSystemComponent::RecreateEmitterInstances()
 
 	if (!Template)
 	{
+		CachedTemplateVersion = 0;
 		return;
 	}
 
 	Template->CacheSystemModuleInfo();
+	CachedTemplateVersion = Template->GetVersion();
 	CurrentLODIndex = 0;
 	LastLODDistance = 0.0f;
 
@@ -158,6 +160,11 @@ void UParticleSystemComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 	if (!IsActive() || !Template)
 	{
 		return;
+	}
+
+	if (CachedTemplateVersion != Template->GetVersion())
+	{
+		RecreateEmitterInstances();
 	}
 
 	UpdateLODSelection();

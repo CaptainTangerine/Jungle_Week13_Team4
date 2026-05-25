@@ -59,4 +59,5 @@ private:
 
 	int32 CurrentLODIndex = 0;
 	float LastLODDistance = 0.0f;
+	uint32 CachedTemplateVersion = 0;
 };

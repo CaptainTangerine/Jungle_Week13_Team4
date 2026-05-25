@@ -15,6 +15,20 @@ enum class EParticleEmitterType : uint8
 };
 
 UENUM()
+enum class EParticleModuleType : uint8
+{
+	General,
+	TypeData,
+	Beam,
+	Trail,
+	Spawn,
+	Required,
+	Event,
+	Light,
+	SubUV,
+};
+
+UENUM()
 enum class EParticleSortMode : uint8
 {
 	None,
@@ -37,6 +51,22 @@ enum class EParticleScreenAlignment : uint8
 	FacingCameraPosition,
 	Square,
 	Velocity,
+};
+
+UENUM()
+enum class EParticleBeamEndpointMethod : uint8
+{
+	Emitter,
+	Particle,
+	UserSet,
+};
+
+UENUM()
+enum class EParticleTrailRenderAxis : uint8
+{
+	CameraFacing,
+	Velocity,
+	WorldUp,
 };
 
 struct FBaseParticle

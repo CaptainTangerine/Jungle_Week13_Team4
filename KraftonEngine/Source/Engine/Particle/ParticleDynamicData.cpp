@@ -98,3 +98,37 @@ FDynamicMeshEmitterData::FDynamicMeshEmitterData(const UParticleModuleRequired* 
 {
 	Source.EmitterType = EDynamicEmitterType::Mesh;
 }
+
+FDynamicBeamEmitterReplayData::FDynamicBeamEmitterReplayData(const UParticleModuleRequired* RequiredModule)
+	: FDynamicSpriteEmitterReplayDataBase(RequiredModule)
+{
+	EmitterType = EDynamicEmitterType::Beam;
+}
+
+FDynamicTrailsEmitterReplayData::FDynamicTrailsEmitterReplayData(const UParticleModuleRequired* RequiredModule)
+	: FDynamicSpriteEmitterReplayDataBase(RequiredModule)
+{
+}
+
+FDynamicRibbonEmitterReplayData::FDynamicRibbonEmitterReplayData(const UParticleModuleRequired* RequiredModule)
+	: FDynamicTrailsEmitterReplayData(RequiredModule)
+{
+	EmitterType = EDynamicEmitterType::Ribbon;
+}
+
+FDynamicBeamEmitterData::FDynamicBeamEmitterData(const UParticleModuleRequired* RequiredModule)
+	: FDynamicSpriteEmitterDataBase(RequiredModule)
+	, Source(RequiredModule)
+{
+}
+
+FDynamicTrailsEmitterData::FDynamicTrailsEmitterData(const UParticleModuleRequired* RequiredModule)
+	: FDynamicSpriteEmitterDataBase(RequiredModule)
+{
+}
+
+FDynamicRibbonEmitterData::FDynamicRibbonEmitterData(const UParticleModuleRequired* RequiredModule)
+	: FDynamicTrailsEmitterData(RequiredModule)
+	, Source(RequiredModule)
+{
+}

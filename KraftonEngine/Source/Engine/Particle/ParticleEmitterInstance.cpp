@@ -39,6 +39,24 @@ namespace
 
 		return ResolveEmitterType(EmitterTemplate->GetLODLevelForIndex(0));
 	}
+
+	FVector ResolveModulePoint(const FParticleEmitterInstance* Instance, const FVector& Point, bool bAbsolute)
+	{
+		if (bAbsolute || !Instance || !Instance->Component)
+		{
+			return Point;
+		}
+		return Instance->Component->GetWorldMatrix().TransformPositionWithW(Point);
+	}
+
+	FVector ResolveModuleVector(const FParticleEmitterInstance* Instance, const FVector& Vector, bool bAbsolute)
+	{
+		if (bAbsolute || !Instance || !Instance->Component)
+		{
+			return Vector;
+		}
+		return Instance->Component->GetWorldMatrix().TransformVector(Vector);
+	}
 }
 
 const FParticleModuleCache* FParticleLODLevelCompiledData::FindModuleCache(const UParticleModule* Module) const
@@ -273,15 +291,74 @@ FDynamicEmitterDataBase* FParticleEmitterInstance::CreateDynamicData(int32 Emitt
 	Source.EmitterType = GetDynamicEmitterType();
 	Source.ActiveParticleCount = ActiveParticles;
 	Source.ParticleStride = ParticleStride;
+	Source.EmitterTime = EmitterTime;
 	Source.Scale = Component ? Component->GetWorldScale() : FVector::OneVector;
 
 	if (Source.EmitterType == EDynamicEmitterType::Sprite || Source.EmitterType == EDynamicEmitterType::Mesh)
 	{
-		FDynamicSpriteEmitterReplayDataBase& SpriteSource = static_cast<FDynamicSpriteEmitterReplayDataBase&>(Source);
+		FDynamicSpriteEmitterReplayDataBase& SpriteSource = static_cast<FDynamicSpriteEmitterDataBase*>(DynamicData)->GetSpriteSource();
 		if (const UParticleModuleTypeDataMesh* MeshTypeData = Cast<UParticleModuleTypeDataMesh>(CurrentLODLevel->GetTypeDataModule()))
 		{
 			SpriteSource.MeshPath = MeshTypeData->MeshPath.ToString();
 		}
+	}
+	else if (Source.EmitterType == EDynamicEmitterType::Beam)
+	{
+		FDynamicBeamEmitterReplayData& BeamSource = static_cast<FDynamicBeamEmitterData*>(DynamicData)->GetBeamSource();
+		const FVector ComponentLocation = Component ? Component->GetWorldLocation() : FVector::ZeroVector;
+		BeamSource.SourcePoint = ComponentLocation;
+		BeamSource.TargetPoint = ComponentLocation + FVector(0.0f, 0.0f, 100.0f);
+		if (const UParticleModuleTypeDataBeam* BeamTypeData = Cast<UParticleModuleTypeDataBeam>(CurrentLODLevel->GetTypeDataModule()))
+		{
+			BeamSource.MaxBeamCount = std::max(1, BeamTypeData->MaxBeamCount);
+			BeamSource.Sheets = std::max(1, BeamTypeData->Sheets);
+			BeamSource.InterpolationPoints = std::max(1, BeamTypeData->InterpolationPoints);
+		}
+		for (UParticleModule* Module : CurrentLODLevel->GetModules())
+		{
+			if (!Module || !Module->IsEnabled())
+			{
+				continue;
+			}
+
+			if (const UParticleModuleBeamSource* SourceModule = Cast<UParticleModuleBeamSource>(Module))
+			{
+				BeamSource.SourceMethod = SourceModule->SourceMethod;
+				BeamSource.SourcePoint = SourceModule->SourceMethod == EParticleBeamEndpointMethod::Emitter
+					? ComponentLocation
+					: ResolveModulePoint(this, SourceModule->SourcePoint, SourceModule->bSourceAbsolute);
+				BeamSource.SourceTangent = ResolveModuleVector(this, SourceModule->SourceTangent, SourceModule->bSourceAbsolute);
+				BeamSource.bUseSourceTangent = SourceModule->bUseSourceTangent;
+			}
+			else if (const UParticleModuleBeamTarget* TargetModule = Cast<UParticleModuleBeamTarget>(Module))
+			{
+				BeamSource.TargetMethod = TargetModule->TargetMethod;
+				BeamSource.TargetPoint = TargetModule->TargetMethod == EParticleBeamEndpointMethod::Emitter
+					? ComponentLocation
+					: ResolveModulePoint(this, TargetModule->TargetPoint, TargetModule->bTargetAbsolute);
+				BeamSource.TargetTangent = ResolveModuleVector(this, TargetModule->TargetTangent, TargetModule->bTargetAbsolute);
+				BeamSource.bUseTargetTangent = TargetModule->bUseTargetTangent;
+			}
+			else if (const UParticleModuleBeamNoise* NoiseModule = Cast<UParticleModuleBeamNoise>(Module))
+			{
+				BeamSource.NoiseFrequency = std::max(0, NoiseModule->Frequency);
+				BeamSource.NoiseStrength = std::max(0.0f, NoiseModule->Strength);
+				BeamSource.NoiseSpeed = std::max(0.0f, NoiseModule->Speed);
+			}
+		}
+	}
+	else if (Source.EmitterType == EDynamicEmitterType::Ribbon)
+	{
+		FDynamicRibbonEmitterReplayData& RibbonSource = static_cast<FDynamicRibbonEmitterData*>(DynamicData)->GetRibbonSource();
+		if (const UParticleModuleTypeDataRibbon* RibbonTypeData = Cast<UParticleModuleTypeDataRibbon>(CurrentLODLevel->GetTypeDataModule()))
+		{
+			RibbonSource.TrailCount = std::max(1, RibbonTypeData->MaxTrailCount);
+			RibbonSource.MaxParticlesInTrail = std::max(2, RibbonTypeData->MaxParticlesInTrail);
+			RibbonSource.Sheets = std::max(1, RibbonTypeData->SheetsPerTrail);
+			RibbonSource.TilingDistance = std::max(0.0f, RibbonTypeData->TilingDistance);
+			RibbonSource.RenderAxis = RibbonTypeData->RenderAxis;
+		}
+		RibbonSource.MaxActiveParticleCount = MaxActiveParticles;
 	}
 
 	const int32 ParticleDataBytes = MaxActiveParticles * ParticleStride;
@@ -304,6 +381,33 @@ const FTransform& FParticleEmitterInstance::GetComponentTransform() const
 FVector FParticleEmitterInstance::GetComponentLocation() const
 {
 	return Component ? Component->GetWorldLocation() : FVector::ZeroVector;
+}
+
+uint8* FParticleEmitterInstance::GetModuleInstanceData(const UParticleModule* Module)
+{
+	return const_cast<uint8*>(static_cast<const FParticleEmitterInstance*>(this)->GetModuleInstanceData(Module));
+}
+
+const uint8* FParticleEmitterInstance::GetModuleInstanceData(const UParticleModule* Module) const
+{
+	if (!Module || !InstanceData || InstancePayloadSize <= 0)
+	{
+		return nullptr;
+	}
+
+	const FParticleModuleCache* Cache = LODData.FindModuleCache(Module);
+	if (!Cache || Cache->InstancePayloadSize <= 0 || Cache->InstancePayloadOffset < 0)
+	{
+		return nullptr;
+	}
+
+	const int32 PayloadEnd = Cache->InstancePayloadOffset + Cache->InstancePayloadSize;
+	if (PayloadEnd > InstancePayloadSize)
+	{
+		return nullptr;
+	}
+
+	return InstanceData + Cache->InstancePayloadOffset;
 }
 
 UObject* FParticleEmitterInstance::GetDistributionData() const
@@ -536,4 +640,14 @@ void FParticleEmitterInstance::UpdateParticleLifetimesAndMovement(float DeltaTim
 FDynamicEmitterDataBase* FParticleMeshEmitterInstance::CreateDynamicEmitterData(const UParticleModuleRequired* RequiredModule) const
 {
 	return new FDynamicMeshEmitterData(RequiredModule);
+}
+
+FDynamicEmitterDataBase* FParticleBeamEmitterInstance::CreateDynamicEmitterData(const UParticleModuleRequired* RequiredModule) const
+{
+	return new FDynamicBeamEmitterData(RequiredModule);
+}
+
+FDynamicEmitterDataBase* FParticleRibbonEmitterInstance::CreateDynamicEmitterData(const UParticleModuleRequired* RequiredModule) const
+{
+	return new FDynamicRibbonEmitterData(RequiredModule);
 }

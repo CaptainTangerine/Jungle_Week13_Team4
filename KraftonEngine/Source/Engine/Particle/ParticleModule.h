@@ -25,6 +25,7 @@ public:
 	virtual bool IsSpawnModule() const { return false; }
 	virtual bool IsUpdateModule() const { return false; }
 	virtual bool IsTypeDataModule() const { return false; }
+	virtual EParticleModuleType GetModuleType() const { return EParticleModuleType::General; }
 
 	virtual int32 GetParticlePayloadSize() const { return 0; }
 	virtual int32 GetInstancePayloadSize() const { return 0; }
@@ -70,7 +71,8 @@ public:
 	{
 		int32 Offset;
 		float DeltaTime;
-		FUpdateContext(FParticleEmitterInstance& Ow, int32 Of, float Dt) : FContext(Ow), Offset(Of), DeltaTime(Dt) {}
+		FUpdateContext(FParticleEmitterInstance& Ow, int32 Of, float Dt)
+			: FContext(Ow), Offset(Of), DeltaTime(Dt) {}
 	};
 	virtual void Update(const FUpdateContext& Context) {}
 
@@ -91,6 +93,7 @@ class UParticleModuleTypeDataBase : public UParticleModule
 public:
 	GENERATED_BODY()
 	bool IsTypeDataModule() const override { return true; }
+	EParticleModuleType GetModuleType() const override { return EParticleModuleType::TypeData; }
 
 	UPROPERTY(Edit, Save, Category="TypeData", DisplayName="Emitter Type", Enum=EParticleEmitterType)
 	EParticleEmitterType EmitterType = EParticleEmitterType::Sprite;
@@ -136,6 +139,9 @@ public:
 
 	UPROPERTY(Edit, Save, Category="Beam", DisplayName="Sheets", Min=1.0f, Max=16.0f, Speed=1.0f)
 	int32 Sheets = 1;
+
+	UPROPERTY(Edit, Save, Category="Beam", DisplayName="Interpolation Points", Min=1.0f, Max=64.0f, Speed=1.0f)
+	int32 InterpolationPoints = 1;
 };
 
 UCLASS()
@@ -150,6 +156,91 @@ public:
 
 	UPROPERTY(Edit, Save, Category="Ribbon", DisplayName="Max Particles In Trail", Min=2.0f, Max=4096.0f, Speed=1.0f)
 	int32 MaxParticlesInTrail = 64;
+
+	UPROPERTY(Edit, Save, Category="Ribbon", DisplayName="Sheets Per Trail", Min=1.0f, Max=16.0f, Speed=1.0f)
+	int32 SheetsPerTrail = 1;
+
+	UPROPERTY(Edit, Save, Category="Ribbon", DisplayName="Tiling Distance", Min=0.0f, Max=100000.0f, Speed=1.0f)
+	float TilingDistance = 0.0f;
+
+	UPROPERTY(Edit, Save, Category="Ribbon", DisplayName="Render Axis", Enum=EParticleTrailRenderAxis)
+	EParticleTrailRenderAxis RenderAxis = EParticleTrailRenderAxis::CameraFacing;
+};
+
+UCLASS()
+class UParticleModuleBeamBase : public UParticleModule
+{
+public:
+	GENERATED_BODY()
+	EParticleModuleType GetModuleType() const override { return EParticleModuleType::Beam; }
+};
+
+UCLASS()
+class UParticleModuleTrailBase : public UParticleModule
+{
+public:
+	GENERATED_BODY()
+	EParticleModuleType GetModuleType() const override { return EParticleModuleType::Trail; }
+};
+
+UCLASS()
+class UParticleModuleBeamSource : public UParticleModuleBeamBase
+{
+public:
+	GENERATED_BODY()
+
+	UPROPERTY(Edit, Save, Category="Beam Source", DisplayName="Source Method", Enum=EParticleBeamEndpointMethod)
+	EParticleBeamEndpointMethod SourceMethod = EParticleBeamEndpointMethod::Emitter;
+
+	UPROPERTY(Edit, Save, Category="Beam Source", DisplayName="Source Point")
+	FVector SourcePoint = FVector(0.0f, 0.0f, 0.0f);
+
+	UPROPERTY(Edit, Save, Category="Beam Source", DisplayName="Source Absolute")
+	bool bSourceAbsolute = false;
+
+	UPROPERTY(Edit, Save, Category="Beam Source", DisplayName="Use Source Tangent")
+	bool bUseSourceTangent = false;
+
+	UPROPERTY(Edit, Save, Category="Beam Source", DisplayName="Source Tangent")
+	FVector SourceTangent = FVector(100.0f, 0.0f, 0.0f);
+};
+
+UCLASS()
+class UParticleModuleBeamTarget : public UParticleModuleBeamBase
+{
+public:
+	GENERATED_BODY()
+
+	UPROPERTY(Edit, Save, Category="Beam Target", DisplayName="Target Method", Enum=EParticleBeamEndpointMethod)
+	EParticleBeamEndpointMethod TargetMethod = EParticleBeamEndpointMethod::Particle;
+
+	UPROPERTY(Edit, Save, Category="Beam Target", DisplayName="Target Point")
+	FVector TargetPoint = FVector(0.0f, 0.0f, 100.0f);
+
+	UPROPERTY(Edit, Save, Category="Beam Target", DisplayName="Target Absolute")
+	bool bTargetAbsolute = false;
+
+	UPROPERTY(Edit, Save, Category="Beam Target", DisplayName="Use Target Tangent")
+	bool bUseTargetTangent = false;
+
+	UPROPERTY(Edit, Save, Category="Beam Target", DisplayName="Target Tangent")
+	FVector TargetTangent = FVector(100.0f, 0.0f, 0.0f);
+};
+
+UCLASS()
+class UParticleModuleBeamNoise : public UParticleModuleBeamBase
+{
+public:
+	GENERATED_BODY()
+
+	UPROPERTY(Edit, Save, Category="Beam Noise", DisplayName="Frequency", Min=0.0f, Max=64.0f, Speed=1.0f)
+	int32 Frequency = 0;
+
+	UPROPERTY(Edit, Save, Category="Beam Noise", DisplayName="Strength", Min=0.0f, Max=10000.0f, Speed=1.0f)
+	float Strength = 0.0f;
+
+	UPROPERTY(Edit, Save, Category="Beam Noise", DisplayName="Speed", Min=0.0f, Max=1000.0f, Speed=0.1f)
+	float Speed = 0.0f;
 };
 
 UCLASS()
@@ -157,6 +248,7 @@ class UParticleModuleRequired : public UParticleModule
 {
 public:
 	GENERATED_BODY()
+	EParticleModuleType GetModuleType() const override { return EParticleModuleType::Required; }
 
 	UPROPERTY(Edit, Save, Category="Required", DisplayName="Emitter Type", Enum=EParticleEmitterType)
 	EParticleEmitterType EmitterType = EParticleEmitterType::Sprite;
@@ -189,6 +281,7 @@ class UParticleModuleSpawn : public UParticleModule
 public:
 	GENERATED_BODY()
 	bool IsSpawnModule() const override { return true; }
+	EParticleModuleType GetModuleType() const override { return EParticleModuleType::Spawn; }
 
 	UPROPERTY(Edit, Save, Category="Spawn", DisplayName="Rate", Min=0.0f, Max=100000.0f, Speed=1.0f)
 	float Rate = 10.0f;
@@ -201,6 +294,32 @@ public:
 
 	UPROPERTY(Edit, Save, Category="Spawn", DisplayName="Burst Time", Min=0.0f, Max=1000.0f, Speed=0.01f)
 	float BurstTime = 0.0f;
+};
+
+UCLASS()
+class UParticleModuleSpawnPerUnit : public UParticleModule
+{
+public:
+	GENERATED_BODY()
+	bool IsUpdateModule() const override { return true; }
+	EParticleModuleType GetModuleType() const override { return EParticleModuleType::Spawn; }
+	int32 GetInstancePayloadSize() const override;
+	void Update(const FUpdateContext& Context) override;
+
+	UPROPERTY(Edit, Save, Category="Spawn Per Unit", DisplayName="Unit Scalar", Min=0.001f, Max=100000.0f, Speed=1.0f)
+	float UnitScalar = 50.0f;
+
+	UPROPERTY(Edit, Save, Category="Spawn Per Unit", DisplayName="Spawn Per Unit", Min=0.0f, Max=1000.0f, Speed=0.1f)
+	float SpawnPerUnit = 1.0f;
+
+	UPROPERTY(Edit, Save, Category="Spawn Per Unit", DisplayName="Movement Tolerance", Min=0.0f, Max=10000.0f, Speed=0.1f)
+	float MovementTolerance = 0.1f;
+
+	UPROPERTY(Edit, Save, Category="Spawn Per Unit", DisplayName="Max Frame Distance", Min=0.0f, Max=100000.0f, Speed=1.0f)
+	float MaxFrameDistance = 1000.0f;
+
+	UPROPERTY(Edit, Save, Category="Spawn Per Unit", DisplayName="Ignore Movement Along Z")
+	bool bIgnoreMovementAlongZ = false;
 };
 
 UCLASS()

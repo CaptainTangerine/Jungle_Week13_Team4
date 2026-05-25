@@ -3,10 +3,21 @@
 #include "Math/MathUtils.h"
 #include "Particle/ParticleEmitterInstance.h"
 #include "Particle/ParticleHelper.h"
+#include "Particle/ParticleLODLevel.h"
 #include "Serialization/Archive.h"
+
+#include <algorithm>
+#include <cmath>
 
 namespace
 {
+	struct FSpawnPerUnitInstancePayload
+	{
+		FVector PreviousLocation = FVector::ZeroVector;
+		float SpawnRemainder = 0.0f;
+		float bInitialized = 0.0f;
+	};
+
 	FVector Midpoint(const FVector& Min, const FVector& Max)
 	{
 		return FVector::Lerp(Min, Max, 0.5f);
@@ -111,6 +122,79 @@ void UParticleModuleVelocity::Spawn(const FSpawnContext& Context)
 	const FVector SpawnVelocity = Midpoint(StartVelocityMin, StartVelocityMax);
 	Context.ParticleBase->Velocity = SpawnVelocity;
 	Context.ParticleBase->BaseVelocity = SpawnVelocity;
+}
+
+int32 UParticleModuleSpawnPerUnit::GetInstancePayloadSize() const
+{
+	return sizeof(FSpawnPerUnitInstancePayload);
+}
+
+void UParticleModuleSpawnPerUnit::Update(const FUpdateContext& Context)
+{
+	if (!Context.Owner.InstanceData || UnitScalar <= 0.0f || SpawnPerUnit <= 0.0f)
+	{
+		return;
+	}
+
+	FSpawnPerUnitInstancePayload* Payload = reinterpret_cast<FSpawnPerUnitInstancePayload*>(
+		Context.Owner.GetModuleInstanceData(this));
+	if (!Payload)
+	{
+		return;
+	}
+
+	const FVector CurrentLocation = Context.Owner.GetComponentLocation();
+	if (Payload->bInitialized <= 0.0f)
+	{
+		Payload->PreviousLocation = CurrentLocation;
+		Payload->SpawnRemainder = 0.0f;
+		Payload->bInitialized = 1.0f;
+		return;
+	}
+
+	FVector Travel = CurrentLocation - Payload->PreviousLocation;
+	if (bIgnoreMovementAlongZ)
+	{
+		Travel.Z = 0.0f;
+	}
+
+	const float Distance = Travel.Length();
+	const FVector PreviousLocation = Payload->PreviousLocation;
+	Payload->PreviousLocation = CurrentLocation;
+
+	if (Distance <= MovementTolerance)
+	{
+		return;
+	}
+	if (MaxFrameDistance > 0.0f && Distance > MaxFrameDistance)
+	{
+		Payload->SpawnRemainder = 0.0f;
+		return;
+	}
+
+	float SpawnFloat = Payload->SpawnRemainder + (Distance / std::max(0.001f, UnitScalar)) * SpawnPerUnit;
+	int32 SpawnCount = static_cast<int32>(std::floor(SpawnFloat));
+	Payload->SpawnRemainder = SpawnFloat - static_cast<float>(SpawnCount);
+
+	const int32 AvailableCount = Context.Owner.GetMaxActiveParticleCount() - Context.Owner.GetActiveParticleCount();
+	SpawnCount = std::min(SpawnCount, std::max(0, AvailableCount));
+	if (SpawnCount <= 0)
+	{
+		return;
+	}
+
+	const bool bUseLocalSpace = Context.Owner.GetCurrentLODLevel()
+		&& Context.Owner.GetCurrentLODLevel()->GetRequiredModule()
+		&& Context.Owner.GetCurrentLODLevel()->GetRequiredModule()->bUseLocalSpace;
+	const FVector RawTravel = CurrentLocation - PreviousLocation;
+	for (int32 SpawnIndex = 0; SpawnIndex < SpawnCount; ++SpawnIndex)
+	{
+		const float Alpha = static_cast<float>(SpawnIndex + 1) / static_cast<float>(SpawnCount + 1);
+		const FVector SpawnLocation = bUseLocalSpace
+			? FVector::ZeroVector
+			: PreviousLocation + RawTravel * Alpha;
+		Context.Owner.SpawnParticles(1, Context.Owner.EmitterTime, 0.0f, SpawnLocation, FVector::ZeroVector);
+	}
 }
 
 void UParticleModuleColor::Spawn(const FSpawnContext& Context)

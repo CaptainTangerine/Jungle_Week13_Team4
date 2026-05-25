@@ -61,6 +61,8 @@ struct FParticleEmitterInstance
 	const uint8* GetParticleData() const { return ParticleData; }
 	uint16* GetParticleIndices() { return ParticleIndices; }
 	const uint16* GetParticleIndices() const { return ParticleIndices; }
+	uint8* GetModuleInstanceData(const UParticleModule* Module);
+	const uint8* GetModuleInstanceData(const UParticleModule* Module) const;
 
 	const FTransform& GetComponentTransform() const;
 	FVector GetComponentLocation() const;
@@ -146,6 +148,7 @@ struct FParticleBeamEmitterInstance : public FParticleEmitterInstance
 
 private:
 	EDynamicEmitterType GetDynamicEmitterType() const override { return EDynamicEmitterType::Beam; }
+	FDynamicEmitterDataBase* CreateDynamicEmitterData(const UParticleModuleRequired* RequiredModule) const override;
 };
 
 struct FParticleRibbonEmitterInstance : public FParticleEmitterInstance
@@ -154,4 +157,5 @@ struct FParticleRibbonEmitterInstance : public FParticleEmitterInstance
 
 private:
 	EDynamicEmitterType GetDynamicEmitterType() const override { return EDynamicEmitterType::Ribbon; }
+	FDynamicEmitterDataBase* CreateDynamicEmitterData(const UParticleModuleRequired* RequiredModule) const override;
 };
