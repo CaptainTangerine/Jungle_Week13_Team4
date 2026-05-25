@@ -1,4 +1,5 @@
-#include "Render/Proxy/ParticleSystemSceneProxy.h"
+﻿#include "Render/Proxy/ParticleSystemSceneProxy.h"
+#include "GameFramework/AActor.h"
 
 #include "Component/Primitive/ParticleSystemComponent.h"
 #include "Mesh/Static/StaticMesh.h"
@@ -68,6 +69,23 @@ void FParticleSystemSceneProxy::ClearDynamicData()
 
 void FParticleSystemSceneProxy::UpdatePerViewport(const FFrameContext& Frame)
 {
+	//아래 코드 망할 가능성 있음.
+	const UParticleSystemComponent* Component = GetParticleComponent();
+	AActor* OwnerActor = Component ? Component->GetOwner() : nullptr;
+
+	if (!Frame.RenderOptions.ShowFlags.bParticle
+		|| !Component
+		|| !Component->IsVisible()
+		|| (OwnerActor && !OwnerActor->IsVisible()))
+	{
+		bVisible = false;
+		return;
+	}
+
+	bVisible = true;
+
+	bVisible = true;
+	bVisible = true;
 	RebuildRenderDataForView(Frame);
 	bDynamicDataDirty = false;
 }
