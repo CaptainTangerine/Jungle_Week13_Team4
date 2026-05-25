@@ -148,9 +148,10 @@ namespace
 		UClass* AbstractTypeDataBase = UParticleModuleTypeDataBase::StaticClass();
 		UClass* AbstractBeamBase = UParticleModuleBeamBase::StaticClass();
 		UClass* AbstractTrailBase = UParticleModuleTrailBase::StaticClass();
+		UClass* AbstractAccelerationBase = UParticleModuleAccelerationBase::StaticClass();
 		for (UClass* Class : UClass::GetAllClasses())
 		{
-			if (!Class || Class == BaseClass || Class == AbstractTypeDataBase || Class == AbstractBeamBase || Class == AbstractTrailBase)
+			if (!Class || Class == BaseClass || Class == AbstractTypeDataBase || Class == AbstractBeamBase || Class == AbstractTrailBase || Class == AbstractAccelerationBase)
 			{
 				continue;
 			}
