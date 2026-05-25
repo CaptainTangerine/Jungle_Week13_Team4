@@ -6,6 +6,7 @@
 #include "Distributions/DistributionVector.h"
 #include "Particle/ParticleSystem.h"
 #include "Particle/Asset/ParticleSystemManager.h"
+#include "Particle/ParticleModuleEvent.h"
 #include "Editor/EditorEngine.h"
 #include "Editor/UI/Util/EditorTextureManager.h"
 #include "Component/Light/DirectionalLightComponent.h"
@@ -151,9 +152,17 @@ namespace
 		UClass* AbstractTypeDataBase = UParticleModuleTypeDataBase::StaticClass();
 		UClass* AbstractBeamBase = UParticleModuleBeamBase::StaticClass();
 		UClass* AbstractTrailBase = UParticleModuleTrailBase::StaticClass();
+		UClass* AbstractEventBase = UParticleModuleEventBase::StaticClass();
+		UClass* AbstractEventReceiverBase = UParticleModuleEventReceiverBase::StaticClass();
 		for (UClass* Class : UClass::GetAllClasses())
 		{
-			if (!Class || Class == BaseClass || Class == AbstractTypeDataBase || Class == AbstractBeamBase || Class == AbstractTrailBase)
+			if (!Class
+				|| Class == BaseClass
+				|| Class == AbstractTypeDataBase
+				|| Class == AbstractBeamBase
+				|| Class == AbstractTrailBase
+				|| Class == AbstractEventBase
+				|| Class == AbstractEventReceiverBase)
 			{
 				continue;
 			}
@@ -191,6 +200,10 @@ namespace
 		if (Class->IsA(UParticleModuleTrailBase::StaticClass()))
 		{
 			return EParticleModuleType::Trail;
+		}
+		if (Class->IsA(UParticleModuleEventBase::StaticClass()))
+		{
+			return EParticleModuleType::Event;
 		}
 		if (Class->IsA(UParticleModuleSpawn::StaticClass()) || Class->IsA(UParticleModuleSpawnPerUnit::StaticClass()))
 		{

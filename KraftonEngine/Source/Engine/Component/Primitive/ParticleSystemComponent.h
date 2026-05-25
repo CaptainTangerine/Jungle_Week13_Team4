@@ -71,6 +71,9 @@ public:
 	bool GetVectorParameter(FName Name, FVector& OutValue) const;
 	void SetFloatParameter(FName Name, float Value);
 	void SetVectorParameter(FName Name, const FVector& Value);
+	void ReportParticleEvent(const FParticleEventData& EventData);
+	void ClearParticleEvents();
+	const TArray<FParticleEventData>& GetParticleEvents() const { return ParticleEvents; }
 
 protected:
 	void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction) override;
@@ -93,6 +96,7 @@ private:
 	UParticleSystem* Template = nullptr;
 	TArray<FParticleEmitterInstance*> EmitterInstances;
 	TArray<FDynamicEmitterDataBase*> DynamicEmitterDataArray;
+	TArray<FParticleEventData> ParticleEvents;
 
 	int32 CurrentLODIndex = 0;
 	float LastLODDistance = 0.0f;

@@ -1,6 +1,7 @@
 ﻿#include "ParticleLODLevel.h"
 
 #include "Particle/Asset/ParticleSerialization.h"
+#include "Particle/ParticleModuleEvent.h"
 #include "Serialization/Archive.h"
 
 #include <algorithm>
@@ -20,6 +21,8 @@ UParticleLODLevel::~UParticleLODLevel()
 	ParticleSerialization::DestroyObjectArray(Modules);
 	SpawnModules.clear();
 	UpdateModules.clear();
+	EventGeneratorModules.clear();
+	EventReceiverModules.clear();
 }
 
 void UParticleLODLevel::Serialize(FArchive& Ar)
@@ -200,6 +203,8 @@ void UParticleLODLevel::RebuildModuleLists()
 
 	SpawnModules.clear();
 	UpdateModules.clear();
+	EventGeneratorModules.clear();
+	EventReceiverModules.clear();
 
 	for (UParticleModule* Module : Modules)
 	{
@@ -215,6 +220,14 @@ void UParticleLODLevel::RebuildModuleLists()
 		if (Module->IsUpdateModule())
 		{
 			UpdateModules.push_back(Module);
+		}
+		if (Module->IsA<UParticleModuleEventGenerator>())
+		{
+			EventGeneratorModules.push_back(Module);
+		}
+		if (Module->IsA<UParticleModuleEventReceiverBase>())
+		{
+			EventReceiverModules.push_back(Module);
 		}
 	}
 }

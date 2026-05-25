@@ -68,7 +68,7 @@
       <UniqueIdentifier>{5084842c-4071-bc7f-36a2-4a3bf67026e8}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source\Editor\UI\Asset\Particle">
-      <UniqueIdentifier>{b41777b8-8f5e-409a-8a29-c61bb1bf5a2e}</UniqueIdentifier>
+      <UniqueIdentifier>{ebf11781-61db-1727-e031-70fd890518c6}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source\Editor\UI\ContentBrowser">
       <UniqueIdentifier>{09a2ea7f-e891-b580-bef0-471bcd9b5d4b}</UniqueIdentifier>
@@ -299,7 +299,7 @@
       <UniqueIdentifier>{29fc5be6-2892-6e33-da8a-420028aade0e}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source\Engine\Render\Proxy\Particle">
-      <UniqueIdentifier>{7a6b5e45-8bb7-4f3d-a7f4-c73cf78f1f3a}</UniqueIdentifier>
+      <UniqueIdentifier>{a11597d3-036e-9944-54c6-754b81f43af9}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source\Engine\Render\RenderPass">
       <UniqueIdentifier>{3504742f-0df4-b673-e936-9c953baf72bd}</UniqueIdentifier>
@@ -1286,10 +1286,16 @@
     <ClCompile Include="Source\Engine\Particle\ParticleEmitterInstance.cpp">
       <Filter>Source\Engine\Particle</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Particle\ParticleEvent.cpp">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Particle\ParticleLODLevel.cpp">
       <Filter>Source\Engine\Particle</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Particle\ParticleModule.cpp">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Particle\ParticleModuleEvent.cpp">
       <Filter>Source\Engine\Particle</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Particle\ParticleSystem.cpp">
@@ -1385,24 +1391,6 @@
     <ClCompile Include="Source\Engine\Render\Proxy\GizmoSceneProxy.cpp">
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleDrawBufferCache.cpp">
-      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleMaterialCache.cpp">
-      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleMeshBuilder.cpp">
-      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleRenderUtils.cpp">
-      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleSpriteBuilder.cpp">
-      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleTrailBuilder.cpp">
-      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
-    </ClCompile>
     <ClCompile Include="Source\Engine\Render\Proxy\ParticleSystemSceneProxy.cpp">
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClCompile>
@@ -1423,6 +1411,24 @@
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\Proxy\TextRenderSceneProxy.cpp">
       <Filter>Source\Engine\Render\Proxy</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleDrawBufferCache.cpp">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleMaterialCache.cpp">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleMeshBuilder.cpp">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleRenderUtils.cpp">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleSpriteBuilder.cpp">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Proxy\Particle\ParticleTrailBuilder.cpp">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\RenderPass\AdditiveDecalPass.cpp">
       <Filter>Source\Engine\Render\RenderPass</Filter>
@@ -2459,6 +2465,9 @@
     <ClInclude Include="Source\Engine\Particle\ParticleEmitterInstance.h">
       <Filter>Source\Engine\Particle</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Particle\ParticleEvent.h">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Particle\ParticleHelper.h">
       <Filter>Source\Engine\Particle</Filter>
     </ClInclude>
@@ -2466,6 +2475,9 @@
       <Filter>Source\Engine\Particle</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Particle\ParticleModule.h">
+      <Filter>Source\Engine\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Particle\ParticleModuleEvent.h">
       <Filter>Source\Engine\Particle</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Particle\ParticleSystem.h">
@@ -2588,27 +2600,6 @@
     <ClInclude Include="Source\Engine\Render\Proxy\GizmoSceneProxy.h">
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleDrawBufferCache.h">
-      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleMaterialCache.h">
-      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleMeshBuilder.h">
-      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleRenderTypes.h">
-      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleRenderUtils.h">
-      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleSpriteBuilder.h">
-      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleTrailBuilder.h">
-      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
-    </ClInclude>
     <ClInclude Include="Source\Engine\Render\Proxy\ParticleSystemSceneProxy.h">
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClInclude>
@@ -2629,6 +2620,27 @@
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Proxy\TextRenderSceneProxy.h">
       <Filter>Source\Engine\Render\Proxy</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleDrawBufferCache.h">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleMaterialCache.h">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleMeshBuilder.h">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleRenderTypes.h">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleRenderUtils.h">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleSpriteBuilder.h">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Proxy\Particle\ParticleTrailBuilder.h">
+      <Filter>Source\Engine\Render\Proxy\Particle</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\RenderPass\AdditiveDecalPass.h">
       <Filter>Source\Engine\Render\RenderPass</Filter>

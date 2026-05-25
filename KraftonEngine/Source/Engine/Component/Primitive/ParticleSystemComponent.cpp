@@ -271,6 +271,16 @@ void UParticleSystemComponent::SetVectorParameter(FName Name, const FVector& Val
 	VectorParameters.push_back(Parameter);
 }
 
+void UParticleSystemComponent::ReportParticleEvent(const FParticleEventData& EventData)
+{
+	ParticleEvents.push_back(EventData);
+}
+
+void UParticleSystemComponent::ClearParticleEvents()
+{
+	ParticleEvents.clear();
+}
+
 void UParticleSystemComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
 {
 	UPrimitiveComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -279,6 +289,8 @@ void UParticleSystemComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 
 void UParticleSystemComponent::AdvanceSimulation(float DeltaTime)
 {
+	ClearParticleEvents();
+
 	if (!IsActive() || !Template)
 	{
 		return;

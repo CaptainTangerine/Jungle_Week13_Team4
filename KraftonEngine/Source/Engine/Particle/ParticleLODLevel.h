@@ -22,6 +22,8 @@ public:
 	const TArray<UParticleModule*>& GetModules() const { return Modules; }
 	const TArray<UParticleModule*>& GetSpawnModules() const { return SpawnModules; }
 	const TArray<UParticleModule*>& GetUpdateModules() const { return UpdateModules; }
+	const TArray<UParticleModule*>& GetEventGeneratorModules() const { return EventGeneratorModules; }
+	const TArray<UParticleModule*>& GetEventReceiverModules() const { return EventReceiverModules; }
 
 	void SetRequiredModule(UParticleModuleRequired* InModule);
 	void SetTypeDataModule(UParticleModuleTypeDataBase* InModule);
@@ -57,4 +59,6 @@ private:
 
 	TArray<UParticleModule*> SpawnModules;
 	TArray<UParticleModule*> UpdateModules;
+	TArray<UParticleModule*> EventGeneratorModules;
+	TArray<UParticleModule*> EventReceiverModules;
 };

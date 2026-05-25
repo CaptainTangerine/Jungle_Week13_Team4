@@ -6,6 +6,7 @@
 #include "Particle/ParticleHelper.h"
 #include "Particle/ParticleLODLevel.h"
 #include "Particle/ParticleModule.h"
+#include "Particle/ParticleModuleEvent.h"
 
 #include <algorithm>
 #include <cmath>
@@ -101,6 +102,9 @@ void FParticleEmitterInstance::Init(UParticleSystemComponent* InComponent, UPart
 	bBurstFired = false;
 	ActiveParticles = 0;
 	ParticleCounter = 0;
+	EventCounter = 0;
+	bSpawningSuppressed = false;
+	PendingEvents.clear();
 	SetCurrentLODIndex(0);
 }
 
@@ -121,9 +125,12 @@ void FParticleEmitterInstance::Reset()
 	ActiveParticles = 0;
 	MaxActiveParticles = 0;
 	ParticleCounter = 0;
+	EventCounter = 0;
 	EmitterTime = 0.0f;
 	SpawnFraction = 0.0f;
 	bBurstFired = false;
+	bSpawningSuppressed = false;
+	PendingEvents.clear();
 }
 
 void FParticleEmitterInstance::Tick(float DeltaTime)
@@ -136,8 +143,9 @@ void FParticleEmitterInstance::Tick(float DeltaTime)
 	UParticleModuleSpawn* SpawnRateModule = GetSpawnRateModule();
 	const float PreviousEmitterTime = EmitterTime;
 	EmitterTime += DeltaTime;
+	ClearPendingEvents();
 
-	if (SpawnRateModule)
+	if (SpawnRateModule && !bSpawningSuppressed)
 	{
 		FVector InitialLocation = FVector::ZeroVector;
 		if (const UParticleModuleRequired* RequiredModule = CurrentLODLevel->GetRequiredModule())
@@ -154,6 +162,7 @@ void FParticleEmitterInstance::Tick(float DeltaTime)
 		const int32 BurstCount = std::max(0, static_cast<int32>(std::floor(SpawnRateModule->BurstCount.GetValue(SpawnRateModule->BurstTime, DistributionData) + 0.5f)));
 		if (!bBurstFired && BurstCount > 0 && PreviousEmitterTime <= SpawnRateModule->BurstTime && EmitterTime >= SpawnRateModule->BurstTime)
 		{
+			NotifyParticleBurst(BurstCount, InitialLocation);
 			SpawnParticles(BurstCount, SpawnRateModule->BurstTime, 0.0f, InitialLocation, FVector::ZeroVector);
 			bBurstFired = true;
 		}
@@ -537,7 +546,7 @@ void FParticleEmitterInstance::InitializeParticleIndices()
 
 void FParticleEmitterInstance::SpawnParticles(int32 Count, float StartTime, float Increment, const FVector& InitialLocation, const FVector& InitialVelocity)
 {
-	if (!CurrentLODLevel || !ParticleData || !ParticleIndices || Count <= 0)
+	if (!CurrentLODLevel || !ParticleData || !ParticleIndices || Count <= 0 || bSpawningSuppressed)
 	{
 		return;
 	}
@@ -617,10 +626,66 @@ void FParticleEmitterInstance::KillParticle(int32 ActiveIndex)
 		return;
 	}
 
+	NotifyParticleKilled(GetActiveParticle(ActiveIndex));
+
 	const uint16 CurrentIndex = ParticleIndices[ActiveIndex];
 	ParticleIndices[ActiveIndex] = ParticleIndices[ActiveParticles - 1];
 	ParticleIndices[ActiveParticles - 1] = CurrentIndex;
 	ActiveParticles--;
+}
+
+void FParticleEmitterInstance::KillAllParticles()
+{
+	while (ActiveParticles > 0)
+	{
+		KillParticle(ActiveParticles - 1);
+	}
+}
+
+void FParticleEmitterInstance::QueueParticleEvent(const FParticleEventData& EventData)
+{
+	PendingEvents.push_back(EventData);
+	if (Component)
+	{
+		Component->ReportParticleEvent(EventData);
+	}
+}
+
+void FParticleEmitterInstance::ClearPendingEvents()
+{
+	PendingEvents.clear();
+}
+
+void FParticleEmitterInstance::NotifyParticleKilled(const FBaseParticle* Particle)
+{
+	if (!CurrentLODLevel || !Particle)
+	{
+		return;
+	}
+
+	for (UParticleModule* Module : CurrentLODLevel->GetEventGeneratorModules())
+	{
+		if (UParticleModuleEventGenerator* Generator = Cast<UParticleModuleEventGenerator>(Module))
+		{
+			Generator->HandleParticleKilled(*this, Particle);
+		}
+	}
+}
+
+void FParticleEmitterInstance::NotifyParticleBurst(int32 ParticleCount, const FVector& Location)
+{
+	if (!CurrentLODLevel || ParticleCount <= 0)
+	{
+		return;
+	}
+
+	for (UParticleModule* Module : CurrentLODLevel->GetEventGeneratorModules())
+	{
+		if (UParticleModuleEventGenerator* Generator = Cast<UParticleModuleEventGenerator>(Module))
+		{
+			Generator->HandleParticleBurst(*this, ParticleCount, Location);
+		}
+	}
 }
 
 void FParticleEmitterInstance::UpdateParticleLifetimesAndMovement(float DeltaTime)

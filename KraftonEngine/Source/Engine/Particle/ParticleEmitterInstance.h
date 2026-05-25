@@ -3,6 +3,7 @@
 #include "Core/Types/CoreTypes.h"
 #include "Math/Transform.h"
 #include "Object/FName.h"
+#include "Particle/ParticleEvent.h"
 #include "Particle/ParticleDynamicData.h"
 
 class UObject;
@@ -48,6 +49,13 @@ struct FParticleEmitterInstance
 	virtual void PreSpawn(FBaseParticle* Particle, const FVector& InitialLocation, const FVector& InitialVelocity);
 	virtual void PostSpawn(FBaseParticle* Particle, float Interp, float SpawnTime);
 	void KillParticle(int32 ActiveIndex);
+	void KillAllParticles();
+	void QueueParticleEvent(const FParticleEventData& EventData);
+	void ClearPendingEvents();
+	const TArray<FParticleEventData>& GetPendingEvents() const { return PendingEvents; }
+	uint32 AllocateEventSerial() { return ++EventCounter; }
+	void SetSpawningSuppressed(bool bInSuppressed) { bSpawningSuppressed = bInSuppressed; }
+	bool IsSpawningSuppressed() const { return bSpawningSuppressed; }
 
 	virtual FDynamicEmitterDataBase* CreateDynamicData(int32 EmitterIndex) const;
 
@@ -114,6 +122,9 @@ struct FParticleEmitterInstance
 
 	float EmitterTime = 0.0f;
 	bool  bBurstFired = false;
+	bool bSpawningSuppressed = false;
+	uint32 EventCounter = 0;
+	TArray<FParticleEventData> PendingEvents;
 
 protected:
 	virtual EDynamicEmitterType GetDynamicEmitterType() const = 0;
@@ -127,6 +138,8 @@ private:
 	void AllocateParticleDataPreservingBaseParticles();
 	void InitializeParticleIndices();
 	void UpdateParticleLifetimesAndMovement(float DeltaTime);
+	void NotifyParticleKilled(const FBaseParticle* Particle);
+	void NotifyParticleBurst(int32 ParticleCount, const FVector& Location);
 
 	FParticleLODLevelCompiledData LODData;
 };
