@@ -22,6 +22,8 @@
 #include "Animation/Skeleton/SkeletonManager.h"
 #include "Particle/ParticleSystem.h"
 #include "Particle/Asset/ParticleSystemManager.h"
+#include "Particle/VectorField/VectorFieldAsset.h"
+#include "Particle/VectorField/VectorFieldManager.h"
 #include "Asset/AssetRegistry.h"
 #include "Editor/UI/Dialog/FbxImportOptionsDialog.h"
 #include "Editor/UI/Asset/Mesh/MeshEditorWidget.h"
@@ -264,6 +266,28 @@ static bool ImportFbxWithDefaultOptionsForContentBrowser(ContentBrowserContext& 
 	}
 
 	return false;
+}
+
+static FString FormatVector3ForContentBrowser(const FVector& Value)
+{
+	char Buffer[128];
+	std::snprintf(Buffer, sizeof(Buffer), "%.3f, %.3f, %.3f", Value.X, Value.Y, Value.Z);
+	return Buffer;
+}
+
+static bool ImportFgaVectorFieldForContentBrowser(ContentBrowserContext& Context, const FString& SourceFgaPath)
+{
+	FString PackagePath;
+	UVectorFieldAsset* ImportedAsset = nullptr;
+	FString Error;
+	if (!FVectorFieldManager::Get().ImportFga(SourceFgaPath, PackagePath, &ImportedAsset, &Error))
+	{
+		UE_LOG("Vector field import failed: Source=%s Error=%s", SourceFgaPath.c_str(), Error.c_str());
+		return false;
+	}
+
+	Context.bPendingContentRefresh = true;
+	return true;
 }
 
 bool ContentBrowserElement::RenameTo(const FString& NewStem, FString* OutError)
@@ -710,6 +734,86 @@ void ParticleSystemElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
 	if (UParticleSystem* ParticleSystem = FParticleSystemManager::Get().Load(FilePath))
 	{
 		Context.EditorEngine->OpenAssetEditorForObject(ParticleSystem);
+	}
+}
+
+void VectorFieldSourceElement::RenderContextMenu(ContentBrowserContext& Context)
+{
+	const FString FilePath = FPaths::ToUtf8(ContentItem.Path.wstring());
+	if (ImGui::MenuItem("Import Vector Field"))
+	{
+		ImportFgaVectorFieldForContentBrowser(Context, FilePath);
+	}
+}
+
+void VectorFieldSourceElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
+{
+	const FString FilePath = FPaths::ToUtf8(ContentItem.Path.wstring());
+	ImportFgaVectorFieldForContentBrowser(Context, FilePath);
+}
+
+void VectorFieldElement::RenderContextMenu(ContentBrowserContext& Context)
+{
+	const FString PackagePath = FPaths::ToUtf8(ContentItem.Path.lexically_relative(FPaths::RootDir()).generic_wstring());
+	if (ImGui::MenuItem("Reimport"))
+	{
+		FString Error;
+		UVectorFieldAsset* Reimported = nullptr;
+		if (FVectorFieldManager::Get().Reimport(PackagePath, &Reimported, &Error))
+		{
+			Context.bPendingContentRefresh = true;
+		}
+		else
+		{
+			UE_LOG("Vector field reimport failed: Package=%s Error=%s", PackagePath.c_str(), Error.c_str());
+		}
+	}
+}
+
+void VectorFieldElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
+{
+	(void)Context;
+	const FString PackagePath = FPaths::ToUtf8(ContentItem.Path.lexically_relative(FPaths::RootDir()).generic_wstring());
+	if (UVectorFieldAsset* Asset = FVectorFieldManager::Get().Load(PackagePath))
+	{
+		UE_LOG("Vector field asset loaded: %s (%dx%dx%d, %d vectors)",
+			PackagePath.c_str(),
+			Asset->GetSizeX(),
+			Asset->GetSizeY(),
+			Asset->GetSizeZ(),
+			Asset->GetVectorCount());
+	}
+}
+
+void VectorFieldElement::RenderDetail()
+{
+	ContentBrowserElement::RenderDetail();
+
+	const FString PackagePath = FPaths::ToUtf8(ContentItem.Path.lexically_relative(FPaths::RootDir()).generic_wstring());
+	UVectorFieldAsset* Asset = FVectorFieldManager::Get().Load(PackagePath);
+	if (!Asset)
+	{
+		return;
+	}
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+	ImGui::TextUnformatted("Vector Field Data");
+
+	if (ImGui::BeginTable("VectorFieldDetailsTable", 2, ImGuiTableFlags_SizingStretchProp))
+	{
+		ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthFixed, 72.0f);
+		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+		char Resolution[64];
+		std::snprintf(Resolution, sizeof(Resolution), "%d x %d x %d", Asset->GetSizeX(), Asset->GetSizeY(), Asset->GetSizeZ());
+		DrawDetailRow("Resolution", Resolution);
+		DrawDetailRow("Vectors", std::to_string(Asset->GetVectorCount()));
+		DrawDetailRow("Bounds Min", FormatVector3ForContentBrowser(Asset->GetBoundsMin()));
+		DrawDetailRow("Bounds Max", FormatVector3ForContentBrowser(Asset->GetBoundsMax()));
+
+		ImGui::EndTable();
 	}
 }
 

@@ -12,6 +12,7 @@ class UParticleSystemComponent;
 class UMaterial;
 class UStaticMesh;
 class FMeshBuffer;
+class FScene;
 struct FFrameContext;
 struct FDrawCommandBuffer;
 
@@ -70,6 +71,7 @@ public:
 
 	// View-dependent particle
 	virtual void UpdatePerViewport(const FFrameContext& Frame) override;
+	void AppendDebugLines(FScene& Scene) const;
 
 	// proxy가 만든 CPU-expanded vertex/index와 mesh instance 데이터를
 	// GPU dynamic buffer로 업로드한다.
