@@ -1,12 +1,26 @@
 #include "Particle/ParticleModuleVectorField.h"
 
 #include "Component/Primitive/ParticleSystemComponent.h"
+#include "GameFramework/World.h"
 #include "Math/Matrix.h"
 #include "Particle/ParticleHelper.h"
 #include "Particle/ParticleLODLevel.h"
 #include "Particle/VectorField/VectorFieldAsset.h"
 #include "Particle/VectorField/VectorFieldManager.h"
+#include "Render/Scene/FScene.h"
 
+#include <algorithm>
+#include <cmath>
+
+namespace
+{
+	constexpr float VectorFieldBoundsScaleEpsilon = 1.0e-4f;
+
+	float MakeSafeScaleComponent(float Value)
+	{
+		return std::max(std::abs(Value), VectorFieldBoundsScaleEpsilon);
+	}
+}
 
 UVectorFieldAsset* UParticleModuleVectorFieldLocal::ResolveVectorField()
 {
@@ -30,10 +44,82 @@ UVectorFieldAsset* UParticleModuleVectorFieldLocal::ResolveVectorField()
 	return CachedVectorField;
 }
 
+FVector UParticleModuleVectorFieldLocal::GetSafeFieldBoundsScale() const
+{
+	return FVector(
+		MakeSafeScaleComponent(FieldBoundsScale.X),
+		MakeSafeScaleComponent(FieldBoundsScale.Y),
+		MakeSafeScaleComponent(FieldBoundsScale.Z));
+}
+
+FVector UParticleModuleVectorFieldLocal::TransformComponentLocalToFieldLocal(const FVector& ComponentLocalPosition) const
+{
+	const FVector SafeScale = GetSafeFieldBoundsScale();
+	const FVector Relative = ComponentLocalPosition - FieldBoundsOffset;
+	return FVector(
+		Relative.X / SafeScale.X,
+		Relative.Y / SafeScale.Y,
+		Relative.Z / SafeScale.Z);
+}
+
+FVector UParticleModuleVectorFieldLocal::TransformFieldLocalToComponentLocal(const FVector& FieldLocalPosition) const
+{
+	const FVector SafeScale = GetSafeFieldBoundsScale();
+	return FVector(
+		FieldLocalPosition.X * SafeScale.X,
+		FieldLocalPosition.Y * SafeScale.Y,
+		FieldLocalPosition.Z * SafeScale.Z) + FieldBoundsOffset;
+}
+
+void UParticleModuleVectorFieldLocal::AppendFieldBoundsDebugLines(FScene& Scene, const FMatrix& ComponentToWorld)
+{
+	UVectorFieldAsset* VectorField = ResolveVectorField();
+	if (!bDrawBounds || !VectorField || !VectorField->IsValidGrid())
+	{
+		return;
+	}
+
+	const FVector& Min = VectorField->GetBoundsMin();
+	const FVector& Max = VectorField->GetBoundsMax();
+
+	const FVector C000 = ComponentToWorld.TransformPositionWithW(TransformFieldLocalToComponentLocal(FVector(Min.X, Min.Y, Min.Z)));
+	const FVector C100 = ComponentToWorld.TransformPositionWithW(TransformFieldLocalToComponentLocal(FVector(Max.X, Min.Y, Min.Z)));
+	const FVector C110 = ComponentToWorld.TransformPositionWithW(TransformFieldLocalToComponentLocal(FVector(Max.X, Max.Y, Min.Z)));
+	const FVector C010 = ComponentToWorld.TransformPositionWithW(TransformFieldLocalToComponentLocal(FVector(Min.X, Max.Y, Min.Z)));
+	const FVector C001 = ComponentToWorld.TransformPositionWithW(TransformFieldLocalToComponentLocal(FVector(Min.X, Min.Y, Max.Z)));
+	const FVector C101 = ComponentToWorld.TransformPositionWithW(TransformFieldLocalToComponentLocal(FVector(Max.X, Min.Y, Max.Z)));
+	const FVector C111 = ComponentToWorld.TransformPositionWithW(TransformFieldLocalToComponentLocal(FVector(Max.X, Max.Y, Max.Z)));
+	const FVector C011 = ComponentToWorld.TransformPositionWithW(TransformFieldLocalToComponentLocal(FVector(Min.X, Max.Y, Max.Z)));
+
+	const FColor BoundsColor(0, 200, 255);
+	Scene.AddDebugLine(C000, C100, BoundsColor);
+	Scene.AddDebugLine(C100, C110, BoundsColor);
+	Scene.AddDebugLine(C110, C010, BoundsColor);
+	Scene.AddDebugLine(C010, C000, BoundsColor);
+	Scene.AddDebugLine(C001, C101, BoundsColor);
+	Scene.AddDebugLine(C101, C111, BoundsColor);
+	Scene.AddDebugLine(C111, C011, BoundsColor);
+	Scene.AddDebugLine(C011, C001, BoundsColor);
+	Scene.AddDebugLine(C000, C001, BoundsColor);
+	Scene.AddDebugLine(C100, C101, BoundsColor);
+	Scene.AddDebugLine(C110, C111, BoundsColor);
+	Scene.AddDebugLine(C010, C011, BoundsColor);
+
+	const FVector CenterLocal = TransformFieldLocalToComponentLocal((Min + Max) * 0.5f);
+	const FVector Center = ComponentToWorld.TransformPositionWithW(CenterLocal);
+	const FVector AxisX = ComponentToWorld.TransformVector(FVector((Max.X - Min.X) * 0.5f * GetSafeFieldBoundsScale().X, 0.0f, 0.0f));
+	const FVector AxisY = ComponentToWorld.TransformVector(FVector(0.0f, (Max.Y - Min.Y) * 0.5f * GetSafeFieldBoundsScale().Y, 0.0f));
+	const FVector AxisZ = ComponentToWorld.TransformVector(FVector(0.0f, 0.0f, (Max.Z - Min.Z) * 0.5f * GetSafeFieldBoundsScale().Z));
+
+	Scene.AddDebugLine(Center, Center + AxisX, FColor::Red());
+	Scene.AddDebugLine(Center, Center + AxisY, FColor::Green());
+	Scene.AddDebugLine(Center, Center + AxisZ, FColor::Blue());
+}
+
 void UParticleModuleVectorFieldLocal::Update(const FUpdateContext& Context)
 {
 	UVectorFieldAsset* VectorField = ResolveVectorField();
-	if (!VectorField || !VectorField->IsValidGrid() || Intensity == 0.0f)
+	if (!VectorField || !VectorField->IsValidGrid())
 	{
 		return;
 	}
@@ -49,11 +135,17 @@ void UParticleModuleVectorFieldLocal::Update(const FUpdateContext& Context)
 		? FMatrix::Identity
 		: ComponentToWorld.GetInverse();
 
+	if (Intensity == 0.0f)
+	{
+		return;
+	}
+
 	const float DeltaVelocityScale = Intensity * Context.DeltaTime;
 	BEGIN_UPDATE_LOOP
-		const FVector FieldSamplePosition = bParticleDataIsLocalSpace
+		const FVector ComponentLocalParticlePosition = bParticleDataIsLocalSpace
 			? Particle.Location
 			: WorldToComponent.TransformPositionWithW(Particle.Location);
+		const FVector FieldSamplePosition = TransformComponentLocalToFieldLocal(ComponentLocalParticlePosition);
 
 		FVector LocalFieldVector = FVector::ZeroVector;
 		const bool bSampled = bUseTrilinearSampling

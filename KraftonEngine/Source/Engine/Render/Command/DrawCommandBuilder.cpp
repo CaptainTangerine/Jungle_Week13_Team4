@@ -9,6 +9,7 @@
 #include "Render/Proxy/DecalSceneProxy.h"
 #include "Render/Proxy/ShapeSceneProxy.h"
 #include "Render/Proxy/BoneDebugSceneProxy.h"
+#include "Render/Proxy/ParticleSystemSceneProxy.h"
 #include "Render/Proxy/SkeletalMeshSceneProxy.h"
 #include "Render/Scene/FScene.h"
 #include "Render/Types/RenderConstants.h"
@@ -411,6 +412,14 @@ void FDrawCommandBuilder::BuildProxyCommands(const FFrameContext& Frame, FScene&
 					EditorLines.AddLine(Line.Start, Line.End, Color);
 				}
 			}
+		}
+		else if (Proxy->HasProxyFlag(EPrimitiveProxyFlags::ParticleSystem))
+		{
+			if (Frame.RenderOptions.ShowFlags.bDebugDraw)
+			{
+				static_cast<FParticleSystemSceneProxy*>(Proxy)->AppendDebugLines(Scene);
+			}
+			BuildMeshCommands(Scene, Proxy);
 		}
 		else if (Proxy->HasProxyFlag(EPrimitiveProxyFlags::FontBatched))
 		{
