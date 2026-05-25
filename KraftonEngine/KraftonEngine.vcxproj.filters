@@ -262,6 +262,9 @@
     <Filter Include="Source\Engine\Particle\Asset">
       <UniqueIdentifier>{e1026e62-420f-6132-1259-28b52a9a0ccd}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Engine\Particle\VectorField">
+      <UniqueIdentifier>{d5f7f1cb-2d7a-45fe-bc93-0f780bf9e79b}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source\Engine\Physics">
       <UniqueIdentifier>{c1985821-1144-9a46-639a-f7de31f4a1fa}</UniqueIdentifier>
     </Filter>
@@ -1306,6 +1309,15 @@
     </ClCompile>
     <ClCompile Include="Source\Engine\Particle\Asset\ParticleSystemManager.cpp">
       <Filter>Source\Engine\Particle\Asset</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Particle\VectorField\VectorFieldAsset.cpp">
+      <Filter>Source\Engine\Particle\VectorField</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Particle\VectorField\VectorFieldFgaImporter.cpp">
+      <Filter>Source\Engine\Particle\VectorField</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Particle\VectorField\VectorFieldManager.cpp">
+      <Filter>Source\Engine\Particle\VectorField</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Physics\NativePhysicsScene.cpp">
       <Filter>Source\Engine\Physics</Filter>
@@ -2500,6 +2512,15 @@
     </ClInclude>
     <ClInclude Include="Source\Engine\Particle\Asset\ParticleSystemManager.h">
       <Filter>Source\Engine\Particle\Asset</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Particle\VectorField\VectorFieldAsset.h">
+      <Filter>Source\Engine\Particle\VectorField</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Particle\VectorField\VectorFieldFgaImporter.h">
+      <Filter>Source\Engine\Particle\VectorField</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Particle\VectorField\VectorFieldManager.h">
+      <Filter>Source\Engine\Particle\VectorField</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Physics\IPhysicsScene.h">
       <Filter>Source\Engine\Physics</Filter>
