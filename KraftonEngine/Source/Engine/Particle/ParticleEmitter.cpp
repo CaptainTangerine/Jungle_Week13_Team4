@@ -31,8 +31,29 @@ void UParticleEmitter::Serialize(FArchive& Ar)
 
 UParticleLODLevel* UParticleEmitter::AddLODLevel()
 {
-	UParticleLODLevel* NewLODLevel = UObjectManager::Get().CreateObject<UParticleLODLevel>(this);
-	LODLevels.push_back(NewLODLevel);
+	return InsertLODLevel(static_cast<int32>(LODLevels.size()));
+}
+
+UParticleLODLevel* UParticleEmitter::InsertLODLevel(int32 Index, const UParticleLODLevel* SourceLODLevel)
+{
+	if (Index < 0)
+	{
+		Index = 0;
+	}
+	if (Index > static_cast<int32>(LODLevels.size()))
+	{
+		Index = static_cast<int32>(LODLevels.size());
+	}
+
+	UParticleLODLevel* NewLODLevel = SourceLODLevel
+		? Cast<UParticleLODLevel>(SourceLODLevel->Duplicate(this))
+		: UObjectManager::Get().CreateObject<UParticleLODLevel>(this);
+	if (!NewLODLevel)
+	{
+		return nullptr;
+	}
+
+	LODLevels.insert(LODLevels.begin() + Index, NewLODLevel);
 	ReindexLODLevels();
 	CacheEmitterModuleInfo();
 	return NewLODLevel;
@@ -52,6 +73,11 @@ bool UParticleEmitter::RemoveLODLevel(UParticleLODLevel* InLODLevel)
 	ReindexLODLevels();
 	CacheEmitterModuleInfo();
 	return true;
+}
+
+bool UParticleEmitter::RemoveLODLevelAt(int32 Index)
+{
+	return RemoveLODLevel(GetLODLevel(Index));
 }
 
 void UParticleEmitter::ClearLODLevels()

@@ -19,7 +19,9 @@ public:
 	void Serialize(FArchive& Ar) override;
 
 	UParticleLODLevel* AddLODLevel();
+	UParticleLODLevel* InsertLODLevel(int32 Index, const UParticleLODLevel* SourceLODLevel = nullptr);
 	bool RemoveLODLevel(UParticleLODLevel* InLODLevel);
+	bool RemoveLODLevelAt(int32 Index);
 	void ClearLODLevels();
 	void CacheEmitterModuleInfo();
 	void ReindexLODLevels();
