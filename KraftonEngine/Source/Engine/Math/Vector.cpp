@@ -88,6 +88,16 @@ FVector FVector::Lerp(const FVector& A, const FVector& B, float t)
 	return A + Delta * t;
 }
 
+FVector FVector::RotateZ(float Radians, const FVector& Value)
+{
+	const float C = std::cos(Radians);
+	const float S = std::sin(Radians);
+	return FVector(
+		C * Value.X - S * Value.Y,
+		S * Value.X + C * Value.Y,
+		Value.Z);
+}
+
 FVector FVector::operator+(const FVector& Other) const {
 	FVector ret;
 	ret.X = X + Other.X;
@@ -125,6 +135,14 @@ FVector FVector::operator*(float Scalar) const {
 	ret.X = X * Scalar;
 	ret.Y = Y * Scalar;
 	ret.Z = Z * Scalar;
+	return ret;
+}
+
+FVector FVector::operator*(const FVector& Other) const {
+	FVector ret;
+	ret.X = X * Other.X;
+	ret.Y = Y * Other.Y;
+	ret.Z = Z * Other.Z;
 	return ret;
 }
 
@@ -289,6 +307,15 @@ FVector4 FVector4::operator*(float Scalar) const {
 	ret.Y = Y * Scalar;
 	ret.Z = Z * Scalar;
 	ret.W = W * Scalar;
+	return ret;
+}
+
+FVector4 FVector4::operator*(const FVector4& Other) const {
+	FVector4 ret;
+	ret.X = X * Other.X;
+	ret.Y = Y * Other.Y;
+	ret.Z = Z * Other.Z;
+	ret.W = W * Other.W;
 	return ret;
 }
 
