@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 #include <unordered_map>
 #include <imgui.h>
@@ -498,6 +499,9 @@ void FParticleSystemEditorWidget::Open(UObject* Object)
 	UParticleSystemComponent* ParticleComponent = PreviewActor->AddComponent<UParticleSystemComponent>();
 	PreviewActor->SetRootComponent(ParticleComponent);
 	ParticleComponent->SetTemplate(ParticleSystem);
+	ParticleComponent->SetComponentTickEnabled(false);
+	PreviewParticleComponent = ParticleComponent;
+	PreviewPlayback = {};
 	
 	ADirectionalLightActor* LightActor = WorldContext.World->SpawnActor<ADirectionalLightActor>();
 	LightActor->InitDefaultComponents();
@@ -507,11 +511,6 @@ void FParticleSystemEditorWidget::Open(UObject* Object)
 		LightComp->SetShadowBias(0.002f);
 		LightComp->PushToScene();
 	}
-
-	AStaticMeshActor* FloorActor = WorldContext.World->SpawnActor<AStaticMeshActor>();
-	FloorActor->InitDefaultComponents("Content/Data/BasicShape/Cube.OBJ");
-	FloorActor->SetActorLocation(FVector(0.0f, 0.0f, -0.05f));
-	FloorActor->SetActorScale(FVector(10.0f, 10.0f, 0.02f));
 
 	ViewportClient.Initialize(GEngine->GetRenderer().GetFD3DDevice().GetDevice(), 640, 360);
 	ViewportClient.SetPreviewWorld(WorldContext.World);
@@ -544,6 +543,7 @@ void FParticleSystemEditorWidget::ReleasePreviewResources(bool bReleaseViewport)
 	FSlateApplication::Get().UnregisterViewport(&ViewportClient);
 	ViewportClient.SetPreviewWorld(nullptr);
 	ViewportClient.SetPreviewActor(nullptr);
+	PreviewParticleComponent = nullptr;
 
 	if (bReleaseViewport)
 	{
@@ -553,6 +553,46 @@ void FParticleSystemEditorWidget::ReleasePreviewResources(bool bReleaseViewport)
 
 void FParticleSystemEditorWidget::Tick(float DeltaTime)
 {
+	if (PreviewParticleComponent)
+	{
+		PreviewPlayback.Duration = CalculatePreviewDuration();
+		if (!PreviewPlayback.bPaused && !PreviewPlayback.bComplete
+			&& PreviewPlayback.Duration > 0.0f && PreviewPlayback.CurrentTime >= PreviewPlayback.Duration)
+		{
+			if (PreviewPlayback.bLooping)
+			{
+				PreviewParticleComponent->ResetSystem();
+				PreviewPlayback.CurrentTime = 0.0f;
+			}
+			else
+			{
+				PreviewPlayback.bComplete = true;
+			}
+		}
+
+		float SimulationDeltaTime = (!PreviewPlayback.bPaused && !PreviewPlayback.bComplete)
+			? DeltaTime * ClampFloat(PreviewPlayback.PlayRate, 0.0f, 1.0f)
+			: 0.0f;
+		if (PreviewPlayback.Duration > 0.0f)
+		{
+			SimulationDeltaTime = (std::min)(
+				SimulationDeltaTime,
+				(std::max)(0.0f, PreviewPlayback.Duration - PreviewPlayback.CurrentTime));
+		}
+
+		PreviewParticleComponent->AdvanceSimulation(SimulationDeltaTime);
+		if (SimulationDeltaTime > 0.0f)
+		{
+			PreviewPlayback.CurrentTime += SimulationDeltaTime;
+			PreviewPlayback.AccumulatedTime += SimulationDeltaTime;
+			if (!PreviewPlayback.bLooping && PreviewPlayback.Duration > 0.0f
+				&& PreviewPlayback.CurrentTime >= PreviewPlayback.Duration)
+			{
+				PreviewPlayback.bComplete = true;
+			}
+		}
+	}
+
 	if (ViewportClient.IsRenderable())
 	{
 		ViewportClient.Tick(DeltaTime);
@@ -804,43 +844,45 @@ void FParticleSystemEditorWidget::RenderToolbar(UParticleSystem* ParticleSystem)
 
 	ToolbarSeparator(ToolbarHeight - 6.0f);
 
-	DrawIconTextButton("RestartSim", MakeCascadeIconPath(L"icon_Cascade_RestartSim_40x.png"), "시뮬 재시작");
+	DrawIconTextButton("RestartSim", MakeCascadeIconPath(L"icon_Cascade_RestartSim_40x.png"), "Restart Sim");
 	SameLineToolbar();
-	DrawIconTextButton("RestartInLevel", MakeCascadeIconPath(L"icon_Cascade_RestartInLevel_40x.png"), "레벨 재시작");
+	DrawIconTextButton("RestartInLevel", MakeCascadeIconPath(L"icon_Cascade_RestartInLevel_40x.png"), "Restart Level");
 
 	ToolbarSeparator(ToolbarHeight - 6.0f);
 
-	DrawIconTextButton("Undo", MakeCascadeIconPath(L"icon_Generic_Undo_40x.png"), "실행 취소");
+	DrawIconTextButton("Undo", MakeCascadeIconPath(L"icon_Generic_Undo_40x.png"), "Undo");
 	SameLineToolbar();
-	DrawIconTextButton("Redo", MakeCascadeIconPath(L"icon_Generic_Redo_40x.png"), "다시 실행");
+	DrawIconTextButton("Redo", MakeCascadeIconPath(L"icon_Generic_Redo_40x.png"), "Redo");
 
 	ToolbarSeparator(ToolbarHeight - 6.0f);
 
-	DrawIconTextButton("Thumbnail", MakeCascadeIconPath(L"icon_Cascade_Thumbnail_40x.png"), "썸네일");
+	DrawIconTextButton("Thumbnail", MakeCascadeIconPath(L"icon_Cascade_Thumbnail_40x.png"), "Thumbnail");
 	SameLineToolbar();
-	DrawIconTextButton("Bounds", MakeCascadeIconPath(L"icon_Cascade_Bounds_40x.png"), "바운드");
+	DrawIconTextButton("Bounds", MakeCascadeIconPath(L"icon_Cascade_Bounds_40x.png"), "Bounds");
 	SameLineToolbar();
-	DrawIconTextButton("Axis", MakeCascadeIconPath(L"icon_Cascade_Axis_40x.png"), "원점 축");
+	DrawIconTextButton("Axis", MakeCascadeIconPath(L"icon_Cascade_Axis_40x.png"), "Origin Axis");
 	SameLineToolbar();
-	DrawIconTextButton("Color", MakeCascadeIconPath(L"icon_Cascade_Color_40x.png"), "배경색");
+	DrawIconTextButton("Color", MakeCascadeIconPath(L"icon_Cascade_Color_40x.png"), "Background Color");
 
 	ToolbarSeparator(ToolbarHeight - 6.0f);
 
-	DrawIconTextButton("RegenLOD", MakeCascadeIconPath(L"icon_Cascade_RegenLOD1_40x.png"), "LOD 재생성");
+	DrawIconTextButton("RegenLOD", MakeCascadeIconPath(L"icon_Cascade_RegenLOD1_40x.png"), "Regen LOD");
 	SameLineToolbar();
-	DrawIconTextButton("RegenLODDupe", MakeCascadeIconPath(L"icon_Cascade_RegenLOD2_40x.png"), "LOD 재생성");
+	DrawIconTextButton("RegenLODDupe", MakeCascadeIconPath(L"icon_Cascade_RegenLOD2_40x.png"), "Regen LOD");
 	SameLineToolbar();
-	DrawIconTextButton("LowestLOD", MakeCascadeIconPath(L"icon_Cascade_LowestLOD_40x.png"), "최하 LOD");
+	DrawIconTextButton("LowestLOD", MakeCascadeIconPath(L"icon_Cascade_LowestLOD_40x.png"), "Lowest LOD");
 	SameLineToolbar();
-	DrawIconTextButton("LowerLOD", MakeCascadeIconPath(L"icon_Cascade_LowerLOD_40x.png"), "하위 LOD");
+	DrawIconTextButton("LowerLOD", MakeCascadeIconPath(L"icon_Cascade_LowerLOD_40x.png"), "Lower LOD");
 	SameLineToolbar();
-	DrawIconTextButton("AddLOD", MakeCascadeIconPath(L"icon_Cascade_AddLOD1_40x.png"), "LOD 추가");
+	DrawIconTextButton("AddLOD", MakeCascadeIconPath(L"icon_Cascade_AddLOD1_40x.png"), "Add LOD");
 	SameLineToolbar();
-	DrawIconTextButton("AddLOD2", MakeCascadeIconPath(L"icon_Cascade_AddLOD2_40x.png"), "LOD 추가");
+	DrawIconTextButton("AddLOD2", MakeCascadeIconPath(L"icon_Cascade_AddLOD2_40x.png"), "Add LOD");
 	SameLineToolbar();
-	DrawIconTextButton("HigherLOD", MakeCascadeIconPath(L"icon_Cascade_HigherLOD_40x.png"), "상위 LOD");
+	DrawIconTextButton("HigherLOD", MakeCascadeIconPath(L"icon_Cascade_HigherLOD_40x.png"), "Higher LOD");
 	SameLineToolbar();
-	DrawIconTextButton("HighestLOD", MakeCascadeIconPath(L"icon_Cascade_HighestLOD_40x.png"), "최상 LOD");
+	DrawIconTextButton("HighestLOD", MakeCascadeIconPath(L"icon_Cascade_HighestLOD_40x.png"), "Highest LOD");
+	SameLineToolbar();
+	DrawIconTextButton("DeleteLOD", MakeCascadeIconPath(L"icon_Cascade_DeleteLOD_40x.png"), "Delete LOD");
 
 	ImGui::SetCursorScreenPos(ImVec2(ToolbarPos.x, ToolbarPos.y + ToolbarHeight));
 	ImGui::Dummy(ImVec2(ToolbarWidth, 1.0f));
@@ -1943,6 +1985,10 @@ void FParticleSystemEditorWidget::RenderViewportPanel(const ImVec2& Size)
 
 		FSlateApplication::Get().SetViewportImGuiHovered(&ViewportClient, ImGui::IsItemHovered());
 		DrawViewportAxisOverlay(DrawList, ViewportPos, ViewportSize);
+		DrawViewportStatsOverlay(DrawList, ViewportPos, ViewportSize);
+
+		ImGui::SetCursorScreenPos(ImVec2(ViewportPos.x + 8.0f, ViewportPos.y + 8.0f));
+		RenderViewportMenus();
 	}
 	else
 	{
@@ -1954,6 +2000,183 @@ void FParticleSystemEditorWidget::RenderViewportPanel(const ImVec2& Size)
 	}
 
 	ImGui::EndChild();
+}
+
+void FParticleSystemEditorWidget::RenderViewportMenus()
+{
+	ImVec2 ViewPopupPos;
+	ImVec2 TimePopupPos;
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 3.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
+	ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(48, 48, 50, 220));
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(64, 64, 67, 245));
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(72, 72, 74, 255));
+
+	if (ImGui::Button("View"))
+	{
+		ImGui::OpenPopup("##ParticlePreviewViewOptions");
+	}
+	ViewPopupPos = ImVec2(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + 1.0f);
+	ImGui::SameLine(0.0f, 6.0f);
+	if (ImGui::Button("Time"))
+	{
+		ImGui::OpenPopup("##ParticlePreviewTimeOptions");
+	}
+	TimePopupPos = ImVec2(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + 1.0f);
+
+	ImGui::PopStyleColor(3);
+	ImGui::PopStyleVar(2);
+
+	ImGui::SetNextWindowPos(ViewPopupPos, ImGuiCond_Always);
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 3.0f));
+	if (ImGui::BeginPopup("##ParticlePreviewViewOptions"))
+	{
+		ImGui::Dummy(ImVec2(0.0f, 1.0f));
+
+		ImGui::Checkbox("Particle Count", &bShowParticleCount);
+		ImGui::Checkbox("Particle Time", &bShowParticleTime);
+		ImGui::Checkbox("Particle Memory", &bShowParticleMemory);
+
+		bool bShowGrid = ViewportClient.GetRenderOptions().ShowFlags.bGrid;
+		if (ImGui::Checkbox("Grid", &bShowGrid))
+		{
+			ViewportClient.GetRenderOptions().ShowFlags.bGrid = bShowGrid;
+			ViewportClient.GetRenderOptions().ShowFlags.bWorldAxis = bShowGrid;
+		}
+
+		ImGui::Dummy(ImVec2(0.0f, 1.0f));
+		ImGui::EndPopup();
+	}
+	ImGui::PopStyleVar();
+
+	ImGui::SetNextWindowPos(TimePopupPos, ImGuiCond_Always);
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 3.0f));
+	if (ImGui::BeginPopup("##ParticlePreviewTimeOptions"))
+	{
+		ImGui::Dummy(ImVec2(0.0f, 1.0f));
+
+		ImGui::Checkbox("Pause", &PreviewPlayback.bPaused);
+		if (ImGui::Checkbox("Loop", &PreviewPlayback.bLooping) && PreviewPlayback.bLooping && PreviewParticleComponent)
+		{
+			PreviewParticleComponent->ResetSystem();
+			PreviewPlayback.CurrentTime = 0.0f;
+			PreviewPlayback.bComplete = false;
+		}
+		ImGui::SetNextItemWidth(120.0f);
+		ImGui::SliderFloat("Speed", &PreviewPlayback.PlayRate, 0.0f, 1.0f, "%.2fx");
+
+		ImGui::Dummy(ImVec2(0.0f, 1.0f));
+		ImGui::EndPopup();
+	}
+	ImGui::PopStyleVar();
+}
+
+float FParticleSystemEditorWidget::CalculatePreviewDuration() const
+{
+	const UParticleSystem* ParticleSystem = Cast<UParticleSystem>(EditedObject);
+	if (!ParticleSystem)
+	{
+		return 0.0f;
+	}
+
+	float Duration = 0.0f;
+	for (const UParticleEmitter* Emitter : ParticleSystem->GetEmitters())
+	{
+		if (!Emitter || !Emitter->IsEnabled())
+		{
+			continue;
+		}
+
+		const UParticleLODLevel* LODLevel = Emitter->GetLODLevel(0);
+		const UParticleModuleRequired* Required = LODLevel ? LODLevel->GetRequiredModule() : nullptr;
+		if (Required)
+		{
+			Duration = (std::max)(Duration, Required->EmitterDuration);
+		}
+	}
+	return Duration;
+}
+
+void FParticleSystemEditorWidget::DrawViewportStatsOverlay(ImDrawList* DrawList, const ImVec2& ViewportPos, const ImVec2& ViewportSize) const
+{
+	if (!DrawList || !PreviewParticleComponent || (!bShowParticleCount && !bShowParticleTime && !bShowParticleMemory))
+	{
+		return;
+	}
+
+	const ImU32 NameColor = IM_COL32(245, 245, 245, 255);
+	const ImU32 CountColor = IM_COL32(255, 32, 194, 255);
+	const ImU32 TimeColor = IM_COL32(60, 215, 255, 255);
+	const float LineHeight = ImGui::GetTextLineHeight();
+	int32 LineCount = bShowParticleMemory ? 1 : 0;
+	if (bShowParticleCount || bShowParticleTime)
+	{
+		LineCount += static_cast<int32>(PreviewParticleComponent->GetEmitterInstances().size());
+	}
+	float CurrentY = ViewportPos.y + ViewportSize.y - 10.0f - LineHeight * static_cast<float>(LineCount);
+
+	if (bShowParticleCount || bShowParticleTime)
+	{
+		for (const FParticleEmitterInstance* Instance : PreviewParticleComponent->GetEmitterInstances())
+		{
+			if (!Instance)
+			{
+				continue;
+			}
+
+			char NameBuffer[128] = {};
+			char CountBuffer[64] = {};
+			char TimeBuffer[128] = {};
+			const FString Name = Instance->GetTemplateName().empty() ? FString("Emitter") : Instance->GetTemplateName();
+			std::snprintf(NameBuffer, sizeof(NameBuffer), "%s: ", Name.c_str());
+			if (bShowParticleCount)
+			{
+				std::snprintf(CountBuffer, sizeof(CountBuffer), "%d / %d",
+					Instance->GetActiveParticleCount(), Instance->GetMaxActiveParticleCount());
+			}
+			if (bShowParticleTime)
+			{
+				std::snprintf(TimeBuffer, sizeof(TimeBuffer), "%.4f s / %.4f s",
+					Instance->GetEmitterTime(), PreviewPlayback.AccumulatedTime);
+			}
+
+			const char* Separator = bShowParticleCount && bShowParticleTime ? " / " : "";
+			const float LineWidth =
+				ImGui::CalcTextSize(NameBuffer).x
+				+ ImGui::CalcTextSize(CountBuffer).x
+				+ ImGui::CalcTextSize(Separator).x
+				+ ImGui::CalcTextSize(TimeBuffer).x;
+			ImVec2 TextPos(ViewportPos.x + ViewportSize.x - LineWidth - 10.0f, CurrentY);
+			DrawList->AddText(TextPos, NameColor, NameBuffer);
+			TextPos.x += ImGui::CalcTextSize(NameBuffer).x;
+			if (bShowParticleCount)
+			{
+				DrawList->AddText(TextPos, CountColor, CountBuffer);
+				TextPos.x += ImGui::CalcTextSize(CountBuffer).x;
+			}
+			if (Separator[0] != '\0')
+			{
+				DrawList->AddText(TextPos, NameColor, Separator);
+				TextPos.x += ImGui::CalcTextSize(Separator).x;
+			}
+			if (bShowParticleTime)
+			{
+				DrawList->AddText(TextPos, TimeColor, TimeBuffer);
+			}
+			CurrentY += LineHeight;
+		}
+	}
+
+	if (bShowParticleMemory)
+	{
+		char Buffer[256] = {};
+		const double TemplateKBytes = static_cast<double>(PreviewParticleComponent->GetTemplateMemoryBytes()) / 1024.0;
+		const double InstanceKBytes = static_cast<double>(PreviewParticleComponent->GetInstanceMemoryBytes()) / 1024.0;
+		std::snprintf(Buffer, sizeof(Buffer), "Template: %.2f KByte / Instance: %.2f KByte", TemplateKBytes, InstanceKBytes);
+		const ImVec2 TextSize = ImGui::CalcTextSize(Buffer);
+		const ImVec2 TextPos(ViewportPos.x + ViewportSize.x - TextSize.x - 10.0f, CurrentY);
+		DrawList->AddText(TextPos, NameColor, Buffer);
+	}
 }
 
 void FParticleSystemEditorWidget::DrawViewportAxisOverlay(ImDrawList* DrawList, const ImVec2& ViewportPos, const ImVec2& ViewportSize) const

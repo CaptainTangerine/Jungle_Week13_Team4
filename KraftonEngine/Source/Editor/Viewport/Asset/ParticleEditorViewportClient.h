@@ -31,6 +31,7 @@ public:
 
 	FViewportRenderOptions& GetRenderOptions() override { return RenderOptions; }
 	const FViewportRenderOptions& GetRenderOptions() const override { return RenderOptions; }
+	bool SupportsGridRendering() const override { return true; }
 
 	void NotifyViewportResized(int32 NewWidth, int32 NewHeight) override;
 	bool GetCameraView(FMinimalViewInfo& OutPOV) const override;
