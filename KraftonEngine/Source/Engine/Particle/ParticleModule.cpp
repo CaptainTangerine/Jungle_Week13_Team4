@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace
 {
@@ -67,6 +68,20 @@ void UParticleModule::Serialize(FArchive& Ar)
 
 UParticleModuleTypeDataSprite::UParticleModuleTypeDataSprite()
 {
+}
+
+bool UParticleModuleTypeDataSprite::ShouldExposeProperty(const FProperty& Property) const
+{
+	if (Property.Name &&
+		(std::strcmp(Property.Name, "SubUVResourceName") == 0 ||
+		 std::strcmp(Property.Name, "SubImagesX") == 0 ||
+		 std::strcmp(Property.Name, "SubImagesY") == 0 ||
+		 std::strcmp(Property.Name, "SubUVFrameRate") == 0))
+	{
+		return bUseSubUV;
+	}
+
+	return UParticleModuleTypeDataBase::ShouldExposeProperty(Property);
 }
 
 UParticleModuleTypeDataMesh::UParticleModuleTypeDataMesh()

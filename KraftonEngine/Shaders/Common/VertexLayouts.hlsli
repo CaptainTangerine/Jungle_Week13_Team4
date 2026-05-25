@@ -32,6 +32,20 @@ struct VS_Input_PNCTT
     float4 tangent : TANGENT;
 };
 
+struct VS_Input_PNCTT_InstancedParticle
+{
+    float3 position : POSITION;
+    float3 normal : NORMAL;
+    float4 color : COLOR;
+    float2 texcoord : TEXTCOORD;
+    float4 tangent : TANGENT;
+
+    float3 instanceLocation : INSTANCE_LOCATION;
+    float3 instanceSize : INSTANCE_SIZE;
+    float4 instanceColor : INSTANCE_COLOR;
+    float  instanceRotation : INSTANCE_ROTATION;
+};
+
 // 나도 이러고 싶지 않았다.
 struct VS_Input_PNCTTBB
 {

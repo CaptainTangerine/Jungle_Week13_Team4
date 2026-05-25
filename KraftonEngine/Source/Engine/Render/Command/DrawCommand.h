@@ -15,14 +15,30 @@ struct ID3D11Buffer;
 // 버퍼 자원 + 드로우 범위(어디부터 얼마나 그릴 것인가)를 함께 보관
 struct FDrawCommandBuffer
 {
+	FDrawCommandBuffer() = default;
+	FDrawCommandBuffer(ID3D11Buffer* InVB, uint32 InVBStride, ID3D11Buffer* InIB)
+		: VB(InVB)
+		, VBStride(InVBStride)
+		, IB(InIB)
+	{
+	}
+
 	ID3D11Buffer* VB       = nullptr;
 	uint32        VBStride = 0;
+	uint32        VBOffset = 0;
 	ID3D11Buffer* IB       = nullptr;
 
 	uint32 FirstIndex  = 0;              // 인덱스 시작 오프셋
 	uint32 IndexCount  = 0;              // DrawIndexed 인덱스 수
 	uint32 VertexCount = 0;              // IB 없을 때 Draw(VertexCount, 0)
 	int32  BaseVertex  = 0;              // DrawIndexed BaseVertexLocation
+
+	bool bInstanced = false;
+	ID3D11Buffer* InstanceBuffer = nullptr;
+	uint32 InstanceStride = 0;
+	uint32 InstanceOffset = 0;
+	uint32 InstanceCount = 0;
+	uint32 StartInstance = 0;
 
 	bool HasBuffers() const { return VB != nullptr; }
 };

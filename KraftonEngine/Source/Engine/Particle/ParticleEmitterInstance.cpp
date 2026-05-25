@@ -293,6 +293,15 @@ FDynamicEmitterDataBase* FParticleEmitterInstance::CreateDynamicData(int32 Emitt
 	if (Source.EmitterType == EDynamicEmitterType::Sprite || Source.EmitterType == EDynamicEmitterType::Mesh)
 	{
 		FDynamicSpriteEmitterReplayDataBase& SpriteSource = static_cast<FDynamicSpriteEmitterDataBase*>(DynamicData)->GetSpriteSource();
+		if (const UParticleModuleTypeDataSprite* SpriteTypeData = Cast<UParticleModuleTypeDataSprite>(CurrentLODLevel->GetTypeDataModule()))
+		{
+			SpriteSource.bUseSubUV = SpriteTypeData->bUseSubUV;
+			SpriteSource.SubUVResourceName = SpriteTypeData->SubUVResourceName.ToString();
+			SpriteSource.SubImagesX = std::max(1, SpriteTypeData->SubImagesX);
+			SpriteSource.SubImagesY = std::max(1, SpriteTypeData->SubImagesY);
+			SpriteSource.SubUVFrameRate = std::max(0.0f, SpriteTypeData->SubUVFrameRate);
+		}
+
 		if (const UParticleModuleTypeDataMesh* MeshTypeData = Cast<UParticleModuleTypeDataMesh>(CurrentLODLevel->GetTypeDataModule()))
 		{
 			SpriteSource.MeshPath = MeshTypeData->MeshPath.ToString();
