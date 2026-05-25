@@ -41,6 +41,7 @@ struct FParticleEmitterInstance
 	virtual void Init(UParticleSystemComponent* InComponent, UParticleEmitter* InTemplate);
 	virtual void Reset();
 	virtual void Tick(float DeltaTime);
+	void ProcessParticleEvents(const TArray<FParticleEventData>& Events);
 
 	bool SetCurrentLODIndex(int32 InLODIndex);
 	void BuildLODData(UParticleLODLevel* LODLevel);

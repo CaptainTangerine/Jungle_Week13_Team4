@@ -199,6 +199,31 @@ void FParticleEmitterInstance::Tick(float DeltaTime)
 	}
 }
 
+void FParticleEmitterInstance::ProcessParticleEvents(const TArray<FParticleEventData>& Events)
+{
+	if (!CurrentLODLevel || Events.empty())
+	{
+		return;
+	}
+
+	for (UParticleModule* Module : CurrentLODLevel->GetEventReceiverModules())
+	{
+		UParticleModuleEventReceiverBase* Receiver = Cast<UParticleModuleEventReceiverBase>(Module);
+		if (!Receiver || !Receiver->IsEnabled())
+		{
+			continue;
+		}
+
+		for (const FParticleEventData& EventData : Events)
+		{
+			if (Receiver->WillProcessParticleEvent(EventData))
+			{
+				Receiver->ProcessParticleEvent(EventData, *this);
+			}
+		}
+	}
+}
+
 bool FParticleEmitterInstance::SetCurrentLODIndex(int32 InLODIndex)
 {
 	if (!EmitterTemplate)

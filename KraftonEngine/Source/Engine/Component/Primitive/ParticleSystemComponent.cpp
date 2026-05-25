@@ -313,6 +313,15 @@ void UParticleSystemComponent::AdvanceSimulation(float DeltaTime)
 		EmitterInstance->Tick(DeltaTime);
 	}
 
+	const TArray<FParticleEventData> EventsSnapshot = ParticleEvents;
+	for (FParticleEmitterInstance* EmitterInstance : EmitterInstances)
+	{
+		if (EmitterInstance)
+		{
+			EmitterInstance->ProcessParticleEvents(EventsSnapshot);
+		}
+	}
+
 	RebuildDynamicData();
 }
 

@@ -2,6 +2,8 @@
 
 #include "Asset/AssetRegistry.h"
 #include "Component/Primitive/ParticleSystemComponent.h"
+#include "Component/Shape/BoxComponent.h"
+#include "Core/Types/CollisionTypes.h"
 #include "Distributions/DistributionFloat.h"
 #include "Distributions/DistributionVector.h"
 #include "Particle/ParticleSystem.h"
@@ -544,6 +546,16 @@ void FParticleSystemEditorWidget::Open(UObject* Object)
 	FloorActor->InitDefaultComponents("Content/Data/BasicShape/Cube.OBJ");
 	FloorActor->SetActorLocation(FVector(0.0f, 0.0f, -0.05f));
 	FloorActor->SetActorScale(FVector(10.0f, 10.0f, 0.02f));
+	if (UBoxComponent* FloorCollision = FloorActor->AddComponent<UBoxComponent>())
+	{
+		FloorCollision->AttachToComponent(FloorActor->GetRootComponent());
+		FloorCollision->SetBoxExtent(FVector(0.5f, 0.5f, 0.5f));
+		FloorCollision->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		FloorCollision->SetCollisionObjectType(ECollisionChannel::WorldStatic);
+		FloorCollision->SetCollisionResponseToAllChannels(ECollisionResponse::Block);
+	}
+
+	WorldContext.World->BeginPlay();
 
 	ViewportClient.Initialize(GEngine->GetRenderer().GetFD3DDevice().GetDevice(), 640, 360);
 	ViewportClient.SetPreviewWorld(WorldContext.World);
@@ -1293,7 +1305,7 @@ void FParticleSystemEditorWidget::RenderEmitterPanel(UParticleSystem* ParticleSy
 				ImGui::Separator();
 
 				TArray<UClass*> ModuleClasses = EnumerateParticleModuleClasses();
-				const char* Categories[] = { "Emitter", "Type Data", "Beam", "Trail", "Spawn", "Module" };
+				const char* Categories[] = { "Emitter", "Type Data", "Beam", "Trail", "Spawn", "Event", "Collision", "Module" };
 				for (const char* Category : Categories)
 				{
 					bool bHasCategory = false;

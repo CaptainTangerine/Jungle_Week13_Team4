@@ -1,5 +1,6 @@
 #include "ParticleModuleEvent.h"
 
+#include "Component/Primitive/ParticleSystemComponent.h"
 #include "Math/MathUtils.h"
 #include "Particle/Asset/ParticleSerialization.h"
 #include "Particle/ParticleEmitterInstance.h"
@@ -224,7 +225,9 @@ bool UParticleModuleEventGenerator::ShouldGenerateEvent(FParticleEmitterInstance
 
 void UParticleModuleEventReceiverBase::Update(const FUpdateContext& Context)
 {
-	const TArray<FParticleEventData> EventsSnapshot = Context.Owner.GetPendingEvents();
+	const TArray<FParticleEventData> EventsSnapshot = Context.Owner.Component
+		? Context.Owner.Component->GetParticleEvents()
+		: Context.Owner.GetPendingEvents();
 	for (const FParticleEventData& EventData : EventsSnapshot)
 	{
 		if (WillProcessParticleEvent(EventData))
