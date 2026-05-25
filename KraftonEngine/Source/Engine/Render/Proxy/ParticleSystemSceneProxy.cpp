@@ -45,6 +45,34 @@ namespace
 		return FVector4(A.R * B.R, A.G * B.G, A.B * B.B, A.A * B.A);
 	}
 
+	FVector2 BuildSubUV(const FDynamicSpriteEmitterReplayDataBase& Source, const FParticleProxyParticle& Particle, float U, float V)
+	{
+		if (!Source.bUseSubUV)
+		{
+			return FVector2(U, V);
+		}
+
+		const int32 SubImagesX = std::max(1, Source.SubImagesX);
+		const int32 SubImagesY = std::max(1, Source.SubImagesY);
+		const int32 TotalFrames = SubImagesX * SubImagesY;
+		if (TotalFrames <= 1)
+		{
+			return FVector2(U, V);
+		}
+
+		const float RelativeTime = std::max(0.0f, Particle.RelativeTime);
+		const float FramePosition = Source.SubUVFrameRate > 0.0f
+			? RelativeTime * Source.SubUVFrameRate
+			: RelativeTime * static_cast<float>(TotalFrames);
+		const int32 FrameIndex = static_cast<int32>(std::floor(FramePosition)) % TotalFrames;
+		const int32 FrameX = FrameIndex % SubImagesX;
+		const int32 FrameY = FrameIndex / SubImagesX;
+		const float InvX = 1.0f / static_cast<float>(SubImagesX);
+		const float InvY = 1.0f / static_cast<float>(SubImagesY);
+
+		return FVector2((static_cast<float>(FrameX) + U) * InvX, (static_cast<float>(FrameY) + V) * InvY);
+	}
+
 	bool IsTranslucentPacket(const FParticleRenderPacket& Packet)
 	{
 		return Packet.BlendMode != EParticleBlendMode::Opaque;
@@ -215,7 +243,7 @@ void FParticleSystemSceneProxy::BuildSpriteEmitterForView(const FDynamicSpriteEm
 	}
 
 	const uint32 StartIndex = static_cast<uint32>(CachedParticleIndices.size());
-	BuildSpriteVertices(Particles, Frame.CameraRight, Frame.CameraUp, CachedParticleVertices, CachedParticleIndices);
+	BuildSpriteVertices(Source, Particles, Frame.CameraRight, Frame.CameraUp, CachedParticleVertices, CachedParticleIndices);
 
 	const uint32 IndexCount = static_cast<uint32>(CachedParticleIndices.size()) - StartIndex;
 	if (IndexCount > 0)
@@ -376,6 +404,7 @@ void FParticleSystemSceneProxy::GatherParticles(const FDynamicEmitterReplayDataB
 		Particle.Size = ApplyParticleScale(BaseParticle->Size, Source.Scale);
 		Particle.Color = BaseParticle->Color;
 		Particle.Rotation = BaseParticle->Rotation;
+		Particle.RelativeTime = BaseParticle->RelativeTime;
 
 		const FVector Diff = Particle.Position - Frame.CameraPosition;
 		Particle.CameraDistanceSq = Diff.Dot(Diff);
@@ -389,7 +418,7 @@ void FParticleSystemSceneProxy::SortParticlesForView(TArray<FParticleProxyPartic
 	std::sort(Particles.begin(), Particles.end(), SortByCameraDistanceDesc);
 }
 
-void FParticleSystemSceneProxy::BuildSpriteVertices(const TArray<FParticleProxyParticle>& Particles, const FVector& CameraRight,
+void FParticleSystemSceneProxy::BuildSpriteVertices(const FDynamicSpriteEmitterReplayDataBase& Source, const TArray<FParticleProxyParticle>& Particles, const FVector& CameraRight,
 	const FVector& CameraUp, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const
 {
 	const FVector Normal = CameraUp.Cross(CameraRight).Normalized();
@@ -415,10 +444,10 @@ void FParticleSystemSceneProxy::BuildSpriteVertices(const TArray<FParticleProxyP
 		const FVector4 Color = Particle.Color.ToVector4();
 
 		FVertexPNCTT V0, V1, V2, V3;
-		V0.Position = P0; V0.Normal = Normal; V0.Color = Color; V0.UV = FVector2(0.0f, 0.0f); V0.Tangent = Tangent;
-		V1.Position = P1; V1.Normal = Normal; V1.Color = Color; V1.UV = FVector2(1.0f, 0.0f); V1.Tangent = Tangent;
-		V2.Position = P2; V2.Normal = Normal; V2.Color = Color; V2.UV = FVector2(0.0f, 1.0f); V2.Tangent = Tangent;
-		V3.Position = P3; V3.Normal = Normal; V3.Color = Color; V3.UV = FVector2(1.0f, 1.0f); V3.Tangent = Tangent;
+		V0.Position = P0; V0.Normal = Normal; V0.Color = Color; V0.UV = BuildSubUV(Source, Particle, 0.0f, 0.0f); V0.Tangent = Tangent;
+		V1.Position = P1; V1.Normal = Normal; V1.Color = Color; V1.UV = BuildSubUV(Source, Particle, 1.0f, 0.0f); V1.Tangent = Tangent;
+		V2.Position = P2; V2.Normal = Normal; V2.Color = Color; V2.UV = BuildSubUV(Source, Particle, 0.0f, 1.0f); V2.Tangent = Tangent;
+		V3.Position = P3; V3.Normal = Normal; V3.Color = Color; V3.UV = BuildSubUV(Source, Particle, 1.0f, 1.0f); V3.Tangent = Tangent;
 
 		OutVertices.push_back(V0);
 		OutVertices.push_back(V1);

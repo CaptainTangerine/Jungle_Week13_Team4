@@ -73,6 +73,10 @@ struct FDynamicSpriteEmitterReplayDataBase : public FDynamicEmitterReplayDataBas
 	FString MaterialPath;
 	FString MeshPath;
 	EParticleBlendMode BlendMode = EParticleBlendMode::AlphaBlend;
+	bool bUseSubUV = false;
+	int32 SubImagesX = 1;
+	int32 SubImagesY = 1;
+	float SubUVFrameRate = 16.0f;
 };
 
 struct FDynamicEmitterDataBase

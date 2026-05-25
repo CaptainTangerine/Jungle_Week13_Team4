@@ -106,11 +106,19 @@ public:
 	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="Screen Alignment", Enum=EParticleScreenAlignment)
 	EParticleScreenAlignment ScreenAlignment = EParticleScreenAlignment::FacingCameraPosition;
 
+	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="Use SubUV")
+	bool bUseSubUV = false;
+
 	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="Sub Images X", Min=1.0f, Max=64.0f, Speed=1.0f)
 	int32 SubImagesX = 1;
 
 	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="Sub Images Y", Min=1.0f, Max=64.0f, Speed=1.0f)
 	int32 SubImagesY = 1;
+
+	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="SubUV Frame Rate", Min=0.0f, Max=120.0f, Speed=1.0f)
+	float SubUVFrameRate = 16.0f;
+
+	bool ShouldExposeProperty(const FProperty& Property) const override;
 };
 
 UCLASS()

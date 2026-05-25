@@ -29,6 +29,7 @@ struct FParticleProxyParticle
 	FVector Size = FVector::OneVector;
 	FLinearColor Color = FLinearColor::White();
 	float Rotation = 0.0f;
+	float RelativeTime = 0.0f;
 	float CameraDistanceSq = 0.0f;
 };
 
@@ -110,7 +111,7 @@ private:
 	void GatherParticles(const FDynamicEmitterReplayDataBase& Source, const FFrameContext& Frame,
 		TArray<FParticleProxyParticle>& OutParticles) const;
 	void SortParticlesForView(TArray<FParticleProxyParticle>& Particles, const FVector& ViewLocation) const;
-	void BuildSpriteVertices(const TArray<FParticleProxyParticle>& Particles, const FVector& CameraRight,
+	void BuildSpriteVertices(const FDynamicSpriteEmitterReplayDataBase& Source, const TArray<FParticleProxyParticle>& Particles, const FVector& CameraRight,
 		const FVector& CameraUp, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const;
 	void BuildMeshVertices(const TArray<FParticleProxyParticle>& Particles, const TArray<FNormalVertex>& MeshVertices,
 		const TArray<uint32>& MeshIndices, TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices) const;

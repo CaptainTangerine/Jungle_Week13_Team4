@@ -5,6 +5,8 @@
 #include "Particle/ParticleHelper.h"
 #include "Serialization/Archive.h"
 
+#include <cstring>
+
 namespace
 {
 	FVector Midpoint(const FVector& Min, const FVector& Max)
@@ -57,6 +59,19 @@ void UParticleModule::Serialize(FArchive& Ar)
 UParticleModuleTypeDataSprite::UParticleModuleTypeDataSprite()
 {
 	EmitterType = EParticleEmitterType::Sprite;
+}
+
+bool UParticleModuleTypeDataSprite::ShouldExposeProperty(const FProperty& Property) const
+{
+	if (Property.Name &&
+		(std::strcmp(Property.Name, "SubImagesX") == 0 ||
+		 std::strcmp(Property.Name, "SubImagesY") == 0 ||
+		 std::strcmp(Property.Name, "SubUVFrameRate") == 0))
+	{
+		return bUseSubUV;
+	}
+
+	return UParticleModuleTypeDataBase::ShouldExposeProperty(Property);
 }
 
 UParticleModuleTypeDataMesh::UParticleModuleTypeDataMesh()
