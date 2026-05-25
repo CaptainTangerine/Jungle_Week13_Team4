@@ -3,12 +3,17 @@
 
 #include "Component/Primitive/ParticleSystemComponent.h"
 #include "Mesh/Static/StaticMesh.h"
+#include "Particle/ParticleEmitter.h"
+#include "Particle/ParticleLODLevel.h"
+#include "Particle/ParticleModuleVectorField.h"
+#include "Particle/ParticleSystem.h"
 #include "Render/Command/DrawCommand.h"
 #include "Render/Proxy/Particle/ParticleMeshBuilder.h"
 #include "Render/Proxy/Particle/ParticleRenderUtils.h"
 #include "Render/Proxy/Particle/ParticleSpriteBuilder.h"
 #include "Render/Proxy/Particle/ParticleTrailBuilder.h"
 #include "Render/Resource/Buffer.h"
+#include "Render/Scene/FScene.h"
 #include "Render/Types/FrameContext.h"
 
 #include <algorithm>
@@ -16,7 +21,7 @@
 FParticleSystemSceneProxy::FParticleSystemSceneProxy(UParticleSystemComponent* InComponent)
 	: FPrimitiveSceneProxy(InComponent)
 {
-	ProxyFlags |= EPrimitiveProxyFlags::PerViewportUpdate | EPrimitiveProxyFlags::NeverCull;
+	ProxyFlags |= EPrimitiveProxyFlags::PerViewportUpdate | EPrimitiveProxyFlags::NeverCull | EPrimitiveProxyFlags::ParticleSystem;
 }
 
 FParticleSystemSceneProxy::~FParticleSystemSceneProxy()
@@ -93,6 +98,40 @@ void FParticleSystemSceneProxy::UpdatePerViewport(const FFrameContext& Frame)
 	bVisible = true;
 	RebuildRenderDataForView(Frame);
 	bDynamicDataDirty = false;
+}
+
+void FParticleSystemSceneProxy::AppendDebugLines(FScene& Scene) const
+{
+	UParticleSystemComponent* Component = GetParticleComponent();
+	UParticleSystem* Template = Component ? Component->GetTemplate() : nullptr;
+	if (!Component || !Template)
+	{
+		return;
+	}
+
+	const FMatrix ComponentToWorld = Component->GetWorldMatrix();
+	const int32 LODIndex = Component->GetCurrentLODIndex();
+	for (UParticleEmitter* Emitter : Template->GetEmitters())
+	{
+		if (!Emitter || !Emitter->IsEnabled())
+		{
+			continue;
+		}
+
+		UParticleLODLevel* LODLevel = Emitter->GetLODLevelForIndex(LODIndex);
+		if (!LODLevel)
+		{
+			continue;
+		}
+
+		for (UParticleModule* Module : LODLevel->GetModules())
+		{
+			if (UParticleModuleVectorFieldLocal* VectorField = Cast<UParticleModuleVectorFieldLocal>(Module))
+			{
+				VectorField->AppendFieldBoundsDebugLines(Scene, ComponentToWorld);
+			}
+		}
+	}
 }
 
 void FParticleSystemSceneProxy::RebuildRenderDataForView(const FFrameContext& Frame)

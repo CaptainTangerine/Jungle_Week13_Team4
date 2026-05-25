@@ -24,6 +24,11 @@ namespace
 			}
 		}
 	}
+
+	float MakeNextLODDistance(const TArray<float>& LODDistances)
+	{
+		return LODDistances.empty() ? 0.0f : LODDistances.back() + 500.0f;
+	}
 }
 
 UParticleSystem::~UParticleSystem()
@@ -53,6 +58,7 @@ UParticleEmitter* UParticleSystem::AddEmitter()
 {
 	UParticleEmitter* NewEmitter = UObjectManager::Get().CreateObject<UParticleEmitter>(this);
 	Emitters.push_back(NewEmitter);
+	SynchronizeEmitterLODLevels();
 	CacheSystemModuleInfo();
 	BumpVersion();
 	return NewEmitter;
@@ -71,6 +77,7 @@ UParticleEmitter* UParticleSystem::InsertEmitter(int32 Index)
 	}
 
 	Emitters.insert(Emitters.begin() + Index, NewEmitter);
+	SynchronizeEmitterLODLevels();
 	CacheSystemModuleInfo();
 	BumpVersion();
 	return NewEmitter;
@@ -134,6 +141,104 @@ void UParticleSystem::ClearEmitters()
 	ParticleSerialization::DestroyObjectArray(Emitters);
 	CacheSystemModuleInfo();
 	BumpVersion();
+}
+
+bool UParticleSystem::SynchronizeEmitterLODLevels()
+{
+	NormalizeLODDistances(LODDistances);
+
+	int32 TargetLODCount = static_cast<int32>(LODDistances.size());
+	for (const UParticleEmitter* Emitter : Emitters)
+	{
+		if (Emitter)
+		{
+			TargetLODCount = (std::max)(TargetLODCount, Emitter->GetLODLevelCount());
+		}
+	}
+
+	bool bChanged = false;
+	while (static_cast<int32>(LODDistances.size()) < TargetLODCount)
+	{
+		LODDistances.push_back(MakeNextLODDistance(LODDistances));
+		bChanged = true;
+	}
+
+	for (UParticleEmitter* Emitter : Emitters)
+	{
+		if (!Emitter)
+		{
+			continue;
+		}
+
+		while (Emitter->GetLODLevelCount() < TargetLODCount)
+		{
+			const UParticleLODLevel* SourceLODLevel = Emitter->GetLODLevel(Emitter->GetLODLevelCount() - 1);
+			if (!Emitter->InsertLODLevel(Emitter->GetLODLevelCount(), SourceLODLevel))
+			{
+				break;
+			}
+			bChanged = true;
+		}
+	}
+
+	if (bChanged)
+	{
+		CacheSystemModuleInfo();
+	}
+	return bChanged;
+}
+
+bool UParticleSystem::InsertLODLevel(int32 Index)
+{
+	SynchronizeEmitterLODLevels();
+	const int32 Count = static_cast<int32>(LODDistances.size());
+	if (Index <= 0 || Index > Count)
+	{
+		return false;
+	}
+
+	const float PreviousDistance = LODDistances[Index - 1];
+	const float NewDistance = Index < Count
+		? PreviousDistance + (LODDistances[Index] - PreviousDistance) * 0.5f
+		: MakeNextLODDistance(LODDistances);
+	LODDistances.insert(LODDistances.begin() + Index, NewDistance);
+
+	for (UParticleEmitter* Emitter : Emitters)
+	{
+		if (!Emitter)
+		{
+			continue;
+		}
+
+		const UParticleLODLevel* SourceLODLevel = Emitter->GetLODLevel(Index - 1);
+		Emitter->InsertLODLevel(Index, SourceLODLevel);
+	}
+
+	CacheSystemModuleInfo();
+	BumpVersion();
+	return true;
+}
+
+bool UParticleSystem::RemoveLODLevel(int32 Index)
+{
+	SynchronizeEmitterLODLevels();
+	if (Index <= 0 || Index >= static_cast<int32>(LODDistances.size()))
+	{
+		return false;
+	}
+
+	LODDistances.erase(LODDistances.begin() + Index);
+	for (UParticleEmitter* Emitter : Emitters)
+	{
+		if (Emitter)
+		{
+			Emitter->RemoveLODLevelAt(Index);
+		}
+	}
+
+	CacheSystemModuleInfo();
+	BumpVersion();
+	return true;
 }
 
 void UParticleSystem::CacheSystemModuleInfo()

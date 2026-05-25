@@ -37,8 +37,12 @@ private:
 	void InsertParticleEmitter(class UParticleSystem* ParticleSystem, int32 Index);
 	void DeleteParticleEmitter(class UParticleSystem* ParticleSystem, int32 Index);
 	void MoveParticleEmitter(class UParticleSystem* ParticleSystem, int32 SourceIndex, int32 TargetIndex);
+	void InsertParticleLOD(class UParticleSystem* ParticleSystem, int32 Index);
+	void DeleteParticleLOD(class UParticleSystem* ParticleSystem, int32 Index);
+	void SelectParticleLOD(class UParticleSystem* ParticleSystem, int32 Index);
 	void AddParticleModule(class UParticleSystem* ParticleSystem, class UParticleEmitter* Emitter, class UClass* ModuleClass);
 	void MoveParticleModule(class UParticleSystem* ParticleSystem, class UParticleLODLevel* SourceLODLevel, class UParticleLODLevel* TargetLODLevel, class UParticleModule* Module, int32 TargetIndex);
+	bool RenderLODDistanceProperties(class UParticleSystem* ParticleSystem);
 	bool RenderObjectPropertiesInline(class UObject* Object);
 
 private:
@@ -64,6 +68,7 @@ private:
 	float EmitterCurveSplitRatio = 0.58f;
 
 	int32 SelectedEmitterIndex = -1;
+	int32 SelectedLODIndex = 0;
 	class UParticleModule* SelectedModule = nullptr;
 
 	bool bOpenParticleAssetSearchPopup = false;

@@ -116,6 +116,30 @@ protected:
 	uint32 GetAccentColor() const override { return IM_COL32(115, 210, 210, 255); }
 };
 
+class VectorFieldSourceElement final : public ContentBrowserElement
+{
+public:
+	void RenderContextMenu(ContentBrowserContext& Context) override;
+	void OnDoubleLeftClicked(ContentBrowserContext& Context) override;
+
+protected:
+	const char* GetTypeLabel() const override { return "FGA Vector Field"; }
+	uint32 GetAccentColor() const override { return IM_COL32(140, 220, 180, 255); }
+};
+
+class VectorFieldElement final : public ContentBrowserElement
+{
+public:
+	virtual const char* GetDragItemType() override { return "VectorFieldContentItem"; }
+	void RenderContextMenu(ContentBrowserContext& Context) override;
+	void OnDoubleLeftClicked(ContentBrowserContext& Context) override;
+	void RenderDetail() override;
+
+protected:
+	const char* GetTypeLabel() const override { return "Vector Field"; }
+	uint32 GetAccentColor() const override { return IM_COL32(80, 210, 150, 255); }
+};
+
 class MeshElement final : public ContentBrowserElement
 {
 public:

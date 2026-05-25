@@ -23,11 +23,15 @@ public:
 	bool RemoveEmitter(UParticleEmitter* InEmitter);
 	bool MoveEmitter(int32 SourceIndex, int32 TargetIndex);
 	void ClearEmitters();
+	bool SynchronizeEmitterLODLevels();
+	bool InsertLODLevel(int32 Index);
+	bool RemoveLODLevel(int32 Index);
 	void CacheSystemModuleInfo();
 	void InitializeDefaultSpriteSystem();
 	int32 SelectLODIndexByDistance(float Distance) const;
 
 	const TArray<UParticleEmitter*>& GetEmitters() const { return Emitters; }
+	TArray<float>& GetLODDistances() { return LODDistances; }
 	const TArray<float>& GetLODDistances() const { return LODDistances; }
 
 	void SetSourcePath(const FString& InPath) { SourcePath = InPath; }
@@ -44,7 +48,7 @@ private:
 	float WarmupTime = 0.0f;
 
 	UPROPERTY(Edit, Save, Category="LOD", DisplayName="LOD Distances")
-	TArray<float> LODDistances = { 0.0f, 1500.0f, 3000.0f, 6000.0f };
+	TArray<float> LODDistances = { 0.0f };
 
 	UPROPERTY(Edit, Category="ParticleSystem", DisplayName="Emitters", AllowedClass=UParticleEmitter)
 	TArray<UParticleEmitter*> Emitters;
