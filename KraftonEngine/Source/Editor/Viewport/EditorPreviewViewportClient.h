@@ -19,6 +19,7 @@ public:
 
 	virtual FViewportRenderOptions& GetRenderOptions() = 0;
 	virtual const FViewportRenderOptions& GetRenderOptions() const = 0;
+	virtual bool SupportsGridRendering() const { return false; }
 
 	virtual void NotifyViewportResized(int32 NewWidth, int32 NewHeight) = 0;
 	virtual void GetClearColor(float OutClearColor[4]) const
