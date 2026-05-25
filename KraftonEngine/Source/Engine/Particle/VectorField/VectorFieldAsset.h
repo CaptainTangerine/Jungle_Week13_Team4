@@ -40,6 +40,11 @@ public:
 	int32 GetIndex(int32 X, int32 Y, int32 Z) const;
 	const FVector* GetVectorAt(int32 X, int32 Y, int32 Z) const;
 
+	// Sample at a position in the vector field's local bounds. Returns false when
+	// the position is outside the field or the grid is invalid.
+	bool SampleNearest(const FVector& LocalPosition, FVector& OutVector) const;
+	bool SampleTrilinear(const FVector& LocalPosition, FVector& OutVector) const;
+
 private:
 	int32 SizeX = 0;
 	int32 SizeY = 0;
