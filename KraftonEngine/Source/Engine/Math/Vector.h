@@ -67,12 +67,14 @@ struct FVector {
 
 	// Linear interpolation from A to B at time t
 	static FVector Lerp(const FVector& A, const FVector& B, float t);
+	static FVector RotateZ(float Radians, const FVector& Value);
 
 	FVector operator+(const FVector& Other) const;
 	FVector operator-(const FVector& Other) const;
 	FVector operator+(float Scalar) const;
 	FVector operator-(float Scalar) const;
 	FVector operator*(float Scalar) const;
+	FVector operator*(const FVector& Other) const;
 	FVector operator/(float Scalar) const;
 
 	FVector& operator+=(const FVector& Other);
@@ -177,6 +179,7 @@ struct FVector4 {
 	FVector4 operator+(float Scalar) const;
 	FVector4 operator-(float Scalar) const;
 	FVector4 operator*(float Scalar) const;
+	FVector4 operator*(const FVector4& Other) const;
 	FVector4 operator/(float Scalar) const;
 
 	FVector4& operator+=(const FVector4& Other);
