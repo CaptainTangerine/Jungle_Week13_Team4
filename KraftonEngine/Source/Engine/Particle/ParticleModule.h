@@ -483,6 +483,7 @@ public:
 	UParticleModuleColor();
 	bool IsSpawnModule() const override { return true; }
 	bool IsUpdateModule() const override { return bColorOverLife; }
+	void Serialize(FArchive& Ar) override;
 	void Spawn(const FSpawnContext& Context) override;
 	void Update(const FUpdateContext& Context) override;
 
@@ -501,6 +502,10 @@ public:
 	UPROPERTY(Edit, Save, Instanced, Category="Color", DisplayName="End Alpha", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=EndAlpha.Distribution, CppType=UDistributionFloat*)
 	;
 	FRawDistributionFloat EndAlpha;
+
+	// Saved manually by Serialize so older binary particle assets keep their original layout.
+	UPROPERTY(Edit, Category="Color", DisplayName="Emissive Intensity", Min=0.0f, Max=50.0f, Speed=0.05f)
+	float EmissiveIntensity = 1.0f;
 
 	UPROPERTY(Edit, Save, Category="Color", DisplayName="Color Over Life")
 	bool bColorOverLife = true;

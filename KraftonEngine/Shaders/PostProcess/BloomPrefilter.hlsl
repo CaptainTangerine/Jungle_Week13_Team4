@@ -28,6 +28,11 @@ float3 ApplyBloomThreshold(float3 color)
 
 float4 PS(PS_Input_UV input) : SV_TARGET
 {
-    float3 color = SourceTexture.SampleLevel(LinearClampSampler, input.uv, 0).rgb;
-    return float4(ApplyBloomThreshold(color), 1.0f);
+    float2 texel = SourceTexelSize;
+    float3 bloom = ApplyBloomThreshold(SourceTexture.SampleLevel(LinearClampSampler, input.uv, 0).rgb) * 4.0f;
+    bloom += ApplyBloomThreshold(SourceTexture.SampleLevel(LinearClampSampler, input.uv + float2(-texel.x, -texel.y), 0).rgb);
+    bloom += ApplyBloomThreshold(SourceTexture.SampleLevel(LinearClampSampler, input.uv + float2( texel.x, -texel.y), 0).rgb);
+    bloom += ApplyBloomThreshold(SourceTexture.SampleLevel(LinearClampSampler, input.uv + float2(-texel.x,  texel.y), 0).rgb);
+    bloom += ApplyBloomThreshold(SourceTexture.SampleLevel(LinearClampSampler, input.uv + float2( texel.x,  texel.y), 0).rgb);
+    return float4(bloom * 0.125f, 1.0f);
 }

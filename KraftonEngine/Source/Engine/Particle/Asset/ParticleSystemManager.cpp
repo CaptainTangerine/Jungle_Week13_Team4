@@ -38,6 +38,7 @@ UParticleSystem* FParticleSystemManager::Load(const FString& Path)
 
 	FAssetImportMetadata Metadata;
 	Ar << Metadata;
+	Ar.SetPackageVersion(Header.Version);
 
 	UParticleSystem* NewAsset = UObjectManager::Get().CreateObject<UParticleSystem>();
 	NewAsset->Serialize(Ar);
@@ -86,6 +87,7 @@ bool FParticleSystemManager::Save(UParticleSystem* Asset)
 
 	Ar << Header;
 	Ar << Metadata;
+	Ar.SetPackageVersion(Header.Version);
 	Asset->Serialize(Ar);
 
 	return Ar.IsValid();

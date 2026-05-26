@@ -22,7 +22,7 @@ enum class EAssetPackageType : uint32
 struct FAssetPackageHeader
 {
 	static constexpr uint32 MagicValue = 0x54455341; // ASET
-	static constexpr uint32 CurrentVersion = 1;
+	static constexpr uint32 CurrentVersion = 2;
 
 	uint32 Magic = MagicValue;
 	uint32 Version = CurrentVersion;
@@ -39,14 +39,16 @@ struct FAssetPackageHeader
 	bool IsValid(EAssetPackageType ExpectedType) const
 	{
 		return Magic == MagicValue
-			&& Version == CurrentVersion
+			&& Version >= 1
+			&& Version <= CurrentVersion
 			&& Type == static_cast<uint32>(ExpectedType);
 	}
 
 	bool IsValidPackage() const
 	{
 		return Magic == MagicValue
-			&& Version == CurrentVersion;
+			&& Version >= 1
+			&& Version <= CurrentVersion;
 	}
 };
 

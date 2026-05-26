@@ -3563,6 +3563,22 @@ void FParticleSystemEditorWidget::RenderViewportMenus()
 			ViewportClient.GetRenderOptions().ShowFlags.bGrid = bShowGrid;
 		}
 
+		FViewportRenderOptions& RenderOptions = ViewportClient.GetRenderOptions();
+		ImGui::Checkbox("Bloom", &RenderOptions.ShowFlags.bBloom);
+		if (RenderOptions.ShowFlags.bBloom)
+		{
+			ImGui::SliderFloat("Bloom Threshold", &RenderOptions.BloomThreshold, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat("Bloom Intensity", &RenderOptions.BloomIntensity, 0.0f, 3.0f, "%.2f");
+			ImGui::SliderFloat("Bloom Radius", &RenderOptions.BloomBlurRadius, 0.25f, 4.0f, "%.2f");
+			ImGui::SliderFloat("Bloom Soft Knee", &RenderOptions.BloomSoftKnee, 0.0f, 1.0f, "%.2f");
+		}
+		ImGui::Checkbox("Gamma Correction", &RenderOptions.ShowFlags.bGammaCorrection);
+		if (RenderOptions.ShowFlags.bGammaCorrection)
+		{
+			ImGui::SliderFloat("Exposure", &RenderOptions.Exposure, 0.0f, 5.0f, "%.2f");
+			ImGui::SliderFloat("Gamma", &RenderOptions.Gamma, 1.0f, 3.0f, "%.2f");
+		}
+
 		ImGui::Dummy(ImVec2(0.0f, 1.0f));
 		ImGui::EndPopup();
 	}

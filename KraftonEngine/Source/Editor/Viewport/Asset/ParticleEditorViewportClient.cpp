@@ -19,6 +19,10 @@ void FParticleEditorViewportClient::Initialize(ID3D11Device* Device, uint32 Widt
 	RenderOptions.ShowFlags.bGrid = false;
 	RenderOptions.ShowFlags.bWorldAxis = false;
 	RenderOptions.ShowFlags.bOriginAxisGizmo = false;
+	RenderOptions.ShowFlags.bBloom = true;
+	RenderOptions.BloomThreshold = 0.8f;
+	RenderOptions.BloomIntensity = 1.2f;
+	RenderOptions.BloomBlurRadius = 2.0f;
 
 	bIsRenderable = true;
 }

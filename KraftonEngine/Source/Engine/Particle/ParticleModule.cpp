@@ -70,6 +70,16 @@ namespace
 		return FLinearColor(Color.R, Color.G, Color.B, Alpha);
 	}
 
+	FLinearColor ApplyEmissiveIntensity(const FLinearColor& Color, float Intensity)
+	{
+		const float SafeIntensity = std::max(0.0f, Intensity);
+		return FLinearColor(
+			Color.R * SafeIntensity,
+			Color.G * SafeIntensity,
+			Color.B * SafeIntensity,
+			Color.A);
+	}
+
 	FLinearColor LerpColor(const FLinearColor& A, const FLinearColor& B, float Alpha)
 	{
 		return FLinearColor(
@@ -360,6 +370,27 @@ UParticleModuleColor::UParticleModuleColor()
 	EndAlpha.SetDistribution(NewFloatConstant(this, 0.0f));
 }
 
+void UParticleModuleColor::Serialize(FArchive& Ar)
+{
+	UParticleModule::Serialize(Ar);
+
+	const bool bHasEmissiveIntensity =
+		Ar.IsSaving() ||
+		Ar.GetPackageVersion() == 0 ||
+		Ar.GetPackageVersion() >= 2;
+
+	if (bHasEmissiveIntensity && Ar.HasProperty("EmissiveIntensity"))
+	{
+		Ar.BeginProperty("EmissiveIntensity");
+		Ar << EmissiveIntensity;
+		Ar.EndProperty();
+	}
+	else if (Ar.IsLoading())
+	{
+		EmissiveIntensity = 1.0f;
+	}
+}
+
 UParticleModuleSize::UParticleModuleSize()
 {
 	StartSize.SetDistribution(NewVectorUniform(this, FVector::OneVector, FVector::OneVector));
@@ -498,7 +529,9 @@ void UParticleModuleColor::Spawn(const FSpawnContext& Context)
 
 	const FVector ColorValue = StartColor.GetValue(Context.SpawnTime, Context.GetDistributionData());
 	const float AlphaValue = StartAlpha.GetValue(Context.SpawnTime, Context.GetDistributionData());
-	const FLinearColor InitialColor = ToLinearColor(ColorValue, AlphaValue);
+	const FLinearColor InitialColor = ApplyEmissiveIntensity(
+		ToLinearColor(ColorValue, AlphaValue),
+		EmissiveIntensity);
 	Context.ParticleBase->Color = InitialColor;
 	Context.ParticleBase->BaseColor = InitialColor;
 }
@@ -515,7 +548,9 @@ void UParticleModuleColor::Update(const FUpdateContext& Context)
 		const float RelativeTime = FMath::Clamp(Particle.RelativeTime, 0.0f, 1.0f);
 		const FVector EndColorValue = EndColor.GetValue(RelativeTime, DistributionData);
 		const float EndAlphaValue = EndAlpha.GetValue(RelativeTime, DistributionData);
-		const FLinearColor FinalColor = ToLinearColor(EndColorValue, EndAlphaValue);
+		const FLinearColor FinalColor = ApplyEmissiveIntensity(
+			ToLinearColor(EndColorValue, EndAlphaValue),
+			EmissiveIntensity);
 		Particle.Color = LerpColor(Particle.BaseColor, FinalColor, RelativeTime);
 	END_UPDATE_LOOP
 }

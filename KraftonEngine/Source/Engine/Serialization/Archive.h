@@ -17,12 +17,15 @@ class FArchive
 protected:
 	bool bIsLoading = false;
 	bool bIsSaving = false;
+	uint32 PackageVersion = 0;
 
 public:
 	virtual ~FArchive() = default;
 
 	inline bool IsLoading() const { return bIsLoading; }
 	inline bool IsSaving() const { return bIsSaving; }
+	inline uint32 GetPackageVersion() const { return PackageVersion; }
+	inline void SetPackageVersion(uint32 InPackageVersion) { PackageVersion = InPackageVersion; }
 	virtual bool IsObjectReferenceRemapping() const { return false; }
 	virtual UObject* ResolveObjectReference(uint32 /*SourceUUID*/) const { return nullptr; }
 	virtual void AddObjectReferenceFixup(uint32 /*SourceUUID*/, std::function<void(UObject*)> /*Fixup*/) {}
