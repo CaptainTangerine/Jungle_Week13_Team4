@@ -46,7 +46,7 @@ void FParticleSpriteBuilder::Build(const FDynamicSpriteEmitterDataBase& EmitterD
 	}
 
 	const uint32 StartIndex = static_cast<uint32>(Indices.size());
-	ParticleRenderUtils::BuildSpriteVertices(Source, Particles, Frame.CameraRight, Frame.CameraUp, ResolvedSubImagesX, ResolvedSubImagesY,
+	ParticleRenderUtils::BuildSpriteVertices(Source, Particles, Frame.CameraPosition, Frame.CameraRight, Frame.CameraUp, ResolvedSubImagesX, ResolvedSubImagesY,
 		Vertices, Indices);
 
 	const uint32 IndexCount = static_cast<uint32>(Indices.size()) - StartIndex;

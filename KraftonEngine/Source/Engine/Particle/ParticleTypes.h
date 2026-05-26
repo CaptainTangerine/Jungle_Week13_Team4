@@ -49,9 +49,8 @@ enum class EParticleBlendMode : uint8
 UENUM()
 enum class EParticleScreenAlignment : uint8
 {
-	FacingCameraPosition,
-	Square,
-	Velocity,
+	PSA_FacingCameraPosition,
+	PSA_Velocity,
 };
 
 UENUM()

@@ -6,6 +6,74 @@
 #include <algorithm>
 #include <cmath>
 
+namespace
+{
+	constexpr float ParticleSpriteTinyNumber = 1.0e-4f;
+
+	FVector SafeNormal(const FVector& Value, const FVector& Fallback)
+	{
+		const float Length = Value.Length();
+		if (Length <= ParticleSpriteTinyNumber)
+		{
+			return Fallback.Normalized();
+		}
+		return Value / Length;
+	}
+
+	FVector ProjectVectorOnPlane(const FVector& Value, const FVector& PlaneNormal)
+	{
+		return Value - PlaneNormal * Value.Dot(PlaneNormal);
+	}
+
+	void ResolveSpriteAxes(const FDynamicSpriteEmitterReplayDataBase& Source, const FParticleProxyParticle& Particle,
+		const FVector& CameraPosition, const FVector& CameraRight, const FVector& CameraUp, const FVector& CameraNormal,
+		FVector& OutRight, FVector& OutUp, FVector& OutNormal)
+	{
+		OutRight = CameraRight;
+		OutUp = CameraUp;
+		OutNormal = CameraNormal;
+
+		if (Source.ScreenAlignment != EParticleScreenAlignment::PSA_Velocity)
+		{
+			return;
+		}
+
+		FVector VelocityDirection = Particle.Velocity;
+		if (VelocityDirection.Length() <= ParticleSpriteTinyNumber)
+		{
+			VelocityDirection = Particle.Position - Particle.OldPosition;
+		}
+		if (VelocityDirection.Length() <= ParticleSpriteTinyNumber)
+		{
+			return;
+		}
+
+		const FVector VelocityDir = SafeNormal(VelocityDirection, FVector::ForwardVector);
+		const FVector ViewDir = SafeNormal(CameraPosition - Particle.Position, CameraNormal);
+
+		// PSA_Velocity is an axial billboard: the long axis follows the real 3D velocity,
+		// while the wing-width axis stays perpendicular to the camera ray so width is not foreshortened.
+		FVector Side = ViewDir.Cross(VelocityDir);
+		if (Side.Length() <= ParticleSpriteTinyNumber)
+		{
+			Side = ProjectVectorOnPlane(CameraRight, ViewDir);
+		}
+		if (Side.Length() <= ParticleSpriteTinyNumber)
+		{
+			Side = ProjectVectorOnPlane(CameraUp, ViewDir);
+		}
+
+		OutRight = SafeNormal(Side, CameraRight);
+		OutUp = VelocityDir;
+		OutNormal = SafeNormal(OutUp.Cross(OutRight), CameraNormal);
+		if (OutNormal.Dot(ViewDir) < 0.0f)
+		{
+			OutRight *= -1.0f;
+			OutNormal = SafeNormal(OutUp.Cross(OutRight), CameraNormal);
+		}
+	}
+}
+
 namespace ParticleRenderUtils
 {
 	bool IsNonePath(const FString& Path)
@@ -138,11 +206,12 @@ namespace ParticleRenderUtils
 	}
 
 	void BuildSpriteVertices(const FDynamicSpriteEmitterReplayDataBase& Source, const TArray<FParticleProxyParticle>& Particles,
-		const FVector& CameraRight, const FVector& CameraUp, int32 ResolvedSubImagesX, int32 ResolvedSubImagesY,
+		const FVector& CameraPosition, const FVector& CameraRight, const FVector& CameraUp, int32 ResolvedSubImagesX, int32 ResolvedSubImagesY,
 		TArray<FVertexPNCTT>& OutVertices, TArray<uint32>& OutIndices)
 	{
-		const FVector Normal = CameraUp.Cross(CameraRight).Normalized();
-		const FVector4 Tangent(CameraRight, 1.0f);
+		const FVector CameraNormal = SafeNormal(CameraUp.Cross(CameraRight), FVector::ForwardVector);
+		const FVector BaseCameraRight = SafeNormal(CameraRight, FVector::RightVector);
+		const FVector BaseCameraUp = SafeNormal(CameraUp, FVector::UpVector);
 
 		for (const FParticleProxyParticle& Particle : Particles)
 		{
@@ -150,10 +219,16 @@ namespace ParticleRenderUtils
 			const float HalfWidth = (std::max)(0.001f, Particle.Size.X * 0.5f);
 			const float HalfHeight = (std::max)(0.001f, Particle.Size.Y * 0.5f);
 
+			FVector AlignmentRight;
+			FVector AlignmentUp;
+			FVector AlignmentNormal;
+			ResolveSpriteAxes(Source, Particle, CameraPosition, BaseCameraRight, BaseCameraUp, CameraNormal, AlignmentRight, AlignmentUp, AlignmentNormal);
+
 			const float C = std::cos(Particle.Rotation);
 			const float S = std::sin(Particle.Rotation);
-			const FVector Right = CameraRight * C - CameraUp * S;
-			const FVector Up = CameraRight * S + CameraUp * C;
+			const FVector Right = AlignmentRight * C - AlignmentUp * S;
+			const FVector Up = AlignmentRight * S + AlignmentUp * C;
+			const FVector4 Tangent(Right, 1.0f);
 
 			const FVector P0 = Particle.Position - Right * HalfWidth + Up * HalfHeight;
 			const FVector P1 = Particle.Position + Right * HalfWidth + Up * HalfHeight;
@@ -163,10 +238,10 @@ namespace ParticleRenderUtils
 			const FVector4 Color = Particle.Color.ToVector4();
 
 			FVertexPNCTT V0, V1, V2, V3;
-			V0.Position = P0; V0.Normal = Normal; V0.Color = Color; V0.UV = BuildSubUV(Source, Particle, 0.0f, 0.0f, ResolvedSubImagesX, ResolvedSubImagesY); V0.Tangent = Tangent;
-			V1.Position = P1; V1.Normal = Normal; V1.Color = Color; V1.UV = BuildSubUV(Source, Particle, 1.0f, 0.0f, ResolvedSubImagesX, ResolvedSubImagesY); V1.Tangent = Tangent;
-			V2.Position = P2; V2.Normal = Normal; V2.Color = Color; V2.UV = BuildSubUV(Source, Particle, 0.0f, 1.0f, ResolvedSubImagesX, ResolvedSubImagesY); V2.Tangent = Tangent;
-			V3.Position = P3; V3.Normal = Normal; V3.Color = Color; V3.UV = BuildSubUV(Source, Particle, 1.0f, 1.0f, ResolvedSubImagesX, ResolvedSubImagesY); V3.Tangent = Tangent;
+			V0.Position = P0; V0.Normal = AlignmentNormal; V0.Color = Color; V0.UV = BuildSubUV(Source, Particle, 0.0f, 0.0f, ResolvedSubImagesX, ResolvedSubImagesY); V0.Tangent = Tangent;
+			V1.Position = P1; V1.Normal = AlignmentNormal; V1.Color = Color; V1.UV = BuildSubUV(Source, Particle, 1.0f, 0.0f, ResolvedSubImagesX, ResolvedSubImagesY); V1.Tangent = Tangent;
+			V2.Position = P2; V2.Normal = AlignmentNormal; V2.Color = Color; V2.UV = BuildSubUV(Source, Particle, 0.0f, 1.0f, ResolvedSubImagesX, ResolvedSubImagesY); V2.Tangent = Tangent;
+			V3.Position = P3; V3.Normal = AlignmentNormal; V3.Color = Color; V3.UV = BuildSubUV(Source, Particle, 1.0f, 1.0f, ResolvedSubImagesX, ResolvedSubImagesY); V3.Tangent = Tangent;
 
 			OutVertices.push_back(V0);
 			OutVertices.push_back(V1);
