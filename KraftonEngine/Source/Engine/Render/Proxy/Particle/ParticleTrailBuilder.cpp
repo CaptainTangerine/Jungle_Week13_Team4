@@ -135,9 +135,10 @@ void FParticleTrailBuilder::BuildBeam(const FDynamicBeamEmitterData& EmitterData
 	{
 		Particles.resize(static_cast<size_t>(MaxBeamCount));
 	}
-	if (ParticleRenderUtils::ShouldSortParticles(Source.SortMode))
+	const EParticleSortMode ResolvedSortMode = ParticleRenderUtils::ResolveParticleSortMode(Source.SortMode, Source.BlendMode);
+	if (ParticleRenderUtils::ShouldSortParticles(ResolvedSortMode))
 	{
-		ParticleRenderUtils::SortParticlesForView(Particles);
+		ParticleRenderUtils::SortParticlesForView(Particles, ResolvedSortMode);
 	}
 
 	const uint32 StartIndex = static_cast<uint32>(Indices.size());
@@ -418,6 +419,9 @@ FParticleRenderPacket FParticleTrailBuilder::MakeCpuExpandedPacket(EDynamicEmitt
 	Packet.FirstIndex = FirstIndex;
 	Packet.IndexCount = IndexCount;
 	Packet.BaseVertex = 0;
-	Packet.SortDepth = ParticleRenderUtils::ComputePacketSortDepth(Particles);
+	const EParticleSortMode ResolvedSortMode = ParticleRenderUtils::ResolveParticleSortMode(Source.SortMode, Source.BlendMode);
+	Packet.SortDepth = ParticleRenderUtils::ComputePacketSortDepth(Particles, ResolvedSortMode);
+	Packet.TranslucencySortPriority = Source.TranslucencySortPriority;
+	Packet.bHasTranslucencySort = Source.BlendMode != EParticleBlendMode::Opaque;
 	return Packet;
 }

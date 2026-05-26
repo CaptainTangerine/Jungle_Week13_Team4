@@ -89,6 +89,9 @@ struct FDrawCommand
 
 	// ===== Sort =====
 	uint64 SortKey = 0;                              // 정렬 키 (Pass → Shader → MeshBuffer → SRV)
+	bool bHasTranslucencySort = false;
+	float SortDepth = 0.0f;
+	int32 TranslucencySortPriority = 0;
 
 	// ===== Profiling =====
 	bool bIsSkeletal = false;

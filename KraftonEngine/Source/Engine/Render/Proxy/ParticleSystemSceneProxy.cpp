@@ -245,6 +245,9 @@ void FParticleSystemSceneProxy::RebuildSectionDrawsFromRenderPackets()
 		Draw.Material = Packet.Material;
 		Draw.FirstIndex = Packet.FirstIndex;
 		Draw.IndexCount = Packet.IndexCount;
+		Draw.bHasTranslucencySort = Packet.bHasTranslucencySort;
+		Draw.SortDepth = Packet.SortDepth;
+		Draw.TranslucencySortPriority = Packet.TranslucencySortPriority;
 		if (Packet.PacketType == EParticleRenderPacketType::InstancedMesh && Packet.Mesh)
 		{
 			FMeshBuffer* MeshBuffer = Packet.Mesh->GetLODMeshBuffer(0);

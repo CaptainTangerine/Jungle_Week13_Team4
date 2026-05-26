@@ -31,9 +31,10 @@ void FParticleSpriteBuilder::Build(const FDynamicSpriteEmitterDataBase& EmitterD
 		return;
 	}
 
-	if (ParticleRenderUtils::ShouldSortParticles(Source.SortMode))
+	const EParticleSortMode ResolvedSortMode = ParticleRenderUtils::ResolveParticleSortMode(Source.SortMode, Source.BlendMode);
+	if (ParticleRenderUtils::ShouldSortParticles(ResolvedSortMode))
 	{
-		ParticleRenderUtils::SortParticlesForView(Particles);
+		ParticleRenderUtils::SortParticlesForView(Particles, ResolvedSortMode);
 	}
 
 	int32 ResolvedSubImagesX = Source.SubImagesX;
@@ -66,6 +67,9 @@ FParticleRenderPacket FParticleSpriteBuilder::MakeCpuExpandedPacket(const FDynam
 	Packet.BlendMode = Source.BlendMode;
 	Packet.FirstIndex = FirstIndex;
 	Packet.IndexCount = IndexCount;
-	Packet.SortDepth = ParticleRenderUtils::ComputePacketSortDepth(Particles);
+	const EParticleSortMode ResolvedSortMode = ParticleRenderUtils::ResolveParticleSortMode(Source.SortMode, Source.BlendMode);
+	Packet.SortDepth = ParticleRenderUtils::ComputePacketSortDepth(Particles, ResolvedSortMode);
+	Packet.TranslucencySortPriority = Source.TranslucencySortPriority;
+	Packet.bHasTranslucencySort = Source.BlendMode != EParticleBlendMode::Opaque;
 	return Packet;
 }

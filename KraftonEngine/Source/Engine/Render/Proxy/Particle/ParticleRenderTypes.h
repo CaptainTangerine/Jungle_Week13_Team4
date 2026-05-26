@@ -21,6 +21,7 @@ struct FParticleProxyParticle
 	float Rotation = 0.0f;
 	float RelativeTime = 0.0f;
 	float CameraDistanceSq = 0.0f;
+	float ViewDepth = 0.0f;
 };
 
 struct FParticleMeshRenderBatch
@@ -59,6 +60,7 @@ struct FParticleRenderPacket
 
 	float SortDepth = 0.0f;
 	int32 TranslucencySortPriority = 0;
+	bool bHasTranslucencySort = false;
 
 	bool HasIndexRange() const { return IndexCount > 0; }
 };

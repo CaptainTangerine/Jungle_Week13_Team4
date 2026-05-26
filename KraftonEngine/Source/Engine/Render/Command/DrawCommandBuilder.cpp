@@ -224,6 +224,9 @@ void FDrawCommandBuilder::BuildCommandForProxy(FScene& Scene, const FPrimitiveSc
 		Cmd.bIsGpuSkinned = bGPUSkinning;
 		Cmd.Buffer.FirstIndex = Section.FirstIndex;
 		Cmd.Buffer.IndexCount = Section.IndexCount;
+		Cmd.bHasTranslucencySort = Section.bHasTranslucencySort;
+		Cmd.SortDepth = Section.SortDepth;
+		Cmd.TranslucencySortPriority = Section.TranslucencySortPriority;
 		if (Section.bInstanced)
 		{
 			Cmd.Buffer = {};

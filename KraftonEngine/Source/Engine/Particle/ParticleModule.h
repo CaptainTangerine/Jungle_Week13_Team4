@@ -280,6 +280,9 @@ public:
 	UPROPERTY(Edit, Save, Category="Required", DisplayName="Sort Mode", Enum=EParticleSortMode)
 	EParticleSortMode SortMode = EParticleSortMode::None;
 
+	UPROPERTY(Edit, Save, Category="Required", DisplayName="Translucency Sort Priority", Min=-10000.0f, Max=10000.0f, Speed=1.0f)
+	int32 TranslucencySortPriority = 0;
+
 	UPROPERTY(Edit, Save, Category="Required", DisplayName="Blend Mode", Enum=EParticleBlendMode)
 	EParticleBlendMode BlendMode = EParticleBlendMode::AlphaBlend;
 

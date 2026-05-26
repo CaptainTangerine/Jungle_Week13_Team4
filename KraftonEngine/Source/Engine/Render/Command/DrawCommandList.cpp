@@ -62,9 +62,22 @@ void FDrawCommandList::Sort()
 {
 	if (Commands.size() > 1)
 	{
-		std::sort(Commands.begin(), Commands.end(),
+		std::stable_sort(Commands.begin(), Commands.end(),
 			[](const FDrawCommand& A, const FDrawCommand& B)
 			{
+				if (A.bHasTranslucencySort && B.bHasTranslucencySort && A.Pass == B.Pass)
+				{
+					if (A.TranslucencySortPriority != B.TranslucencySortPriority)
+					{
+						return A.TranslucencySortPriority < B.TranslucencySortPriority;
+					}
+
+					if (A.SortDepth != B.SortDepth)
+					{
+						return A.SortDepth > B.SortDepth;
+					}
+				}
+
 				return A.SortKey < B.SortKey;
 			});
 	}

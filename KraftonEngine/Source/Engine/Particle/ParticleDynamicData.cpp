@@ -62,6 +62,7 @@ FDynamicSpriteEmitterReplayDataBase::FDynamicSpriteEmitterReplayDataBase(const U
 	}
 
 	SortMode = RequiredModule->SortMode;
+	TranslucencySortPriority = RequiredModule->TranslucencySortPriority;
 	bUseLocalSpace = RequiredModule->bUseLocalSpace;
 	MaterialPath = RequiredModule->MaterialPath.ToString();
 	BlendMode = RequiredModule->BlendMode;
