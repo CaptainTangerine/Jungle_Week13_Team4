@@ -12,7 +12,9 @@
 #include "Materials/MaterialManager.h"
 #include "Particle/ParticleDynamicData.h"
 #include "Particle/ParticleModule.h"
+#include "Profiling/Stats/Stats.h"
 
+#include <chrono>
 #include <cstring>
 
 UParticleSystemComponent::~UParticleSystemComponent()
@@ -150,6 +152,18 @@ uint64 UParticleSystemComponent::GetInstanceMemoryBytes() const
 		}
 	}
 	return Bytes;
+}
+
+uint32 UParticleSystemComponent::GetParticleDrawCallCount() const
+{
+	const FParticleSystemSceneProxy* Proxy = static_cast<const FParticleSystemSceneProxy*>(GetSceneProxy());
+	return Proxy ? Proxy->GetParticleDrawCallCount() : 0;
+}
+
+double UParticleSystemComponent::GetLastRenderBuildTimeMs() const
+{
+	const FParticleSystemSceneProxy* Proxy = static_cast<const FParticleSystemSceneProxy*>(GetSceneProxy());
+	return Proxy ? Proxy->GetLastRenderBuildTimeMs() : 0.0;
 }
 
 void UParticleSystemComponent::RecreateEmitterInstances()
@@ -290,11 +304,15 @@ void UParticleSystemComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 void UParticleSystemComponent::AdvanceSimulation(float DeltaTime)
 {
 	ClearParticleEvents();
+	LastSimulationTimeMs = 0.0;
 
 	if (!IsActive() || !Template)
 	{
 		return;
 	}
+
+	const auto StartTime = std::chrono::steady_clock::now();
+	SCOPE_STAT_CAT("ParticleSimulation", "Particles");
 
 	if (CachedTemplateVersion != Template->GetVersion())
 	{
@@ -314,6 +332,8 @@ void UParticleSystemComponent::AdvanceSimulation(float DeltaTime)
 	}
 
 	RebuildDynamicData();
+	const auto EndTime = std::chrono::steady_clock::now();
+	LastSimulationTimeMs = std::chrono::duration<double, std::milli>(EndTime - StartTime).count();
 }
 
 void UParticleSystemComponent::ResolveTemplate()

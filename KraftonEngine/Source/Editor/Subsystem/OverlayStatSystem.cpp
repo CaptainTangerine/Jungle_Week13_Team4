@@ -1,6 +1,9 @@
-#include "Editor/Subsystem/OverlayStatSystem.h"
+﻿#include "Editor/Subsystem/OverlayStatSystem.h"
 
 #include "Editor/EditorEngine.h"
+#include "Component/Primitive/ParticleSystemComponent.h"
+#include "GameFramework/AActor.h"
+#include "GameFramework/World.h"
 #include "Engine/Profiling/Time/Timer.h"
 #include "Engine/Profiling/Stats/MemoryStats.h"
 #include "Engine/Profiling/Stats/ShadowStats.h"
@@ -11,6 +14,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <unordered_set>
 
 // バイト数を適切な単位 (B / KB / MB / GB) に変換して文字列化
 static int FormatBytes(char* Buffer, int32 BufferSize, const char* Label, uint64 Bytes)
@@ -129,6 +133,77 @@ void FOverlayStatSystem::BuildMemoryLines(TArray<FString>& OutLines) const
 		FormatBytes(Buffer, sizeof(Buffer), Entry.Label, Entry.Bytes);
 		OutLines.push_back(FString(Buffer));
 	}
+}
+
+void FOverlayStatSystem::BuildParticlesLines(const UEditorEngine& Editor, TArray<FString>& OutLines) const
+{
+	uint32 ActiveParticles = 0;
+	uint32 EmitterCount = 0;
+	uint32 DrawCallCount = 0;
+	uint64 TemplateMemoryBytes = 0;
+	uint64 InstanceMemoryBytes = 0;
+	double RenderBuildTimeMs = 0.0;
+	double SimulationTimeMs = 0.0;
+	std::unordered_set<const UParticleSystem*> CountedTemplates;
+
+	if (const UWorld* World = Editor.GetWorld())
+	{
+		for (const AActor* Actor : World->GetActors())
+		{
+			if (!Actor)
+			{
+				continue;
+			}
+
+			for (UActorComponent* Component : Actor->GetComponents())
+			{
+				const UParticleSystemComponent* ParticleComponent = Cast<UParticleSystemComponent>(Component);
+				if (!ParticleComponent)
+				{
+					continue;
+				}
+
+				for (const FParticleEmitterInstance* Instance : ParticleComponent->GetEmitterInstances())
+				{
+					if (!Instance)
+					{
+						continue;
+					}
+					++EmitterCount;
+					ActiveParticles += static_cast<uint32>((std::max)(0, Instance->GetActiveParticleCount()));
+				}
+
+				InstanceMemoryBytes += ParticleComponent->GetInstanceMemoryBytes();
+				if (const UParticleSystem* Template = ParticleComponent->GetTemplate())
+				{
+					if (CountedTemplates.insert(Template).second)
+					{
+						TemplateMemoryBytes += ParticleComponent->GetTemplateMemoryBytes();
+					}
+				}
+
+				DrawCallCount += ParticleComponent->GetParticleDrawCallCount();
+				RenderBuildTimeMs += ParticleComponent->GetLastRenderBuildTimeMs();
+				SimulationTimeMs += ParticleComponent->GetLastSimulationTimeMs();
+			}
+		}
+	}
+
+	char Buffer[128] = {};
+	snprintf(Buffer, sizeof(Buffer), "Active Particles : %u", ActiveParticles);
+	OutLines.push_back(FString(Buffer));
+	snprintf(Buffer, sizeof(Buffer), "Emitters : %u", EmitterCount);
+	OutLines.push_back(FString(Buffer));
+	snprintf(Buffer, sizeof(Buffer), "Draw Calls : %u", DrawCallCount);
+	OutLines.push_back(FString(Buffer));
+	snprintf(Buffer, sizeof(Buffer), "Render Build Time : %.3f ms", RenderBuildTimeMs);
+	OutLines.push_back(FString(Buffer));
+	snprintf(Buffer, sizeof(Buffer), "Simulation Time : %.3f ms", SimulationTimeMs);
+	OutLines.push_back(FString(Buffer));
+	FormatBytes(Buffer, sizeof(Buffer), "Template Memory", TemplateMemoryBytes);
+	OutLines.push_back(FString(Buffer));
+	FormatBytes(Buffer, sizeof(Buffer), "Instance Memory", InstanceMemoryBytes);
+	OutLines.push_back(FString(Buffer));
 }
 
 void FOverlayStatSystem::BuildShadowLines(TArray<FString>& OutLines) const
@@ -315,6 +390,10 @@ void FOverlayStatSystem::BuildLines(const UEditorEngine& Editor, TArray<FOverlay
 	{
 		EstimatedLineCount += 8;
 	}
+	if (bShowParticles)
+	{
+		EstimatedLineCount += 7;
+	}
 	if (bShowShadow)
 	{
 		EstimatedLineCount += 8;
@@ -351,6 +430,13 @@ void FOverlayStatSystem::BuildLines(const UEditorEngine& Editor, TArray<FOverlay
 	{
 		Lines.clear();
 		BuildMemoryLines(Lines);
+		AppendGroup(Lines);
+	}
+
+	if (bShowParticles)
+	{
+		Lines.clear();
+		BuildParticlesLines(Editor, Lines);
 		AppendGroup(Lines);
 	}
 
@@ -458,6 +544,13 @@ void FOverlayStatSystem::RenderImGui(const UEditorEngine& Editor, const FRect& V
 		Lines.clear();
 		BuildMemoryLines(Lines);
 		RenderWindow("##StatMemoryOverlay", "Stat Memory", ImVec4(0.10f, 0.07f, 0.04f, 0.62f), Lines);
+	}
+
+	if (bShowParticles)
+	{
+		Lines.clear();
+		BuildParticlesLines(Editor, Lines);
+		RenderWindow("##StatParticlesOverlay", "Stat Particles", ImVec4(0.06f, 0.10f, 0.11f, 0.62f), Lines);
 	}
 
 	if (bShowShadow)

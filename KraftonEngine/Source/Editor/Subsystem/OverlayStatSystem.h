@@ -30,10 +30,12 @@ public:
 	void ShowFPS(bool bEnable = true) { bShowFPS = bEnable; }
 	void ShowPickingTime(bool bEnable = true) { bShowPickingTime = bEnable; }
 	void ShowMemory(bool bEnable = true) { bShowMemory = bEnable; }
+	void ShowParticles(bool bEnable = true) { bShowParticles = bEnable; }
 	void ShowShadow(bool bEnable = true) { bShowShadow = bEnable; }
 	void ShowSkinning(bool bEnable = true) { bShowSkinning = bEnable; }
 	bool ToggleFPS() { bShowFPS = !bShowFPS; return bShowFPS; }
 	bool ToggleMemory() { bShowMemory = !bShowMemory; return bShowMemory; }
+	bool ToggleParticles() { bShowParticles = !bShowParticles; return bShowParticles; }
 	bool ToggleShadow() { bShowShadow = !bShowShadow; return bShowShadow; }
 	bool ToggleSkinning() { bShowSkinning = !bShowSkinning; return bShowSkinning; }
 	void RecordPickingAttempt(double ElapsedMs);
@@ -42,6 +44,7 @@ public:
 		bShowFPS = false;
 		bShowPickingTime = false;
 		bShowMemory = false;
+		bShowParticles = false;
 		bShowShadow = false;
 		bShowSkinning = false;
 	}
@@ -57,12 +60,14 @@ private:
 	void AppendLine(TArray<FOverlayStatLine>& OutLines, float Y, const FString& Text) const;
 	void BuildFPSLines(const UEditorEngine& Editor, TArray<FString>& OutLines) const;
 	void BuildMemoryLines(TArray<FString>& OutLines) const;
+	void BuildParticlesLines(const UEditorEngine& Editor, TArray<FString>& OutLines) const;
 	void BuildShadowLines(TArray<FString>& OutLines) const;
 	void BuildSkinningLines(TArray<FString>& OutLines) const;
 
 	bool bShowFPS = false;
 	bool bShowPickingTime = false; // WM_LBUTTONDOWN , VK_LBUTTON 입력 시점이 아닌 오브젝트 충돌 판정에 걸린 시간을 측정합니다.
 	bool bShowMemory = false;
+	bool bShowParticles = false;
 	bool bShowShadow = false;
 	bool bShowSkinning = false;
 	double LastPickingTimeMs = 0.0;

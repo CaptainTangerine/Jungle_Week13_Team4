@@ -15,8 +15,10 @@
 #include "Render/Resource/Buffer.h"
 #include "Render/Scene/FScene.h"
 #include "Render/Types/FrameContext.h"
+#include "Profiling/Stats/Stats.h"
 
 #include <algorithm>
+#include <chrono>
 
 FParticleSystemSceneProxy::FParticleSystemSceneProxy(UParticleSystemComponent* InComponent)
 	: FPrimitiveSceneProxy(InComponent)
@@ -75,6 +77,8 @@ void FParticleSystemSceneProxy::ClearDynamicData()
 	CachedMeshBatches.clear();
 	SectionDraws.clear();
 	bDynamicDataDirty = true;
+	LastDrawCallCount = 0;
+	LastRenderBuildTimeMs = 0.0;
 }
 
 void FParticleSystemSceneProxy::UpdatePerViewport(const FFrameContext& Frame)
@@ -89,13 +93,13 @@ void FParticleSystemSceneProxy::UpdatePerViewport(const FFrameContext& Frame)
 		|| (OwnerActor && !OwnerActor->IsVisible()))
 	{
 		bVisible = false;
+		LastDrawCallCount = 0;
+		LastRenderBuildTimeMs = 0.0;
 		return;
 	}
 
 	bVisible = true;
 
-	bVisible = true;
-	bVisible = true;
 	RebuildRenderDataForView(Frame);
 	bDynamicDataDirty = false;
 }
@@ -136,6 +140,9 @@ void FParticleSystemSceneProxy::AppendDebugLines(FScene& Scene) const
 
 void FParticleSystemSceneProxy::RebuildRenderDataForView(const FFrameContext& Frame)
 {
+	const auto StartTime = std::chrono::steady_clock::now();
+	SCOPE_STAT_CAT("ParticleRenderBuild", "Particles");
+
 	DrawBufferCache.ClearViewData();
 	RenderPackets.clear();
 	CachedMeshBatches.clear();
@@ -148,6 +155,8 @@ void FParticleSystemSceneProxy::RebuildRenderDataForView(const FFrameContext& Fr
 
 	SortRenderPacketsForView();
 	RebuildSectionDrawsFromRenderPackets();
+	const auto EndTime = std::chrono::steady_clock::now();
+	LastRenderBuildTimeMs = std::chrono::duration<double, std::milli>(EndTime - StartTime).count();
 }
 
 void FParticleSystemSceneProxy::BuildEmitterForView(FDynamicEmitterDataBase* EmitterData, const FFrameContext& Frame)
@@ -238,6 +247,8 @@ void FParticleSystemSceneProxy::RebuildSectionDrawsFromRenderPackets()
 		}
 		SectionDraws.push_back(Draw);
 	}
+
+	LastDrawCallCount = static_cast<uint32>(SectionDraws.size());
 }
 
 bool FParticleSystemSceneProxy::PrepareDrawBuffer(ID3D11Device* Device, ID3D11DeviceContext* Context, FDrawCommandBuffer& OutBuffer) const
