@@ -2,6 +2,11 @@
 
 #include "Render/Resource/Buffer.h"
 
+namespace
+{
+	constexpr DXGI_FORMAT SceneColorFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
+}
+
 FViewport::~FViewport()
 {
 	ReleaseResources();
@@ -87,13 +92,13 @@ bool FViewport::CreateResources()
 {
 	if (!Device || Width == 0 || Height == 0) return false;
 
-	// ── 렌더 타깃 텍스처 ──
+	// ── HDR SceneColor 렌더 타깃 텍스처 ──
 	D3D11_TEXTURE2D_DESC TexDesc = {};
 	TexDesc.Width = Width;
 	TexDesc.Height = Height;
 	TexDesc.MipLevels = 1;
 	TexDesc.ArraySize = 1;
-	TexDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	TexDesc.Format = SceneColorFormat;
 	TexDesc.SampleDesc.Count = 1;
 	TexDesc.Usage = D3D11_USAGE_DEFAULT;
 	TexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
@@ -189,7 +194,7 @@ bool FViewport::CreateResources()
 	OcclusionDepthCopySRV->SetPrivateData(WKPDID_D3DDebugObjectName, static_cast<UINT>(strlen("ViewportOcclusionDepthCopySRV")), "ViewportOcclusionDepthCopySRV");
 
 	D3D11_SHADER_RESOURCE_VIEW_DESC SceneColorCopySRVDesc = {};
-	SceneColorCopySRVDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	SceneColorCopySRVDesc.Format = SceneColorFormat;
 	SceneColorCopySRVDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
 	SceneColorCopySRVDesc.Texture2D.MipLevels = 1;
 	SceneColorCopySRVDesc.Texture2D.MostDetailedMip = 0;

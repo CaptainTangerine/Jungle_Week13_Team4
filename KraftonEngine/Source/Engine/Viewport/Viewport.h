@@ -82,7 +82,7 @@ private:
 	ID3D11Texture2D* OcclusionDepthCopyTexture = nullptr;
 	ID3D11ShaderResourceView* OcclusionDepthCopySRV = nullptr;
 
-	// SceneColor 복사본 — FXAA 등 PostProcess에서 최종 화면을 읽기 위한 CopyResource 대상
+	// HDR SceneColor 복사본 — FXAA 등 PostProcess에서 최종 화면을 읽기 위한 CopyResource 대상
 	ID3D11Texture2D* SceneColorCopyTexture = nullptr;
 	ID3D11ShaderResourceView* SceneColorCopySRV = nullptr;
 

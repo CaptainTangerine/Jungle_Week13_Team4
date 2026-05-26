@@ -45,7 +45,7 @@ struct FFrameContext
 
 	ID3D11RenderTargetView*   ViewportRTV          = nullptr;
 	ID3D11DepthStencilView*   ViewportDSV          = nullptr;
-	// SceneColor 복사 — FXAA 등 PostProcess에서 최종 화면 읽기용
+	// HDR SceneColor 복사 — FXAA 등 PostProcess에서 최종 화면 읽기용
 	ID3D11ShaderResourceView* SceneColorCopySRV     = nullptr;
 	ID3D11Texture2D* SceneColorCopyTexture          = nullptr;
 	ID3D11Texture2D* ViewportRenderTexture          = nullptr;
