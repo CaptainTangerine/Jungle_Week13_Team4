@@ -116,8 +116,10 @@ public:
 	UParticleModuleTypeDataSprite();
 	EParticleEmitterType GetEmitterType() const override { return EParticleEmitterType::Sprite; }
 
-	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="Screen Alignment", Enum=EParticleScreenAlignment)
-	EParticleScreenAlignment ScreenAlignment = EParticleScreenAlignment::FacingCameraPosition;
+	// Deprecated storage for assets saved before Screen Alignment moved to Required.
+	// Intentionally not editable, so the particle editor exposes only Required::ScreenAlignment.
+	UPROPERTY(Save, Category="Sprite", DisplayName="Screen Alignment", Enum=EParticleScreenAlignment)
+	EParticleScreenAlignment ScreenAlignment = EParticleScreenAlignment::PSA_FacingCameraPosition;
 
 	UPROPERTY(Save, Category="Sprite", DisplayName="Use SubUV")
 	bool bUseSubUV = false;
@@ -333,6 +335,9 @@ public:
 
 	UPROPERTY(Edit, Save, Category="Required", DisplayName="Use Local Space")
 	bool bUseLocalSpace = false;
+
+	UPROPERTY(Edit, Save, Category="Required", DisplayName="Screen Alignment", Enum=EParticleScreenAlignment)
+	EParticleScreenAlignment ScreenAlignment = EParticleScreenAlignment::PSA_FacingCameraPosition;
 
 	UPROPERTY(Edit, Save, Category="Required", DisplayName="Sort Mode", Enum=EParticleSortMode)
 	EParticleSortMode SortMode = EParticleSortMode::None;

@@ -33,6 +33,31 @@ namespace
 		}
 		return 0.0f;
 	}
+
+	void ApplyParticleBlendModeOverride(FMeshSectionDraw& Draw, EParticleBlendMode BlendMode)
+	{
+		Draw.bHasRenderStateOverride = true;
+
+		switch (BlendMode)
+		{
+		case EParticleBlendMode::Opaque:
+			Draw.OverrideRenderPass = ERenderPass::Opaque;
+			Draw.OverrideBlendState = EBlendState::Opaque;
+			Draw.OverrideDepthStencilState = EDepthStencilState::DepthGreaterEqual;
+			break;
+		case EParticleBlendMode::Additive:
+			Draw.OverrideRenderPass = ERenderPass::AdditiveDecal;
+			Draw.OverrideBlendState = EBlendState::Additive;
+			Draw.OverrideDepthStencilState = EDepthStencilState::DepthReadOnly;
+			break;
+		case EParticleBlendMode::AlphaBlend:
+		default:
+			Draw.OverrideRenderPass = ERenderPass::AlphaBlend;
+			Draw.OverrideBlendState = EBlendState::AlphaBlend;
+			Draw.OverrideDepthStencilState = EDepthStencilState::DepthReadOnly;
+			break;
+		}
+	}
 }
 
 FParticleSystemSceneProxy::FParticleSystemSceneProxy(UParticleSystemComponent* InComponent)
@@ -245,6 +270,7 @@ void FParticleSystemSceneProxy::RebuildSectionDrawsFromRenderPackets()
 		Draw.Material = Packet.Material;
 		Draw.FirstIndex = Packet.FirstIndex;
 		Draw.IndexCount = Packet.IndexCount;
+		ApplyParticleBlendModeOverride(Draw, Packet.BlendMode);
 		Draw.bHasTranslucencySort = Packet.bHasTranslucencySort;
 		Draw.SortDepth = Packet.SortDepth;
 		Draw.TranslucencySortPriority = Packet.TranslucencySortPriority;

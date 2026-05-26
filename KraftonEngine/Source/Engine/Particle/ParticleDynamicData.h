@@ -75,6 +75,7 @@ struct FDynamicSpriteEmitterReplayDataBase : public FDynamicEmitterReplayDataBas
 	FString MaterialPath;
 	FString MeshPath;
 	EParticleBlendMode BlendMode = EParticleBlendMode::AlphaBlend;
+	EParticleScreenAlignment ScreenAlignment = EParticleScreenAlignment::PSA_FacingCameraPosition;
 	bool bUseSubUV = false;
 	FString SubUVResourceName;
 	int32 SubImagesX = 1;

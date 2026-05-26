@@ -58,6 +58,7 @@ FDynamicSpriteEmitterReplayDataBase::FDynamicSpriteEmitterReplayDataBase(const U
 	{
 		MaterialPath = ParticleDefaults::DefaultSpriteMaterialPath;
 		BlendMode = EParticleBlendMode::AlphaBlend;
+		ScreenAlignment = EParticleScreenAlignment::PSA_FacingCameraPosition;
 		return;
 	}
 
@@ -66,6 +67,7 @@ FDynamicSpriteEmitterReplayDataBase::FDynamicSpriteEmitterReplayDataBase(const U
 	bUseLocalSpace = RequiredModule->bUseLocalSpace;
 	MaterialPath = RequiredModule->MaterialPath.ToString();
 	BlendMode = RequiredModule->BlendMode;
+	ScreenAlignment = RequiredModule->ScreenAlignment;
 }
 
 FDynamicSpriteEmitterDataBase::FDynamicSpriteEmitterDataBase(const UParticleModuleRequired* RequiredModule)
