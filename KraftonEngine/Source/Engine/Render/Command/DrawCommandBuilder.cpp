@@ -21,6 +21,61 @@
 // UpdateProxyLOD defined in RenderCollector.cpp (shared)
 extern void UpdateProxyLOD(FPrimitiveSceneProxy* Proxy, const FLODUpdateContext& LODCtx);
 
+namespace
+{
+	ERenderPass GetEffectiveSectionRenderPass(const FMeshSectionDraw& Section)
+	{
+		if (Section.bHasRenderStateOverride)
+		{
+			return Section.OverrideRenderPass;
+		}
+		if (Section.Material)
+		{
+			return Section.Material->GetRenderPass();
+		}
+		return ERenderPass::Opaque;
+	}
+
+	bool ShouldDrawSectionInPass(const FMeshSectionDraw& Section, ERenderPass Pass)
+	{
+		if (Pass == ERenderPass::SelectionMask)
+		{
+			return true;
+		}
+
+		const ERenderPass EffectivePass = GetEffectiveSectionRenderPass(Section);
+		if (Pass == ERenderPass::PreDepth)
+		{
+			return EffectivePass == ERenderPass::Opaque;
+		}
+
+		return EffectivePass == Pass;
+	}
+
+	void ApplySectionRenderStateOverride(FDrawCommandRenderState& OutState, const FMeshSectionDraw& Section)
+	{
+		if (!Section.bHasRenderStateOverride)
+		{
+			return;
+		}
+
+		OutState.Blend = Section.OverrideBlendState;
+		OutState.DepthStencil = Section.OverrideDepthStencilState;
+	}
+
+	bool HasSectionForPass(const FPrimitiveSceneProxy& Proxy, ERenderPass Pass)
+	{
+		for (const FMeshSectionDraw& Section : Proxy.GetSectionDraws())
+		{
+			if (ShouldDrawSectionInPass(Section, Pass))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
 // ============================================================
 // Create / Release
 // ============================================================
@@ -118,7 +173,7 @@ FShader* FDrawCommandBuilder::SelectEffectiveShader(FShader* ProxyShader, ERende
 	{
 		VertexFactory = EUberLitDefines::EVertexFactory::MeshParticleInstanced;
 	}
-	const bool bColorOnly = (Pass == ERenderPass::AlphaBlend);
+	const bool bColorOnly = (Pass == ERenderPass::AlphaBlend || Pass == ERenderPass::AdditiveDecal);
 
 	switch (ViewMode)
 	{
@@ -206,6 +261,8 @@ void FDrawCommandBuilder::BuildCommandForProxy(FScene& Scene, const FPrimitiveSc
 		if (!ProxyBuffer.IB) continue;
 		if (Section.bInstanced && (!Section.VertexBuffer || !Section.IndexBuffer || !Section.InstanceBuffer || Section.InstanceCount == 0))
 			continue;
+		if (!ShouldDrawSectionInPass(Section, Pass))
+			continue;
 
 		// Section Material이 셰이더를 가지면 사용, 없으면 Proxy 폴백
 		FShader* SectionShader = (Section.Material && Section.Material->GetShader())
@@ -264,9 +321,14 @@ void FDrawCommandBuilder::BuildCommandForProxy(FScene& Scene, const FPrimitiveSc
 			for (int s = 0; s < (int)EMaterialTextureSlot::Max; s++)
 				Cmd.Bindings.SRVs[s] = const_cast<ID3D11ShaderResourceView*>(MatSRVs[s]);
 
-			// 섹션별 Material의 RenderPass가 현재 Pass와 일치할 때만 렌더 상태 오버라이드
-			if (Pass == Mat->GetRenderPass())
+			// Particle sections may override the material pass/blend from the editor Required module.
+			if (Pass == Mat->GetRenderPass() || Section.bHasRenderStateOverride)
 				ApplyMaterialRenderState(Cmd.RenderState, Mat, BaseRenderState);
+		}
+
+		if (!bDepthOnly)
+		{
+			ApplySectionRenderStateOverride(Cmd.RenderState, Section);
 		}
 
 		//alpha blend 에서는 depth write를 막음.
@@ -466,10 +528,30 @@ void FDrawCommandBuilder::BuildDecalCommands(FScene& Scene, FPrimitiveSceneProxy
 // ============================================================
 void FDrawCommandBuilder::BuildMeshCommands(FScene& Scene, const FPrimitiveSceneProxy* Proxy)
 {
-	if (Proxy->GetRenderPass() == ERenderPass::Opaque)
+	if (Proxy->GetSectionDraws().empty())
+	{
+		if (Proxy->GetRenderPass() == ERenderPass::Opaque)
+			BuildCommandForProxy(Scene, *Proxy, ERenderPass::PreDepth);
+
+		BuildCommandForProxy(Scene, *Proxy, Proxy->GetRenderPass());
+		return;
+	}
+
+	if (HasSectionForPass(*Proxy, ERenderPass::PreDepth))
 		BuildCommandForProxy(Scene, *Proxy, ERenderPass::PreDepth);
 
-	BuildCommandForProxy(Scene, *Proxy, Proxy->GetRenderPass());
+	for (uint32 PassIndex = 0; PassIndex < static_cast<uint32>(ERenderPass::MAX); ++PassIndex)
+	{
+		const ERenderPass Pass = static_cast<ERenderPass>(PassIndex);
+		if (Pass == ERenderPass::PreDepth || Pass == ERenderPass::SelectionMask)
+		{
+			continue;
+		}
+		if (HasSectionForPass(*Proxy, Pass))
+		{
+			BuildCommandForProxy(Scene, *Proxy, Pass);
+		}
+	}
 }
 
 // ============================================================
