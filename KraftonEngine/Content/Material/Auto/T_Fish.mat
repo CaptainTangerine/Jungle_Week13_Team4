@@ -1,0 +1,11 @@
+{
+  "PathFileName": "Content/Particle/T_Fish.mat",
+  "ShaderPath": "Shaders/UI/Billboard.hlsl",
+  "RenderPass": "AlphaBlend",
+  "BlendState": "AlphaBlend",
+  "RasterizerState": "SolidNoCull",
+  "Textures": {
+    "DiffuseTexture": "Content/Particle/T_Fish.PNG"
+  },
+  "Origin": "Manual"
+}
