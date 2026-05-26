@@ -177,6 +177,9 @@ public:
 	UPROPERTY(Edit, Save, Instanced, Category="SubUV", DisplayName="SubImage Index", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=SubImageIndex.Distribution, CppType=UDistributionFloat*)
 	;
 	FRawDistributionFloat SubImageIndex;
+
+	UPROPERTY(Edit, Save, Category="SubUV", DisplayName="Lock SubImage On Spawn")
+	bool bLockSubImageOnSpawn = false;
 };
 
 UCLASS()

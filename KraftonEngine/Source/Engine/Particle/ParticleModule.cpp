@@ -265,6 +265,11 @@ void UParticleModuleSubUV::Spawn(const FSpawnContext& Context)
 
 void UParticleModuleSubUV::Update(const FUpdateContext& Context)
 {
+	if (bLockSubImageOnSpawn)
+	{
+		return;
+	}
+
 	BEGIN_UPDATE_LOOP
 		FParticleSubUVPayload& SubUVPayload = *reinterpret_cast<FParticleSubUVPayload*>(
 			ParticleBase + Context.Offset);
