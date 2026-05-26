@@ -79,6 +79,24 @@ namespace ParticleRenderUtils
 			Particle.Age = BaseParticle->OneOverMaxLifetime > FMath::Epsilon
 				? BaseParticle->RelativeTime / BaseParticle->OneOverMaxLifetime
 				: 0.0f;
+			const bool bSpriteReplayData =
+				Source.EmitterType == EDynamicEmitterType::Sprite ||
+				Source.EmitterType == EDynamicEmitterType::Mesh ||
+				Source.EmitterType == EDynamicEmitterType::Beam ||
+				Source.EmitterType == EDynamicEmitterType::Ribbon;
+			const FDynamicSpriteEmitterReplayDataBase* SpriteSource = bSpriteReplayData
+				? static_cast<const FDynamicSpriteEmitterReplayDataBase*>(&Source)
+				: nullptr;
+			if (SpriteSource)
+			{
+				const int32 PayloadOffset = SpriteSource->SubUVPayloadOffset;
+				if (PayloadOffset >= 0 && PayloadOffset + static_cast<int32>(sizeof(FParticleSubUVPayload)) <= Stride)
+				{
+					const FParticleSubUVPayload* SubUVPayload = reinterpret_cast<const FParticleSubUVPayload*>(
+						ParticleDataBytes + static_cast<size_t>(ParticleIndex) * Stride + PayloadOffset);
+					Particle.SubImageIndex = SubUVPayload ? SubUVPayload->ImageIndex : 0.0f;
+				}
+			}
 
 			const FVector Diff = Particle.Position - Frame.CameraPosition;
 			Particle.CameraDistanceSq = Diff.Dot(Diff);
@@ -122,12 +140,15 @@ namespace ParticleRenderUtils
 			return FVector2(U, V);
 		}
 
+		const bool bHasSubImagePayload = Source.SubUVPayloadOffset >= 0;
 		const float RelativeTime = FMath::Clamp(Particle.RelativeTime, 0.0f, 1.0f);
-		const float FramePosition = Source.SubUVFrameRate > 0.0f
+		const float FramePosition = bHasSubImagePayload
+			? Particle.SubImageIndex
+			: Source.SubUVFrameRate > 0.0f
 			? (std::max)(0.0f, Particle.Age) * Source.SubUVFrameRate
 			: RelativeTime * static_cast<float>(TotalFrames);
 		const int32 RawFrameIndex = static_cast<int32>(std::floor(FramePosition));
-		const int32 FrameIndex = Source.bLoopSubUV
+		const int32 FrameIndex = (!bHasSubImagePayload && Source.bLoopSubUV)
 			? ((RawFrameIndex % TotalFrames) + TotalFrames) % TotalFrames
 			: (std::min)((std::max)(RawFrameIndex, 0), TotalFrames - 1);
 		const int32 FrameX = FrameIndex % SubImagesX;

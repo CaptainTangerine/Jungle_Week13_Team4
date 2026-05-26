@@ -22,6 +22,7 @@ struct FParticleProxyParticle
 	float Rotation = 0.0f;
 	float RelativeTime = 0.0f;
 	float Age = 0.0f;
+	float SubImageIndex = 0.0f;
 	float CameraDistanceSq = 0.0f;
 	float ViewDepth = 0.0f;
 };

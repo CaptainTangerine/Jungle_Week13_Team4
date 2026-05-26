@@ -41,6 +41,15 @@ namespace
 		return Distribution;
 	}
 
+	UDistributionFloatConstantCurve* NewSubImageIndexCurve(UObject* Outer)
+	{
+		UDistributionFloatConstantCurve* Distribution = NewDistribution<UDistributionFloatConstantCurve>(Outer);
+		Distribution->ConstantCurve.AddKey(0.0f, 0.0f);
+		Distribution->ConstantCurve.AddKey(1.0f, 0.0f);
+		Distribution->ConstantCurve.AutoSetTangents();
+		return Distribution;
+	}
+
 	UDistributionVectorConstant* NewVectorConstant(UObject* Outer, const FVector& Value)
 	{
 		UDistributionVectorConstant* Distribution = NewDistribution<UDistributionVectorConstant>(Outer);
@@ -224,6 +233,43 @@ bool UParticleModuleTypeDataSprite::ShouldExposeProperty(const FProperty& Proper
 	}
 
 	return UParticleModuleTypeDataBase::ShouldExposeProperty(Property);
+}
+
+UParticleModuleSubUV::UParticleModuleSubUV()
+{
+	SubImageIndex.SetDistribution(NewSubImageIndexCurve(this));
+}
+
+int32 UParticleModuleSubUV::GetParticlePayloadSize() const
+{
+	return sizeof(FParticleSubUVPayload);
+}
+
+float UParticleModuleSubUV::DetermineImageIndex(const FContext& Context, const FBaseParticle* Particle) const
+{
+	const float RelativeTime = Particle ? FMath::Clamp(Particle->RelativeTime, 0.0f, 1.0f) : 0.0f;
+	return std::max(0.0f, SubImageIndex.GetValue(RelativeTime, Context.GetDistributionData()));
+}
+
+void UParticleModuleSubUV::Spawn(const FSpawnContext& Context)
+{
+	if (!Context.ParticleBase)
+	{
+		return;
+	}
+
+	SPAWN_INIT
+	PARTICLE_ELEMENT(FParticleSubUVPayload, SubUVPayload)
+	SubUVPayload.ImageIndex = DetermineImageIndex(Context, &Particle);
+}
+
+void UParticleModuleSubUV::Update(const FUpdateContext& Context)
+{
+	BEGIN_UPDATE_LOOP
+		FParticleSubUVPayload& SubUVPayload = *reinterpret_cast<FParticleSubUVPayload*>(
+			ParticleBase + Context.Offset);
+		SubUVPayload.ImageIndex = DetermineImageIndex(Context, &Particle);
+	END_UPDATE_LOOP
 }
 
 UParticleModuleTypeDataMesh::UParticleModuleTypeDataMesh()

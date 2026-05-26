@@ -128,6 +128,11 @@ struct FParticleModuleCache
 	int32 InstancePayloadSize = 0;
 };
 
+struct FParticleSubUVPayload
+{
+	float ImageIndex = 0.0f;
+};
+
 constexpr int32 MaxParticleBeamNoisePoints = 64;
 
 struct FParticleBeamNoisePoint

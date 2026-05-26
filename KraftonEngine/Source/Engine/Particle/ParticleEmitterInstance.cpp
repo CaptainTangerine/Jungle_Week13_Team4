@@ -393,6 +393,29 @@ FDynamicEmitterDataBase* FParticleEmitterInstance::CreateDynamicData(int32 Emitt
 			SpriteSource.bLoopSubUV = SpriteTypeData->bLoopSubUV;
 		}
 
+		for (UParticleModule* Module : CurrentLODLevel->GetModules())
+		{
+			if (!Module || !Module->IsEnabled())
+			{
+				continue;
+			}
+
+			if (const UParticleModuleSubUV* SubUVModule = Cast<UParticleModuleSubUV>(Module))
+			{
+				SpriteSource.bUseSubUV = true;
+				SpriteSource.SubUVResourceName = SubUVModule->SubUVResourceName.ToString();
+				SpriteSource.SubImagesX = std::max(1, SubUVModule->SubImagesX);
+				SpriteSource.SubImagesY = std::max(1, SubUVModule->SubImagesY);
+				SpriteSource.SubUVFrameRate = 0.0f;
+				SpriteSource.bLoopSubUV = false;
+				if (const FParticleModuleCache* Cache = LODData.FindModuleCache(SubUVModule))
+				{
+					SpriteSource.SubUVPayloadOffset = Cache->ParticlePayloadOffset;
+				}
+				break;
+			}
+		}
+
 		if (const UParticleModuleTypeDataMesh* MeshTypeData = Cast<UParticleModuleTypeDataMesh>(CurrentLODLevel->GetTypeDataModule()))
 		{
 			SpriteSource.MeshPath = MeshTypeData->MeshPath.ToString();
