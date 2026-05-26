@@ -103,6 +103,12 @@ void UParticleEmitter::CacheEmitterModuleInfo()
 
 		int32 LODParticleSize = sizeof(FBaseParticle);
 		int32 LODInstancePayloadSize = 0;
+		if (LODLevel->GetTypeDataModule()
+			&& LODLevel->GetTypeDataModule()->IsA<UParticleModuleTypeDataRibbon>())
+		{
+			LODParticleSize = FMath::AlignBytes(LODParticleSize, 16);
+			LODParticleSize += sizeof(FRibbonParticlePayload);
+		}
 
 		for (UParticleModule* Module : LODLevel->GetModules())
 		{
