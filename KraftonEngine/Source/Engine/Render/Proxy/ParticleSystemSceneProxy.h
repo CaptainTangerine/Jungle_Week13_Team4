@@ -78,6 +78,9 @@ public:
 	virtual bool PrepareDrawBuffer(ID3D11Device* Device,
 		ID3D11DeviceContext* Context, FDrawCommandBuffer& OutBuffer) const override;
 
+	uint32 GetParticleDrawCallCount() const { return bVisible ? LastDrawCallCount : 0; }
+	double GetLastRenderBuildTimeMs() const { return bVisible ? LastRenderBuildTimeMs : 0.0; }
+
 private:
 	UParticleSystemComponent* GetParticleComponent() const;
 
@@ -106,4 +109,6 @@ private:
 	FParticleMaterialCache MaterialCache;
 
 	bool bDynamicDataDirty = true;
+	uint32 LastDrawCallCount = 0;
+	double LastRenderBuildTimeMs = 0.0;
 };

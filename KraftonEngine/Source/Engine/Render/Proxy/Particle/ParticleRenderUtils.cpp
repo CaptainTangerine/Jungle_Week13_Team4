@@ -13,9 +13,21 @@ namespace ParticleRenderUtils
 		return Path.empty() || Path == "None";
 	}
 
+	EParticleSortMode ResolveParticleSortMode(EParticleSortMode SortMode, EParticleBlendMode BlendMode)
+	{
+		if (SortMode != EParticleSortMode::None)
+		{
+			return SortMode;
+		}
+
+		return BlendMode == EParticleBlendMode::AlphaBlend
+			? EParticleSortMode::ViewDepth
+			: EParticleSortMode::None;
+	}
+
 	bool ShouldSortParticles(EParticleSortMode SortMode)
 	{
-		return SortMode == EParticleSortMode::DistanceToCamera || SortMode == EParticleSortMode::ViewDepth;
+		return SortMode != EParticleSortMode::None;
 	}
 
 	FVector ApplyParticleScale(const FVector& Size, const FVector& Scale)
@@ -69,16 +81,27 @@ namespace ParticleRenderUtils
 
 			const FVector Diff = Particle.Position - Frame.CameraPosition;
 			Particle.CameraDistanceSq = Diff.Dot(Diff);
+			Particle.ViewDepth = Diff.Dot(Frame.CameraForward);
 			OutParticles.push_back(Particle);
 		}
 	}
 
-	void SortParticlesForView(TArray<FParticleProxyParticle>& Particles)
+	void SortParticlesForView(TArray<FParticleProxyParticle>& Particles, EParticleSortMode SortMode)
 	{
 		std::sort(Particles.begin(), Particles.end(),
-			[](const FParticleProxyParticle& A, const FParticleProxyParticle& B)
+			[SortMode](const FParticleProxyParticle& A, const FParticleProxyParticle& B)
 			{
-				return A.CameraDistanceSq > B.CameraDistanceSq;
+				switch (SortMode)
+				{
+				case EParticleSortMode::DistanceToCamera:
+					return A.CameraDistanceSq > B.CameraDistanceSq;
+				case EParticleSortMode::ViewDepth:
+					return A.ViewDepth > B.ViewDepth;
+				case EParticleSortMode::Age:
+					return A.RelativeTime > B.RelativeTime;
+				default:
+					return false;
+				}
 			});
 	}
 
@@ -204,12 +227,15 @@ namespace ParticleRenderUtils
 		}
 	}
 
-	float ComputePacketSortDepth(const TArray<FParticleProxyParticle>& Particles)
+	float ComputePacketSortDepth(const TArray<FParticleProxyParticle>& Particles, EParticleSortMode SortMode)
 	{
 		float SortDepth = 0.0f;
 		for (const FParticleProxyParticle& Particle : Particles)
 		{
-			SortDepth = (std::max)(SortDepth, Particle.CameraDistanceSq);
+			const float ParticleDepth = SortMode == EParticleSortMode::DistanceToCamera
+				? Particle.CameraDistanceSq
+				: Particle.ViewDepth;
+			SortDepth = (std::max)(SortDepth, ParticleDepth);
 		}
 		return SortDepth;
 	}

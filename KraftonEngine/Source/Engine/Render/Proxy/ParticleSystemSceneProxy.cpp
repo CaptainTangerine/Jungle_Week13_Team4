@@ -15,8 +15,25 @@
 #include "Render/Resource/Buffer.h"
 #include "Render/Scene/FScene.h"
 #include "Render/Types/FrameContext.h"
+#include "Profiling/Stats/Stats.h"
 
 #include <algorithm>
+#include <chrono>
+
+namespace
+{
+	float FindEmitterTime(const TArray<FDynamicEmitterDataBase*>& DynamicEmitters, int32 EmitterIndex)
+	{
+		for (const FDynamicEmitterDataBase* DynamicEmitter : DynamicEmitters)
+		{
+			if (DynamicEmitter && DynamicEmitter->EmitterIndex == EmitterIndex)
+			{
+				return DynamicEmitter->GetSource().EmitterTime;
+			}
+		}
+		return 0.0f;
+	}
+}
 
 FParticleSystemSceneProxy::FParticleSystemSceneProxy(UParticleSystemComponent* InComponent)
 	: FPrimitiveSceneProxy(InComponent)
@@ -75,6 +92,8 @@ void FParticleSystemSceneProxy::ClearDynamicData()
 	CachedMeshBatches.clear();
 	SectionDraws.clear();
 	bDynamicDataDirty = true;
+	LastDrawCallCount = 0;
+	LastRenderBuildTimeMs = 0.0;
 }
 
 void FParticleSystemSceneProxy::UpdatePerViewport(const FFrameContext& Frame)
@@ -89,13 +108,13 @@ void FParticleSystemSceneProxy::UpdatePerViewport(const FFrameContext& Frame)
 		|| (OwnerActor && !OwnerActor->IsVisible()))
 	{
 		bVisible = false;
+		LastDrawCallCount = 0;
+		LastRenderBuildTimeMs = 0.0;
 		return;
 	}
 
 	bVisible = true;
 
-	bVisible = true;
-	bVisible = true;
 	RebuildRenderDataForView(Frame);
 	bDynamicDataDirty = false;
 }
@@ -111,8 +130,10 @@ void FParticleSystemSceneProxy::AppendDebugLines(FScene& Scene) const
 
 	const FMatrix ComponentToWorld = Component->GetWorldMatrix();
 	const int32 LODIndex = Component->GetCurrentLODIndex();
-	for (UParticleEmitter* Emitter : Template->GetEmitters())
+	const TArray<UParticleEmitter*>& Emitters = Template->GetEmitters();
+	for (int32 EmitterIndex = 0; EmitterIndex < static_cast<int32>(Emitters.size()); ++EmitterIndex)
 	{
+		UParticleEmitter* Emitter = Emitters[EmitterIndex];
 		if (!Emitter || !Emitter->IsEnabled())
 		{
 			continue;
@@ -124,11 +145,12 @@ void FParticleSystemSceneProxy::AppendDebugLines(FScene& Scene) const
 			continue;
 		}
 
+		const float EmitterTime = FindEmitterTime(DynamicEmitters, EmitterIndex);
 		for (UParticleModule* Module : LODLevel->GetModules())
 		{
 			if (UParticleModuleVectorFieldLocal* VectorField = Cast<UParticleModuleVectorFieldLocal>(Module))
 			{
-				VectorField->AppendFieldBoundsDebugLines(Scene, ComponentToWorld);
+				VectorField->AppendFieldDebugLines(Scene, ComponentToWorld, LODLevel, EmitterTime);
 			}
 		}
 	}
@@ -136,6 +158,9 @@ void FParticleSystemSceneProxy::AppendDebugLines(FScene& Scene) const
 
 void FParticleSystemSceneProxy::RebuildRenderDataForView(const FFrameContext& Frame)
 {
+	const auto StartTime = std::chrono::steady_clock::now();
+	SCOPE_STAT_CAT("ParticleRenderBuild", "Particles");
+
 	DrawBufferCache.ClearViewData();
 	RenderPackets.clear();
 	CachedMeshBatches.clear();
@@ -148,6 +173,8 @@ void FParticleSystemSceneProxy::RebuildRenderDataForView(const FFrameContext& Fr
 
 	SortRenderPacketsForView();
 	RebuildSectionDrawsFromRenderPackets();
+	const auto EndTime = std::chrono::steady_clock::now();
+	LastRenderBuildTimeMs = std::chrono::duration<double, std::milli>(EndTime - StartTime).count();
 }
 
 void FParticleSystemSceneProxy::BuildEmitterForView(FDynamicEmitterDataBase* EmitterData, const FFrameContext& Frame)
@@ -218,6 +245,9 @@ void FParticleSystemSceneProxy::RebuildSectionDrawsFromRenderPackets()
 		Draw.Material = Packet.Material;
 		Draw.FirstIndex = Packet.FirstIndex;
 		Draw.IndexCount = Packet.IndexCount;
+		Draw.bHasTranslucencySort = Packet.bHasTranslucencySort;
+		Draw.SortDepth = Packet.SortDepth;
+		Draw.TranslucencySortPriority = Packet.TranslucencySortPriority;
 		if (Packet.PacketType == EParticleRenderPacketType::InstancedMesh && Packet.Mesh)
 		{
 			FMeshBuffer* MeshBuffer = Packet.Mesh->GetLODMeshBuffer(0);
@@ -238,6 +268,8 @@ void FParticleSystemSceneProxy::RebuildSectionDrawsFromRenderPackets()
 		}
 		SectionDraws.push_back(Draw);
 	}
+
+	LastDrawCallCount = static_cast<uint32>(SectionDraws.size());
 }
 
 bool FParticleSystemSceneProxy::PrepareDrawBuffer(ID3D11Device* Device, ID3D11DeviceContext* Context, FDrawCommandBuffer& OutBuffer) const

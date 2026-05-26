@@ -237,6 +237,8 @@ void FEditorConsoleWidget::RegisterDiagnosticsCommands()
 		"Diagnostics", "stat fps", "Shows the FPS overlay stat.");
 	RegisterCommand("stat memory", [this](const TArray<FString>& Args) { HandleStatMemory(Args); },
 		"Diagnostics", "stat memory", "Shows the memory overlay stat.");
+	RegisterCommand("stat particles", [this](const TArray<FString>& Args) { HandleStatParticles(Args); },
+		"Diagnostics", "stat particles", "Shows the particle system overlay stat.");
 	RegisterCommand("stat shadow", [this](const TArray<FString>& Args) { HandleStatShadow(Args); },
 		"Diagnostics", "stat shadow", "Shows the shadow overlay stat.");
 	RegisterCommand("stat skinning", [this](const TArray<FString>& Args) { HandleStatSkinning(Args); },
@@ -838,6 +840,18 @@ void FEditorConsoleWidget::HandleStatMemory(const TArray<FString>& Args)
 	}
 	const bool bEnabled = EditorEngine->GetOverlayStatSystem().ToggleMemory();
 	AddLog("Overlay stat %s: memory\n", bEnabled ? "enabled" : "disabled");
+}
+
+void FEditorConsoleWidget::HandleStatParticles(const TArray<FString>& Args)
+{
+	(void)Args;
+	if (!EditorEngine)
+	{
+		AddLog("[ERROR] EditorEngine is null.\n");
+		return;
+	}
+	const bool bEnabled = EditorEngine->GetOverlayStatSystem().ToggleParticles();
+	AddLog("Overlay stat %s: particles\n", bEnabled ? "enabled" : "disabled");
 }
 
 void FEditorConsoleWidget::HandleStatShadow(const TArray<FString>& Args)

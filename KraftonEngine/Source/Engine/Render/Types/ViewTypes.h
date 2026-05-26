@@ -49,6 +49,7 @@ struct FShowFlags
 	bool bSkeletalMesh = true;
 	bool bGrid = true;
 	bool bWorldAxis = true;
+	bool bOriginAxisGizmo = false;
 	bool bGizmo = true;
 	bool bBillboardText = true;
 	bool bBoundingVolume = false;

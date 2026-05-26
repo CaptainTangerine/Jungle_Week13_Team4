@@ -1,4 +1,4 @@
-#include "Particle/VectorField/VectorFieldFgaImporter.h"
+﻿#include "Particle/VectorField/VectorFieldFgaImporter.h"
 
 #include "Particle/VectorField/VectorFieldAsset.h"
 #include "Platform/Paths.h"
@@ -45,7 +45,7 @@ namespace
 
 	TArray<double> ExtractNumbers(FString Text)
 	{
-		// FGA is CSV-like. Replacing separators lets scientific notation remain intact.
+		// FGA is CSV처럼 파싱함.
 		for (char& Character : Text)
 		{
 			if (Character == ',' || Character == ';' || Character == '\r' || Character == '\n' || Character == '\t')

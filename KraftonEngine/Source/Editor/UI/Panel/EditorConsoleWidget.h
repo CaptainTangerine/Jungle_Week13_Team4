@@ -104,6 +104,7 @@ private:
 	void HandleObjList(const TArray<FString>& Args);
 	void HandleStatFPS(const TArray<FString>& Args);
 	void HandleStatMemory(const TArray<FString>& Args);
+	void HandleStatParticles(const TArray<FString>& Args);
 	void HandleStatShadow(const TArray<FString>& Args);
 	void HandleStatSkinning(const TArray<FString>& Args);
 	void HandleStatNone(const TArray<FString>& Args);

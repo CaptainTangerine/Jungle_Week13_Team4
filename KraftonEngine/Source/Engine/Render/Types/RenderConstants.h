@@ -347,5 +347,9 @@ struct FMeshSectionDraw
 	uint32 InstanceStride = 0;
 	uint32 InstanceCount = 0;
 	uint32 StartInstance = 0;
+
+	bool bHasTranslucencySort = false;
+	float SortDepth = 0.0f;
+	int32 TranslucencySortPriority = 0;
 };
 

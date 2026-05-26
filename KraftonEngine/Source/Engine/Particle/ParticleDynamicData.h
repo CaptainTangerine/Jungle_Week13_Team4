@@ -62,6 +62,7 @@ struct FDynamicEmitterReplayDataBase
 	float EmitterTime = 0.0f;
 	FVector Scale = FVector::OneVector;
 	EParticleSortMode SortMode = EParticleSortMode::None;
+	int32 TranslucencySortPriority = 0;
 	bool bUseLocalSpace = false;
 	FParticleDataContainer DataContainer;
 };
