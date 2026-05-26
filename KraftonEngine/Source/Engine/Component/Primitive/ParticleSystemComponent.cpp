@@ -251,6 +251,20 @@ bool UParticleSystemComponent::GetVectorParameter(FName Name, FVector& OutValue)
 	return false;
 }
 
+bool UParticleSystemComponent::GetObjectParameter(FName Name, UObject*& OutValue) const
+{
+	for (const FParticleObjectParameter& Parameter : ObjectParameters)
+	{
+		if (Parameter.Name == Name && IsValid(Parameter.Value))
+		{
+			OutValue = Parameter.Value;
+			return true;
+		}
+	}
+	OutValue = nullptr;
+	return false;
+}
+
 void UParticleSystemComponent::SetFloatParameter(FName Name, float Value)
 {
 	for (FParticleFloatParameter& Parameter : FloatParameters)
@@ -283,6 +297,36 @@ void UParticleSystemComponent::SetVectorParameter(FName Name, const FVector& Val
 	Parameter.Name = Name;
 	Parameter.Value = Value;
 	VectorParameters.push_back(Parameter);
+}
+
+void UParticleSystemComponent::SetObjectParameter(FName Name, UObject* Value)
+{
+	for (FParticleObjectParameter& Parameter : ObjectParameters)
+	{
+		if (Parameter.Name == Name)
+		{
+			Parameter.Value = Value;
+			return;
+		}
+	}
+
+	FParticleObjectParameter Parameter;
+	Parameter.Name = Name;
+	Parameter.Value = Value;
+	ObjectParameters.push_back(Parameter);
+}
+
+FParticleEmitterInstance* UParticleSystemComponent::FindEmitterInstanceByName(FName EmitterName) const
+{
+	for (FParticleEmitterInstance* Instance : EmitterInstances)
+	{
+		if (Instance && Instance->GetEmitterTemplate()
+			&& Instance->GetEmitterTemplate()->GetEmitterName() == EmitterName)
+		{
+			return Instance;
+		}
+	}
+	return nullptr;
 }
 
 void UParticleSystemComponent::ReportParticleEvent(const FParticleEventData& EventData)

@@ -16,11 +16,6 @@ namespace
 		return A.RelativeTime < B.RelativeTime;
 	}
 
-	bool SortByParticleAgeDesc(const FParticleProxyParticle& A, const FParticleProxyParticle& B)
-	{
-		return A.RelativeTime > B.RelativeTime;
-	}
-
 	FVector SafeNormal(const FVector& Value, const FVector& Fallback)
 	{
 		const float Length = Value.Length();
@@ -227,30 +222,61 @@ void FParticleTrailBuilder::BuildRibbon(const FDynamicRibbonEmitterData& Emitter
 		return;
 	}
 
-	std::sort(Particles.begin(), Particles.end(), SortByParticleAgeAsc);
+	if (Source.RibbonPayloadOffset >= 0 && Source.DataContainer.ParticleData)
+	{
+		for (int32 ActiveIndex = 0; ActiveIndex < Source.ActiveParticleCount
+			&& ActiveIndex < static_cast<int32>(Particles.size()); ++ActiveIndex)
+		{
+			const int32 ParticleIndex = Source.DataContainer.ParticleIndices
+				? Source.DataContainer.ParticleIndices[ActiveIndex]
+				: ActiveIndex;
+			const uint8* ParticleBytes = Source.DataContainer.ParticleData
+				+ static_cast<size_t>(ParticleIndex) * Source.ParticleStride;
+			const FRibbonParticlePayload* Payload = reinterpret_cast<const FRibbonParticlePayload*>(
+				ParticleBytes + Source.RibbonPayloadOffset);
+			Particles[ActiveIndex].RibbonSpawnSerial = Payload->SpawnSerial;
+			Particles[ActiveIndex].RibbonSourceParticleId = Payload->SourceParticleId;
+			Particles[ActiveIndex].RibbonTrailIndex = Payload->TrailIndex;
+		}
+	}
+
+	std::sort(Particles.begin(), Particles.end(),
+		[](const FParticleProxyParticle& A, const FParticleProxyParticle& B)
+		{
+			if (A.RibbonTrailIndex != B.RibbonTrailIndex)
+			{
+				return A.RibbonTrailIndex < B.RibbonTrailIndex;
+			}
+			return A.RibbonSpawnSerial < B.RibbonSpawnSerial;
+		});
 
 	const int32 MaxTrailCount = std::max(1, Source.TrailCount);
 	const int32 MaxParticlesInTrail = std::max(2, Source.MaxParticlesInTrail);
-	const int32 MaxUsableParticles = MaxTrailCount * MaxParticlesInTrail;
-	if (static_cast<int32>(Particles.size()) > MaxUsableParticles)
-	{
-		Particles.resize(static_cast<size_t>(MaxUsableParticles));
-	}
 
 	const uint32 StartIndex = static_cast<uint32>(Indices.size());
 	int32 Cursor = 0;
-	for (int32 TrailIndex = 0; TrailIndex < MaxTrailCount && Cursor < static_cast<int32>(Particles.size()); ++TrailIndex)
+	int32 RenderedTrailCount = 0;
+	while (Cursor < static_cast<int32>(Particles.size()) && RenderedTrailCount < MaxTrailCount)
 	{
-		const int32 Remaining = static_cast<int32>(Particles.size()) - Cursor;
-		const int32 PointCount = std::min(MaxParticlesInTrail, Remaining);
+		const int32 TrailIndex = Particles[Cursor].RibbonTrailIndex;
+		int32 TrailEnd = Cursor + 1;
+		while (TrailEnd < static_cast<int32>(Particles.size())
+			&& Particles[TrailEnd].RibbonTrailIndex == TrailIndex)
+		{
+			++TrailEnd;
+		}
+		const int32 StartPoint = std::max(Cursor, TrailEnd - MaxParticlesInTrail);
+		const int32 PointCount = TrailEnd - StartPoint;
 		if (PointCount < 2)
 		{
-			break;
+			Cursor = TrailEnd;
+			++RenderedTrailCount;
+			continue;
 		}
 
-		std::sort(Particles.begin() + Cursor, Particles.begin() + Cursor + PointCount, SortByParticleAgeDesc);
-		BuildRibbonTrailVertices(Particles, Cursor, PointCount, Source);
-		Cursor += PointCount;
+		BuildRibbonTrailVertices(Particles, StartPoint, PointCount, Source);
+		Cursor = TrailEnd;
+		++RenderedTrailCount;
 	}
 
 	const uint32 IndexCount = static_cast<uint32>(Indices.size()) - StartIndex;

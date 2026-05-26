@@ -7,6 +7,7 @@
 #include "Source/Engine/Component/Primitive/ParticleSystemComponent.generated.h"
 
 class UParticleSystem;
+class UObject;
 
 USTRUCT()
 struct FParticleFloatParameter
@@ -30,6 +31,12 @@ struct FParticleVectorParameter
 
 	UPROPERTY(Edit, Save, Category="Particle Parameter", DisplayName="Value")
 	FVector Value = FVector::ZeroVector;
+};
+
+struct FParticleObjectParameter
+{
+	FName Name;
+	UObject* Value = nullptr;
 };
 
 UCLASS()
@@ -72,8 +79,11 @@ public:
 	FString GetInstanceNameForParticles() const;
 	bool GetFloatParameter(FName Name, float& OutValue) const;
 	bool GetVectorParameter(FName Name, FVector& OutValue) const;
+	bool GetObjectParameter(FName Name, UObject*& OutValue) const;
 	void SetFloatParameter(FName Name, float Value);
 	void SetVectorParameter(FName Name, const FVector& Value);
+	void SetObjectParameter(FName Name, UObject* Value);
+	FParticleEmitterInstance* FindEmitterInstanceByName(FName EmitterName) const;
 	void ReportParticleEvent(const FParticleEventData& EventData);
 	void ClearParticleEvents();
 	const TArray<FParticleEventData>& GetParticleEvents() const { return ParticleEvents; }
@@ -95,6 +105,9 @@ private:
 
 	UPROPERTY(Edit, Save, Category="Particles", DisplayName="Vector Parameters", Type=Array, Struct=FParticleVectorParameter)
 	TArray<FParticleVectorParameter> VectorParameters;
+
+	// Runtime source references are assigned by gameplay code and are not serialized as asset data.
+	TArray<FParticleObjectParameter> ObjectParameters;
 
 	UParticleSystem* Template = nullptr;
 	TArray<FParticleEmitterInstance*> EmitterInstances;

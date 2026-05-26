@@ -121,6 +121,7 @@ struct FDynamicRibbonEmitterReplayData : public FDynamicTrailsEmitterReplayData
 	explicit FDynamicRibbonEmitterReplayData(const UParticleModuleRequired* RequiredModule = nullptr);
 
 	int32 MaxParticlesInTrail = 64;
+	int32 RibbonPayloadOffset = -1;
 	float TilingDistance = 0.0f;
 	EParticleTrailRenderAxis RenderAxis = EParticleTrailRenderAxis::CameraFacing;
 };
