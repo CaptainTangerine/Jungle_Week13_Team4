@@ -213,11 +213,13 @@ void UParticleLODLevel::RebuildModuleLists()
 			continue;
 		}
 
+		const bool bIsEventReceiver = Module->IsA<UParticleModuleEventReceiverBase>();
+
 		if (Module->IsSpawnModule())
 		{
 			SpawnModules.push_back(Module);
 		}
-		if (Module->IsUpdateModule())
+		if (Module->IsUpdateModule() && !bIsEventReceiver)
 		{
 			UpdateModules.push_back(Module);
 		}
@@ -225,7 +227,7 @@ void UParticleLODLevel::RebuildModuleLists()
 		{
 			EventGeneratorModules.push_back(Module);
 		}
-		if (Module->IsA<UParticleModuleEventReceiverBase>())
+		if (bIsEventReceiver)
 		{
 			EventReceiverModules.push_back(Module);
 		}

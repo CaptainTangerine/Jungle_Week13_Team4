@@ -52,6 +52,9 @@ private:
 	void RemoveInvalidCurveTracks();
 	bool RenderLODDistanceProperties(class UParticleSystem* ParticleSystem);
 	bool RenderObjectPropertiesInline(class UObject* Object);
+	bool RenderInlinePropertyValue(struct FPropertyValue& Prop, class UObject* OwnerObject);
+	bool RenderStructPropertyInline(struct FPropertyValue& Prop, class UObject* OwnerObject);
+	bool RenderArrayPropertyInline(struct FPropertyValue& Prop, class UObject* OwnerObject);
 
 private:
 	struct FPreviewPlaybackState

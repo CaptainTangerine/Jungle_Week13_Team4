@@ -1,5 +1,6 @@
 #include "ParticleModuleEvent.h"
 
+#include "Component/Primitive/ParticleSystemComponent.h"
 #include "Math/MathUtils.h"
 #include "Particle/Asset/ParticleSerialization.h"
 #include "Particle/ParticleEmitterInstance.h"
@@ -61,6 +62,42 @@ namespace
 		return IsNoneEventName(Info.CustomName) ? GetDefaultEventName(Info.Type) : Info.CustomName;
 	}
 
+	bool UsesLocalSpace(FParticleEmitterInstance& Owner)
+	{
+		UParticleLODLevel* LODLevel = Owner.GetCurrentLODLevel();
+		return LODLevel
+			&& LODLevel->GetRequiredModule()
+			&& LODLevel->GetRequiredModule()->bUseLocalSpace;
+	}
+
+	FVector ToWorldPosition(FParticleEmitterInstance& Owner, const FVector& Position)
+	{
+		return UsesLocalSpace(Owner) && Owner.Component
+			? Owner.Component->GetWorldMatrix().TransformPositionWithW(Position)
+			: Position;
+	}
+
+	FVector ToWorldVector(FParticleEmitterInstance& Owner, const FVector& Vector)
+	{
+		return UsesLocalSpace(Owner) && Owner.Component
+			? Owner.Component->GetWorldMatrix().TransformVector(Vector)
+			: Vector;
+	}
+
+	FVector ToReceiverPosition(FParticleEmitterInstance& Owner, const FVector& WorldPosition)
+	{
+		return UsesLocalSpace(Owner) && Owner.Component
+			? Owner.Component->GetWorldMatrix().GetInverse().TransformPositionWithW(WorldPosition)
+			: WorldPosition;
+	}
+
+	FVector ToReceiverVector(FParticleEmitterInstance& Owner, const FVector& WorldVector)
+	{
+		return UsesLocalSpace(Owner) && Owner.Component
+			? Owner.Component->GetWorldMatrix().GetInverse().TransformVector(WorldVector)
+			: WorldVector;
+	}
+
 	float GetParticleTime(const FBaseParticle* Particle)
 	{
 		return Particle ? FMath::Clamp(Particle->RelativeTime, 0.0f, 1.0f) : 0.0f;
@@ -77,9 +114,9 @@ namespace
 		EventData.ParticleTime = GetParticleTime(Particle);
 		if (Particle)
 		{
-			EventData.Location = Particle->Location;
-			EventData.Velocity = Particle->Velocity;
-			EventData.Direction = Particle->Velocity.Normalized();
+			EventData.Location = ToWorldPosition(Owner, Particle->Location);
+			EventData.Velocity = ToWorldVector(Owner, Particle->Velocity);
+			EventData.Direction = EventData.Velocity.Normalized();
 		}
 		return EventData;
 	}
@@ -142,7 +179,7 @@ void UParticleModuleEventGenerator::HandleParticleBurst(FParticleEmitterInstance
 	EventData.Type = EParticleEventType::Burst;
 	EventData.EmitterTime = Owner.GetEmitterTime();
 	EventData.ParticleCount = ParticleCount;
-	EventData.Location = Location;
+	EventData.Location = ToWorldPosition(Owner, Location);
 
 	for (const FParticleEventGenerateInfo& Info : Events)
 	{
@@ -224,7 +261,9 @@ bool UParticleModuleEventGenerator::ShouldGenerateEvent(FParticleEmitterInstance
 
 void UParticleModuleEventReceiverBase::Update(const FUpdateContext& Context)
 {
-	const TArray<FParticleEventData> EventsSnapshot = Context.Owner.GetPendingEvents();
+	const TArray<FParticleEventData> EventsSnapshot = Context.Owner.Component
+		? Context.Owner.Component->GetParticleEvents()
+		: Context.Owner.GetPendingEvents();
 	for (const FParticleEventData& EventData : EventsSnapshot)
 	{
 		if (WillProcessParticleEvent(EventData))
@@ -255,27 +294,35 @@ void UParticleModuleEventReceiverSpawn::ProcessParticleEvent(const FParticleEven
 {
 	UObject* DistributionData = Owner.GetDistributionData();
 	const float EvalTime = bUseParticleTime ? EventData.ParticleTime : Owner.GetEmitterTime();
-	const int32 Count = std::max(0, static_cast<int32>(std::floor(SpawnCount.GetValue(EvalTime, DistributionData) + 0.5f)));
+	const float SpawnCountValue = SpawnCount.IsCreated()
+		? SpawnCount.GetValue(EvalTime, DistributionData)
+		: 1.0f;
+	const int32 Count = std::max(0, static_cast<int32>(std::floor(SpawnCountValue + 0.5f)));
 	if (Count <= 0)
 	{
 		return;
 	}
 
-	const bool bUseLocalSpace = Owner.GetCurrentLODLevel()
-		&& Owner.GetCurrentLODLevel()->GetRequiredModule()
-		&& Owner.GetCurrentLODLevel()->GetRequiredModule()->bUseLocalSpace;
+	const FVector EventNormal = EventData.Normal.IsNearlyZero()
+		? FVector::ZeroVector
+		: EventData.Normal.Normalized();
+	const FVector EventWorldOffset = ToWorldVector(Owner, EventLocationOffset)
+		+ EventNormal * EventNormalOffset;
 
 	const FVector SpawnLocation = bUsePSysLocation
-		? (bUseLocalSpace ? FVector::ZeroVector : Owner.GetComponentLocation())
-		: EventData.Location;
+		? (UsesLocalSpace(Owner) ? FVector::ZeroVector : Owner.GetComponentLocation())
+		: ToReceiverPosition(Owner, EventData.Location + EventWorldOffset);
 
 	FVector SpawnVelocity = FVector::ZeroVector;
 	if (bInheritVelocity)
 	{
-		SpawnVelocity = EventData.Velocity * InheritVelocityScale.GetValue(EvalTime, DistributionData);
+		SpawnVelocity = ToReceiverVector(Owner, EventData.Velocity) * InheritVelocityScale.GetValue(EvalTime, DistributionData);
 	}
 
-	Owner.SpawnParticles(Count, Owner.GetEmitterTime(), 0.0f, SpawnLocation, SpawnVelocity);
+	const int32 ActiveBeforeSpawn = Owner.GetActiveParticleCount();
+	Owner.SpawnParticles(Count, Owner.GetEmitterTime(), 0.0f, SpawnLocation, SpawnVelocity, bUseEventLocationOnly);
+	const int32 SpawnedCount = std::max(0, Owner.GetActiveParticleCount() - ActiveBeforeSpawn);
+	Owner.RecordEventReceiverSpawn(Count, SpawnedCount);
 }
 
 void UParticleModuleEventReceiverKillParticles::ProcessParticleEvent(const FParticleEventData& EventData, FParticleEmitterInstance& Owner)

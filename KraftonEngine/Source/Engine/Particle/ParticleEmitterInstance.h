@@ -41,11 +41,12 @@ struct FParticleEmitterInstance
 	virtual void Init(UParticleSystemComponent* InComponent, UParticleEmitter* InTemplate);
 	virtual void Reset();
 	virtual void Tick(float DeltaTime);
+	void ProcessParticleEvents(const TArray<FParticleEventData>& Events);
 
 	bool SetCurrentLODIndex(int32 InLODIndex);
 	void BuildLODData(UParticleLODLevel* LODLevel);
 
-	void SpawnParticles(int32 Count, float StartTime, float Increment, const FVector& InitialLocation, const FVector& InitialVelocity);
+	void SpawnParticles(int32 Count, float StartTime, float Increment, const FVector& InitialLocation, const FVector& InitialVelocity, bool bLockInitialLocation = false);
 	virtual void PreSpawn(FBaseParticle* Particle, const FVector& InitialLocation, const FVector& InitialVelocity);
 	virtual void PostSpawn(FBaseParticle* Particle, float Interp, float SpawnTime);
 	void KillParticle(int32 ActiveIndex);
@@ -54,6 +55,7 @@ struct FParticleEmitterInstance
 	void ClearPendingEvents();
 	const TArray<FParticleEventData>& GetPendingEvents() const { return PendingEvents; }
 	uint32 AllocateEventSerial() { return ++EventCounter; }
+	void RecordEventReceiverSpawn(int32 RequestedCount, int32 SpawnedCount);
 	void SetSpawningSuppressed(bool bInSuppressed) { bSpawningSuppressed = bInSuppressed; }
 	bool IsSpawningSuppressed() const { return bSpawningSuppressed; }
 
@@ -64,6 +66,9 @@ struct FParticleEmitterInstance
 	int32 GetCurrentLODIndex() const { return CurrentLODLevelIndex; }
 	int32 GetActiveParticleCount() const { return ActiveParticles; }
 	int32 GetMaxActiveParticleCount() const { return MaxActiveParticles; }
+	int32 GetLastProcessedParticleEventCount() const { return LastProcessedParticleEventCount; }
+	int32 GetLastEventReceiverSpawnRequestCount() const { return LastEventReceiverSpawnRequestCount; }
+	int32 GetLastEventReceiverSpawnedCount() const { return LastEventReceiverSpawnedCount; }
 	int32 GetParticleStride() const { return ParticleStride; }
 	float GetEmitterTime() const { return EmitterTime; }
 	uint64 GetAllocatedMemoryBytes() const
@@ -124,6 +129,9 @@ struct FParticleEmitterInstance
 	bool  bBurstFired = false;
 	bool bSpawningSuppressed = false;
 	uint32 EventCounter = 0;
+	int32 LastProcessedParticleEventCount = 0;
+	int32 LastEventReceiverSpawnRequestCount = 0;
+	int32 LastEventReceiverSpawnedCount = 0;
 	TArray<FParticleEventData> PendingEvents;
 
 protected:

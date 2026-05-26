@@ -107,7 +107,8 @@ bool UParticleModuleTypeDataSprite::ShouldExposeProperty(const FProperty& Proper
 		(std::strcmp(Property.Name, "SubUVResourceName") == 0 ||
 		 std::strcmp(Property.Name, "SubImagesX") == 0 ||
 		 std::strcmp(Property.Name, "SubImagesY") == 0 ||
-		 std::strcmp(Property.Name, "SubUVFrameRate") == 0))
+		 std::strcmp(Property.Name, "SubUVFrameRate") == 0 ||
+		 std::strcmp(Property.Name, "bLoopSubUV") == 0))
 	{
 		return bUseSubUV;
 	}
@@ -185,6 +186,11 @@ void UParticleModuleLocation::Spawn(const FSpawnContext& Context)
 {
 	if (!Context.ParticleBase)
 	{
+		return;
+	}
+	if (Context.bLockInitialLocation)
+	{
+		Context.ParticleBase->OldLocation = Context.ParticleBase->Location;
 		return;
 	}
 

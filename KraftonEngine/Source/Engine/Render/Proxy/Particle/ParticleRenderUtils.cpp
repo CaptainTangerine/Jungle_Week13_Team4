@@ -75,6 +75,9 @@ namespace ParticleRenderUtils
 			Particle.Color = BaseParticle->Color;
 			Particle.Rotation = BaseParticle->Rotation;
 			Particle.RelativeTime = BaseParticle->RelativeTime;
+			Particle.Age = BaseParticle->OneOverMaxLifetime > FMath::Epsilon
+				? BaseParticle->RelativeTime / BaseParticle->OneOverMaxLifetime
+				: 0.0f;
 
 			const FVector Diff = Particle.Position - Frame.CameraPosition;
 			Particle.CameraDistanceSq = Diff.Dot(Diff);
@@ -118,11 +121,14 @@ namespace ParticleRenderUtils
 			return FVector2(U, V);
 		}
 
-		const float RelativeTime = (std::max)(0.0f, Particle.RelativeTime);
+		const float RelativeTime = FMath::Clamp(Particle.RelativeTime, 0.0f, 1.0f);
 		const float FramePosition = Source.SubUVFrameRate > 0.0f
-			? RelativeTime * Source.SubUVFrameRate
+			? (std::max)(0.0f, Particle.Age) * Source.SubUVFrameRate
 			: RelativeTime * static_cast<float>(TotalFrames);
-		const int32 FrameIndex = static_cast<int32>(std::floor(FramePosition)) % TotalFrames;
+		const int32 RawFrameIndex = static_cast<int32>(std::floor(FramePosition));
+		const int32 FrameIndex = Source.bLoopSubUV
+			? ((RawFrameIndex % TotalFrames) + TotalFrames) % TotalFrames
+			: (std::min)((std::max)(RawFrameIndex, 0), TotalFrames - 1);
 		const int32 FrameX = FrameIndex % SubImagesX;
 		const int32 FrameY = FrameIndex / SubImagesX;
 		const float InvX = 1.0f / static_cast<float>(SubImagesX);

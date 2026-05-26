@@ -331,6 +331,15 @@ void UParticleSystemComponent::AdvanceSimulation(float DeltaTime)
 		EmitterInstance->Tick(DeltaTime);
 	}
 
+	const TArray<FParticleEventData> EventsSnapshot = ParticleEvents;
+	for (FParticleEmitterInstance* EmitterInstance : EmitterInstances)
+	{
+		if (EmitterInstance)
+		{
+			EmitterInstance->ProcessParticleEvents(EventsSnapshot);
+		}
+	}
+
 	RebuildDynamicData();
 	const auto EndTime = std::chrono::steady_clock::now();
 	LastSimulationTimeMs = std::chrono::duration<double, std::milli>(EndTime - StartTime).count();
