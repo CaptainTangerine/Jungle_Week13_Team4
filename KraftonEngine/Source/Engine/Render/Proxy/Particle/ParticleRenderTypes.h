@@ -13,6 +13,7 @@ class UStaticMesh;
 */
 struct FParticleProxyParticle
 {
+	int32 SourceParticleIndex = -1;
 	FVector OldPosition = FVector::ZeroVector;
 	FVector Position = FVector::ZeroVector;
 	FVector Velocity = FVector::ZeroVector;
@@ -21,6 +22,7 @@ struct FParticleProxyParticle
 	float Rotation = 0.0f;
 	float RelativeTime = 0.0f;
 	float Age = 0.0f;
+	float SubImageIndex = 0.0f;
 	float CameraDistanceSq = 0.0f;
 	float ViewDepth = 0.0f;
 };

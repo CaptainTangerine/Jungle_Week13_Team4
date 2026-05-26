@@ -121,27 +121,62 @@ public:
 	UPROPERTY(Save, Category="Sprite", DisplayName="Screen Alignment", Enum=EParticleScreenAlignment)
 	EParticleScreenAlignment ScreenAlignment = EParticleScreenAlignment::PSA_FacingCameraPosition;
 
-	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="Use SubUV")
+	UPROPERTY(Save, Category="Sprite", DisplayName="Use SubUV")
 	bool bUseSubUV = false;
 
-	// Optional atlas resource managed by FResourceManager.
-	// When set, particle sprites bind this atlas SRV directly and use its Columns/Rows as the SubUV grid.
-	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="SubUV Resource", AssetType="SubUVResource")
+	UPROPERTY(Save, Category="Sprite", DisplayName="SubUV Resource", AssetType="SubUVResource")
 	FName SubUVResourceName;
 
-	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="Sub Images X", Min=1.0f, Max=64.0f, Speed=1.0f)
+	UPROPERTY(Save, Category="Sprite", DisplayName="Sub Images X", Min=1.0f, Max=64.0f, Speed=1.0f)
 	int32 SubImagesX = 1;
 
-	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="Sub Images Y", Min=1.0f, Max=64.0f, Speed=1.0f)
+	UPROPERTY(Save, Category="Sprite", DisplayName="Sub Images Y", Min=1.0f, Max=64.0f, Speed=1.0f)
 	int32 SubImagesY = 1;
 
-	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="SubUV Frame Rate (FPS)", Min=0.0f, Max=120.0f, Speed=1.0f)
+	UPROPERTY(Save, Category="Sprite", DisplayName="SubUV Frame Rate (FPS)", Min=0.0f, Max=120.0f, Speed=1.0f)
 	float SubUVFrameRate = 16.0f;
 
-	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="Loop SubUV")
+	UPROPERTY(Save, Category="Sprite", DisplayName="Loop SubUV")
 	bool bLoopSubUV = false;
 
 	bool ShouldExposeProperty(const FProperty& Property) const override;
+};
+
+UCLASS()
+class UParticleModuleSubUVBase : public UParticleModule
+{
+public:
+	GENERATED_BODY()
+	EParticleModuleType GetModuleType() const override { return EParticleModuleType::SubUV; }
+};
+
+UCLASS()
+class UParticleModuleSubUV : public UParticleModuleSubUVBase
+{
+public:
+	GENERATED_BODY()
+	UParticleModuleSubUV();
+
+	bool IsSpawnModule() const override { return true; }
+	bool IsUpdateModule() const override { return true; }
+	int32 GetParticlePayloadSize() const override;
+	void Spawn(const FSpawnContext& Context) override;
+	void Update(const FUpdateContext& Context) override;
+
+	float DetermineImageIndex(const FContext& Context, const FBaseParticle* Particle) const;
+
+	UPROPERTY(Edit, Save, Category="SubUV", DisplayName="SubUV Resource", AssetType="SubUVResource")
+	FName SubUVResourceName;
+
+	UPROPERTY(Edit, Save, Category="SubUV", DisplayName="Sub Images X", Min=1.0f, Max=64.0f, Speed=1.0f)
+	int32 SubImagesX = 1;
+
+	UPROPERTY(Edit, Save, Category="SubUV", DisplayName="Sub Images Y", Min=1.0f, Max=64.0f, Speed=1.0f)
+	int32 SubImagesY = 1;
+
+	UPROPERTY(Edit, Save, Instanced, Category="SubUV", DisplayName="SubImage Index", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=SubImageIndex.Distribution, CppType=UDistributionFloat*)
+	;
+	FRawDistributionFloat SubImageIndex;
 };
 
 UCLASS()
@@ -263,15 +298,26 @@ class UParticleModuleBeamNoise : public UParticleModuleBeamBase
 {
 public:
 	GENERATED_BODY()
+	bool IsSpawnModule() const override { return true; }
+	bool IsUpdateModule() const override { return true; }
+	int32 GetParticlePayloadSize() const override;
+	void Spawn(const FSpawnContext& Context) override;
+	void Update(const FUpdateContext& Context) override;
 
 	UPROPERTY(Edit, Save, Category="Beam Noise", DisplayName="Frequency", Min=0.0f, Max=64.0f, Speed=1.0f)
 	int32 Frequency = 0;
+
+	UPROPERTY(Edit, Save, Category="Beam Noise", DisplayName="Frequency Low Range", Min=0.0f, Max=64.0f, Speed=1.0f)
+	int32 FrequencyLowRange = 0;
 
 	UPROPERTY(Edit, Save, Category="Beam Noise", DisplayName="Strength", Min=0.0f, Max=10000.0f, Speed=1.0f)
 	float Strength = 0.0f;
 
 	UPROPERTY(Edit, Save, Category="Beam Noise", DisplayName="Speed", Min=0.0f, Max=1000.0f, Speed=0.1f)
 	float Speed = 0.0f;
+
+	UPROPERTY(Edit, Save, Category="Beam Noise", DisplayName="Noise Lock Time", Min=0.0f, Max=1000.0f, Speed=0.1f)
+	float NoiseLockTime = 0.0f;
 };
 
 UCLASS()

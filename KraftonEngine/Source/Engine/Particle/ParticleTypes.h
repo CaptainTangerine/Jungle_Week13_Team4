@@ -126,3 +126,28 @@ struct FParticleModuleCache
 	int32 InstancePayloadOffset = 0;
 	int32 InstancePayloadSize = 0;
 };
+
+struct FParticleSubUVPayload
+{
+	float ImageIndex = 0.0f;
+};
+
+constexpr int32 MaxParticleBeamNoisePoints = 64;
+
+struct FParticleBeamNoisePoint
+{
+	FVector CurrentOffset = FVector::ZeroVector;
+	FVector SourceOffset = FVector::ZeroVector;
+	FVector TargetOffset = FVector::ZeroVector;
+	float LockTimer = 0.0f;
+};
+
+struct FParticleBeamNoisePayload
+{
+	uint32 RandomSeed = 0;
+	int32 Frequency = 0;
+	float Strength = 0.0f;
+	float NoiseSpeed = 0.0f;
+	float NoiseLockTime = 0.0f;
+	FParticleBeamNoisePoint Points[MaxParticleBeamNoisePoints];
+};

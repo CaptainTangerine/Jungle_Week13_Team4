@@ -254,6 +254,7 @@ namespace
 		UClass* AbstractEventBase = UParticleModuleEventBase::StaticClass();
 		UClass* AbstractEventReceiverBase = UParticleModuleEventReceiverBase::StaticClass();
 		UClass* AbstractAccelerationBase = UParticleModuleAccelerationBase::StaticClass();
+		UClass* AbstractSubUVBase = UParticleModuleSubUVBase::StaticClass();
 		for (UClass* Class : UClass::GetAllClasses())
 		{
 			if (!Class
@@ -264,7 +265,8 @@ namespace
 				|| Class == AbstractCollisionBase
 				|| Class == AbstractEventBase
 				|| Class == AbstractEventReceiverBase
-				|| Class == AbstractAccelerationBase)
+				|| Class == AbstractAccelerationBase
+				|| Class == AbstractSubUVBase)
 			{
 				continue;
 			}
@@ -306,6 +308,10 @@ namespace
 		if (Class->IsA(UParticleModuleEventBase::StaticClass()))
 		{
 			return EParticleModuleType::Event;
+		}
+		if (Class->IsA(UParticleModuleSubUVBase::StaticClass()))
+		{
+			return EParticleModuleType::SubUV;
 		}
 		if (Class->IsA(UParticleModuleCollisionBase::StaticClass()))
 		{
@@ -384,6 +390,10 @@ namespace
 		if (Name.rfind(Prefix, 0) == 0)
 		{
 			Name = Name.substr(Prefix.size());
+		}
+		if (Name == "SubUV")
+		{
+			return "SubImage Index";
 		}
 		if (Name.empty())
 		{
@@ -1413,6 +1423,19 @@ void FParticleSystemEditorWidget::AddParticleModule(UParticleSystem* ParticleSys
 		return;
 	}
 
+	if (UParticleModuleSubUV* SubUVModule = Cast<UParticleModuleSubUV>(Module))
+	{
+		if (const UParticleModuleTypeDataSprite* SpriteTypeData = Cast<UParticleModuleTypeDataSprite>(LODLevel->GetTypeDataModule()))
+		{
+			if (SpriteTypeData->bUseSubUV)
+			{
+				SubUVModule->SubUVResourceName = SpriteTypeData->SubUVResourceName;
+				SubUVModule->SubImagesX = SpriteTypeData->SubImagesX;
+				SubUVModule->SubImagesY = SpriteTypeData->SubImagesY;
+			}
+		}
+	}
+
 	if (UParticleModuleRequired* RequiredModule = Cast<UParticleModuleRequired>(Module))
 	{
 		LODLevel->SetRequiredModule(RequiredModule);
@@ -1438,6 +1461,22 @@ void FParticleSystemEditorWidget::AddParticleModule(UParticleSystem* ParticleSys
 
 		LODLevel->AddModule(Module);
 		SelectedModule = Module;
+	}
+	else if (UParticleModuleSubUV* SubUVModule = Cast<UParticleModuleSubUV>(Module))
+	{
+		for (UParticleModule* ExistingModule : LODLevel->GetModules())
+		{
+			if (UParticleModuleSubUV* ExistingSubUV = Cast<UParticleModuleSubUV>(ExistingModule))
+			{
+				UObjectManager::Get().DestroyObject(SubUVModule);
+				SelectedModule = ExistingSubUV;
+				ParticleSystem->CacheSystemModuleInfo();
+				return;
+			}
+		}
+
+		LODLevel->AddModule(SubUVModule);
+		SelectedModule = SubUVModule;
 	}
 	else
 	{
@@ -1927,7 +1966,7 @@ void FParticleSystemEditorWidget::RenderEmitterPanel(UParticleSystem* ParticleSy
 				ImGui::Separator();
 
 				TArray<UClass*> ModuleClasses = EnumerateParticleModuleClasses();
-				const char* Categories[] = { "Emitter", "Type Data", "Beam", "Trail", "Spawn", "Event", "Collision", "Module" };
+				const char* Categories[] = { "Emitter", "Type Data", "Beam", "Trail", "Spawn", "SubUV", "Event", "Collision", "Module" };
 				for (const char* Category : Categories)
 				{
 					bool bHasCategory = false;
