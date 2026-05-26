@@ -46,7 +46,13 @@ public:
 	UPROPERTY(Edit, Save, Category="Local Vector Field", DisplayName="Draw Bounds")
 	bool bDrawBounds = true;
 
-	void AppendFieldBoundsDebugLines(FScene& Scene, const FMatrix& ComponentToWorld);
+	UPROPERTY(Edit, Save, Category="Local Vector Field", DisplayName="Draw Vectors")
+	bool bDrawVectors = false;
+
+	UPROPERTY(Edit, Save, Category="Local Vector Field", DisplayName="Vector Draw Scale", Min=0.0f, Max=10000.0f, Speed=0.1f)
+	float DebugVectorScale = 1.0f;
+
+	void AppendFieldDebugLines(FScene& Scene, const FMatrix& ComponentToWorld);
 
 private:
 	UVectorFieldAsset* ResolveVectorField();

@@ -128,7 +128,7 @@ void FParticleSystemSceneProxy::AppendDebugLines(FScene& Scene) const
 		{
 			if (UParticleModuleVectorFieldLocal* VectorField = Cast<UParticleModuleVectorFieldLocal>(Module))
 			{
-				VectorField->AppendFieldBoundsDebugLines(Scene, ComponentToWorld);
+				VectorField->AppendFieldDebugLines(Scene, ComponentToWorld);
 			}
 		}
 	}
