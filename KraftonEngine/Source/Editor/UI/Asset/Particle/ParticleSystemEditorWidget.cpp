@@ -19,6 +19,7 @@
 #include "GameFramework/Light/DirectionalLightActor.h"
 #include "GameFramework/World.h"
 #include "Math/Rotator.h"
+#include "Materials/MaterialManager.h"
 #include "Object/Ptr/SoftObjectPtr.h"
 #include "Object/Reflection/ObjectFactory.h"
 #include "Object/Reflection/UClass.h"
@@ -139,6 +140,96 @@ namespace
 		std::transform(LowerText.begin(), LowerText.end(), LowerText.begin(), [](unsigned char Ch) { return static_cast<char>(std::tolower(Ch)); });
 		std::transform(LowerFilter.begin(), LowerFilter.end(), LowerFilter.begin(), [](unsigned char Ch) { return static_cast<char>(std::tolower(Ch)); });
 		return LowerText.find(LowerFilter) != FString::npos;
+	}
+
+	FString GetAssetTypeMetadata(const FPropertyValue& Prop)
+	{
+		const TMap<FString, FString>& Metadata = Prop.GetMetadata();
+		auto It = Metadata.find("assettype");
+		if (It != Metadata.end())
+		{
+			return It->second;
+		}
+
+		It = Metadata.find("allowedclass");
+		if (It != Metadata.end())
+		{
+			return It->second;
+		}
+		return {};
+	}
+
+	FString GetAssetPickerPreview(const FString& CurrentPath)
+	{
+		return (CurrentPath.empty() || CurrentPath == "None") ? FString("None") : CurrentPath;
+	}
+
+	bool DrawParticleAssetPathCombo(FSoftObjectPtr& Value, const FString& AssetType)
+	{
+		if (AssetType != "Material" && AssetType != "StaticMesh" && AssetType != "UVectorFieldAsset")
+		{
+			return false;
+		}
+
+		bool bChanged = false;
+		FString CurrentPath = Value.ToString();
+		const FString Preview = GetAssetPickerPreview(CurrentPath);
+		if (ImGui::BeginCombo("##v", Preview.c_str()))
+		{
+			const bool bSelectedNone = CurrentPath.empty() || CurrentPath == "None";
+			if (ImGui::Selectable("None", bSelectedNone))
+			{
+				Value.SetPath("None");
+				CurrentPath = "None";
+				bChanged = true;
+			}
+			if (bSelectedNone)
+			{
+				ImGui::SetItemDefaultFocus();
+			}
+
+			if (AssetType == "Material")
+			{
+				const TArray<FMaterialAssetListItem>& MaterialFiles = FMaterialManager::Get().GetAvailableMaterialFiles();
+				for (const FMaterialAssetListItem& Item : MaterialFiles)
+				{
+					const bool bSelected = CurrentPath == Item.FullPath;
+					if (ImGui::Selectable(Item.DisplayName.c_str(), bSelected))
+					{
+						Value.SetPath(Item.FullPath);
+						CurrentPath = Item.FullPath;
+						bChanged = true;
+					}
+					if (bSelected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+				}
+			}
+			else
+			{
+				const char* RegistryTypeName = AssetType == "StaticMesh" ? "UStaticMesh" : AssetType.c_str();
+				const TArray<FAssetListItem>& AssetFiles = FAssetRegistry::ListByTypeName(RegistryTypeName);
+				for (const FAssetListItem& Item : AssetFiles)
+				{
+					const bool bSelected = CurrentPath == Item.FullPath;
+					if (ImGui::Selectable(Item.DisplayName.c_str(), bSelected))
+					{
+						Value.SetPath(Item.FullPath);
+						CurrentPath = Item.FullPath;
+						bChanged = true;
+					}
+					if (bSelected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+				}
+			}
+
+			ImGui::EndCombo();
+		}
+
+		return bChanged;
 	}
 
 	float GetSplitPaneSize(float TotalSize, float SplitterThickness, float Ratio, float MinFirst, float MinSecond)
@@ -2467,12 +2558,20 @@ bool FParticleSystemEditorWidget::RenderObjectPropertiesInline(UObject* Object)
 				FSoftObjectPtr* Value = static_cast<FSoftObjectPtr*>(Prop.GetValuePtr());
 				if (Value)
 				{
-					char Buffer[512];
-					strncpy_s(Buffer, sizeof(Buffer), Value->ToString().c_str(), _TRUNCATE);
-					if (ImGui::InputText("##v", Buffer, sizeof(Buffer)))
+					const FString AssetType = GetAssetTypeMetadata(Prop);
+					if (AssetType == "Material" || AssetType == "StaticMesh" || AssetType == "UVectorFieldAsset")
 					{
-						Value->SetPath(Buffer);
-						bChanged = true;
+						bChanged = DrawParticleAssetPathCombo(*Value, AssetType);
+					}
+					else
+					{
+						char Buffer[512];
+						strncpy_s(Buffer, sizeof(Buffer), Value->ToString().c_str(), _TRUNCATE);
+						if (ImGui::InputText("##v", Buffer, sizeof(Buffer)))
+						{
+							Value->SetPath(Buffer);
+							bChanged = true;
+						}
 					}
 				}
 				break;
