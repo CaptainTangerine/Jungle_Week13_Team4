@@ -6,6 +6,23 @@
 
 class UVectorFieldAsset;
 class FScene;
+class UParticleLODLevel;
+
+UCLASS()
+class UParticleModuleVectorFieldRotation : public UParticleModule
+{
+public:
+	GENERATED_BODY()
+	UParticleModuleVectorFieldRotation() = default;
+
+	UPROPERTY(Edit, Save, Category="Vector Field Rotation", DisplayName="Rotation", Type=Rotator, Min=0.0f, Max=0.0f, Speed=0.1f)
+	FRotator Rotation = FRotator::ZeroRotator;
+
+	UPROPERTY(Edit, Save, Category="Vector Field Rotation", DisplayName="Rotation Rate", Type=Rotator, Min=0.0f, Max=0.0f, Speed=0.1f)
+	FRotator RotationRate = FRotator::ZeroRotator;
+
+	FQuat GetRotation(float EmitterTime) const;
+};
 
 // Applies a vector-field asset in emitter-local space.
 // The .fga source is never parsed here; this module only loads the serialized
@@ -52,13 +69,15 @@ public:
 	UPROPERTY(Edit, Save, Category="Local Vector Field", DisplayName="Vector Draw Scale", Min=0.0f, Max=10000.0f, Speed=0.1f)
 	float DebugVectorScale = 1.0f;
 
-	void AppendFieldDebugLines(FScene& Scene, const FMatrix& ComponentToWorld);
+	void AppendFieldDebugLines(FScene& Scene, const FMatrix& ComponentToWorld, const UParticleLODLevel* LODLevel, float EmitterTime);
 
 private:
 	UVectorFieldAsset* ResolveVectorField();
 	FVector GetSafeFieldBoundsScale() const;
-	FVector TransformComponentLocalToFieldLocal(const FVector& ComponentLocalPosition) const;
-	FVector TransformFieldLocalToComponentLocal(const FVector& FieldLocalPosition) const;
+	FQuat ResolveFieldRotation(const UParticleLODLevel* LODLevel, float EmitterTime) const;
+	FVector TransformComponentLocalToFieldLocal(const FVector& ComponentLocalPosition, const FQuat& FieldRotation) const;
+	FVector TransformFieldLocalToComponentLocal(const FVector& FieldLocalPosition, const FQuat& FieldRotation) const;
+	FVector TransformFieldVectorToComponentLocal(const FVector& FieldVector, const FQuat& FieldRotation) const;
 
 	FString CachedVectorFieldPath;
 	UVectorFieldAsset* CachedVectorField = nullptr;

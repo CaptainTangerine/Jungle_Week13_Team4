@@ -18,6 +18,21 @@
 
 #include <algorithm>
 
+namespace
+{
+	float FindEmitterTime(const TArray<FDynamicEmitterDataBase*>& DynamicEmitters, int32 EmitterIndex)
+	{
+		for (const FDynamicEmitterDataBase* DynamicEmitter : DynamicEmitters)
+		{
+			if (DynamicEmitter && DynamicEmitter->EmitterIndex == EmitterIndex)
+			{
+				return DynamicEmitter->GetSource().EmitterTime;
+			}
+		}
+		return 0.0f;
+	}
+}
+
 FParticleSystemSceneProxy::FParticleSystemSceneProxy(UParticleSystemComponent* InComponent)
 	: FPrimitiveSceneProxy(InComponent)
 {
@@ -111,8 +126,10 @@ void FParticleSystemSceneProxy::AppendDebugLines(FScene& Scene) const
 
 	const FMatrix ComponentToWorld = Component->GetWorldMatrix();
 	const int32 LODIndex = Component->GetCurrentLODIndex();
-	for (UParticleEmitter* Emitter : Template->GetEmitters())
+	const TArray<UParticleEmitter*>& Emitters = Template->GetEmitters();
+	for (int32 EmitterIndex = 0; EmitterIndex < static_cast<int32>(Emitters.size()); ++EmitterIndex)
 	{
+		UParticleEmitter* Emitter = Emitters[EmitterIndex];
 		if (!Emitter || !Emitter->IsEnabled())
 		{
 			continue;
@@ -124,11 +141,12 @@ void FParticleSystemSceneProxy::AppendDebugLines(FScene& Scene) const
 			continue;
 		}
 
+		const float EmitterTime = FindEmitterTime(DynamicEmitters, EmitterIndex);
 		for (UParticleModule* Module : LODLevel->GetModules())
 		{
 			if (UParticleModuleVectorFieldLocal* VectorField = Cast<UParticleModuleVectorFieldLocal>(Module))
 			{
-				VectorField->AppendFieldDebugLines(Scene, ComponentToWorld);
+				VectorField->AppendFieldDebugLines(Scene, ComponentToWorld, LODLevel, EmitterTime);
 			}
 		}
 	}
