@@ -72,6 +72,7 @@ private:
 	class UParticleModule* SelectedModule = nullptr;
 
 	bool bOpenParticleAssetSearchPopup = false;
+	bool bOpenBackgroundColorPopup = false;
 	char ParticleAssetSearchBuffer[128] = {};
 
 	bool bShowParticleCount = false;

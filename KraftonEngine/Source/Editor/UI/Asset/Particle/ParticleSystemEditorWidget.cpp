@@ -924,9 +924,33 @@ void FParticleSystemEditorWidget::RenderToolbar(UParticleSystem* ParticleSystem)
 	SameLineToolbar();
 	DrawIconTextButton("Bounds", MakeCascadeIconPath(L"icon_Cascade_Bounds_40x.png"), "Bounds");
 	SameLineToolbar();
-	DrawIconTextButton("Axis", MakeCascadeIconPath(L"icon_Cascade_Axis_40x.png"), "Origin Axis");
+	if (DrawIconTextButton("Axis", MakeCascadeIconPath(L"icon_Cascade_Axis_40x.png"), "Origin Axis"))
+	{
+		FShowFlags& ShowFlags = ViewportClient.GetRenderOptions().ShowFlags;
+		ShowFlags.bOriginAxisGizmo = !ShowFlags.bOriginAxisGizmo;
+	}
 	SameLineToolbar();
-	DrawIconTextButton("Color", MakeCascadeIconPath(L"icon_Cascade_Color_40x.png"), "Background Color");
+	if (DrawIconTextButton("Color", MakeCascadeIconPath(L"icon_Cascade_Color_40x.png"), "Background Color"))
+	{
+		bOpenBackgroundColorPopup = true;
+	}
+
+	if (bOpenBackgroundColorPopup)
+	{
+		ImGui::OpenPopup("##ParticleBackgroundColorPopup");
+		bOpenBackgroundColorPopup = false;
+	}
+	ImGui::SetNextWindowSize(ImVec2(280.0f, 300.0f), ImGuiCond_Appearing);
+	if (ImGui::BeginPopup("##ParticleBackgroundColorPopup"))
+	{
+		ImGui::TextUnformatted("Background Color");
+		ImGui::Separator();
+		ImGui::ColorPicker3(
+			"##ParticleViewportBackgroundColor",
+			ViewportClient.GetBackgroundColor(),
+			ImGuiColorEditFlags_PickerHueWheel | ImGuiColorEditFlags_NoAlpha);
+		ImGui::EndPopup();
+	}
 
 	ImGui::SetCursorScreenPos(ImVec2(ToolbarPos.x + 6.0f, ToolbarPos.y + 38.0f));
 
@@ -2305,7 +2329,6 @@ void FParticleSystemEditorWidget::RenderViewportMenus()
 		if (ImGui::Checkbox("Grid", &bShowGrid))
 		{
 			ViewportClient.GetRenderOptions().ShowFlags.bGrid = bShowGrid;
-			ViewportClient.GetRenderOptions().ShowFlags.bWorldAxis = bShowGrid;
 		}
 
 		ImGui::Dummy(ImVec2(0.0f, 1.0f));

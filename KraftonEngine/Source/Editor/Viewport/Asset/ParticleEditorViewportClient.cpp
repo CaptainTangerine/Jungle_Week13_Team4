@@ -18,6 +18,7 @@ void FParticleEditorViewportClient::Initialize(ID3D11Device* Device, uint32 Widt
 
 	RenderOptions.ShowFlags.bGrid = false;
 	RenderOptions.ShowFlags.bWorldAxis = false;
+	RenderOptions.ShowFlags.bOriginAxisGizmo = false;
 
 	bIsRenderable = true;
 }
@@ -80,10 +81,10 @@ bool FParticleEditorViewportClient::GetCameraView(FMinimalViewInfo& OutPOV) cons
 
 void FParticleEditorViewportClient::GetClearColor(float OutClearColor[4]) const
 {
-	OutClearColor[0] = 0.0f;
-	OutClearColor[1] = 0.0f;
-	OutClearColor[2] = 0.0f;
-	OutClearColor[3] = 1.0f;
+	OutClearColor[0] = BackgroundColor[0];
+	OutClearColor[1] = BackgroundColor[1];
+	OutClearColor[2] = BackgroundColor[2];
+	OutClearColor[3] = BackgroundColor[3];
 }
 
 void FParticleEditorViewportClient::Tick(float DeltaTime)
