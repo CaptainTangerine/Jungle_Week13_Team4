@@ -43,6 +43,7 @@ enum class ERenderPass : uint32
 	PostProcess,	// 아웃라인 풀스크린, Fog, SceneDepth
 	AdditiveDecal,	// Additive 빌보드 등
 	AlphaBlend,		// 반투명 지오메트리 (Font, SubUV, Billboard, Translucent)
+	Bloom,			// HDR SceneColor bloom post process
 	FXAA,			// FXAA 안티앨리어싱 (SceneColor 복사 후 실행)
 	GizmoOuter,		// 기즈모 외곽 (깊이 테스트 O)
 	GizmoInner,		// 기즈모 내부 (깊이 무시)
@@ -65,6 +66,7 @@ inline const char* GetRenderPassName(ERenderPass Pass)
 		"RenderPass::PostProcess",
 		"RenderPass::AdditiveDecal",
 		"RenderPass::AlphaBlend",
+		"RenderPass::Bloom",
 		"RenderPass::FXAA",
 		"RenderPass::GizmoOuter",
 		"RenderPass::GizmoInner",
@@ -90,6 +92,7 @@ namespace RenderStateStrings
 		{ "PostProcess",   (int)ERenderPass::PostProcess },
 		{ "AdditiveDecal", (int)ERenderPass::AdditiveDecal },
 		{ "AlphaBlend",    (int)ERenderPass::AlphaBlend },
+		{ "Bloom",         (int)ERenderPass::Bloom },
 		{ "FXAA",          (int)ERenderPass::FXAA },
 		{ "GizmoOuter",    (int)ERenderPass::GizmoOuter },
 		{ "GizmoInner",    (int)ERenderPass::GizmoInner },

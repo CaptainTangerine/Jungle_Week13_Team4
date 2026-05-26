@@ -45,6 +45,10 @@ void FShaderManager::Initialize(ID3D11Device* InDevice)
 	GetOrCreate(EShaderPath::Billboard, StartupError);
 	GetOrCreate(EShaderPath::HeightFog, StartupError);
 	GetOrCreate(EShaderPath::GammaCorrection, StartupError);
+	GetOrCreate(EShaderPath::BloomPrefilter, StartupError);
+	GetOrCreate(EShaderPath::BloomDownsample, StartupError);
+	GetOrCreate(EShaderPath::BloomBlur, StartupError);
+	GetOrCreate(EShaderPath::BloomComposite, StartupError);
 	GetOrCreateShadowDepthPermutation(EShadowDepthDefines::EVertexFactory::StaticMesh, StartupError);
 	GetOrCreateShadowDepthPermutation(EShadowDepthDefines::EVertexFactory::SkeletalMesh, StartupError);
 	GetOrCreate(EShaderPath::ShadowMapVis, StartupError);

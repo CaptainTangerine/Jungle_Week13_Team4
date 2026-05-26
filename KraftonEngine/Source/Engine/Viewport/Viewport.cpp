@@ -2,9 +2,22 @@
 
 #include "Render/Resource/Buffer.h"
 
+#include <cstdio>
+#include <cstring>
+
 namespace
 {
 	constexpr DXGI_FORMAT SceneColorFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
+
+	void SetDebugName(ID3D11DeviceChild* Resource, const char* Name)
+	{
+		if (!Resource || !Name)
+		{
+			return;
+		}
+
+		Resource->SetPrivateData(WKPDID_D3DDebugObjectName, static_cast<UINT>(std::strlen(Name)), Name);
+	}
 }
 
 FViewport::~FViewport()
@@ -249,6 +262,11 @@ bool FViewport::CreateResources()
 	if (FAILED(hr)) return false;
 	CullingHeatmapSRV->SetPrivateData(WKPDID_D3DDebugObjectName, static_cast<UINT>(strlen("ViewportCullingHeatmapSRV")), "ViewportCullingHeatmapSRV");
 
+	if (!CreateBloomResources())
+	{
+		return false;
+	}
+
 	// ── 뷰포트 렉트 ──
 	ViewportRect.TopLeftX = 0.0f;
 	ViewportRect.TopLeftY = 0.0f;
@@ -260,8 +278,100 @@ bool FViewport::CreateResources()
 	return true;
 }
 
+bool FViewport::CreateBloomResources()
+{
+	ReleaseBloomResources();
+
+	for (uint32 MipIndex = 0; MipIndex < EBloom::MaxMipCount; ++MipIndex)
+	{
+		uint32 MipWidth = Width >> (MipIndex + 1);
+		uint32 MipHeight = Height >> (MipIndex + 1);
+		if (MipWidth == 0) MipWidth = 1;
+		if (MipHeight == 0) MipHeight = 1;
+
+		char DebugName[64] = {};
+		std::snprintf(DebugName, sizeof(DebugName), "ViewportBloomMip%u", MipIndex);
+		if (!CreateBloomMip(BloomResources.Mips[MipIndex], MipWidth, MipHeight, DebugName))
+		{
+			ReleaseBloomResources();
+			return false;
+		}
+
+		std::snprintf(DebugName, sizeof(DebugName), "ViewportBloomTempMip%u", MipIndex);
+		if (!CreateBloomMip(BloomResources.TempMips[MipIndex], MipWidth, MipHeight, DebugName))
+		{
+			ReleaseBloomResources();
+			return false;
+		}
+	}
+
+	return true;
+}
+
+void FViewport::ReleaseBloomResources()
+{
+	for (uint32 MipIndex = 0; MipIndex < EBloom::MaxMipCount; ++MipIndex)
+	{
+		ReleaseBloomMip(BloomResources.Mips[MipIndex]);
+		ReleaseBloomMip(BloomResources.TempMips[MipIndex]);
+	}
+}
+
+bool FViewport::CreateBloomMip(FBloomMipResource& OutResource, uint32 InWidth, uint32 InHeight, const char* DebugName)
+{
+	ReleaseBloomMip(OutResource);
+
+	D3D11_TEXTURE2D_DESC Desc = {};
+	Desc.Width = InWidth;
+	Desc.Height = InHeight;
+	Desc.MipLevels = 1;
+	Desc.ArraySize = 1;
+	Desc.Format = EBloom::Format;
+	Desc.SampleDesc.Count = 1;
+	Desc.Usage = D3D11_USAGE_DEFAULT;
+	Desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+
+	HRESULT hr = Device->CreateTexture2D(&Desc, nullptr, &OutResource.Texture);
+	if (FAILED(hr))
+	{
+		return false;
+	}
+	SetDebugName(OutResource.Texture, DebugName);
+
+	hr = Device->CreateRenderTargetView(OutResource.Texture, nullptr, &OutResource.RTV);
+	if (FAILED(hr))
+	{
+		ReleaseBloomMip(OutResource);
+		return false;
+	}
+	SetDebugName(OutResource.RTV, DebugName);
+
+	hr = Device->CreateShaderResourceView(OutResource.Texture, nullptr, &OutResource.SRV);
+	if (FAILED(hr))
+	{
+		ReleaseBloomMip(OutResource);
+		return false;
+	}
+	SetDebugName(OutResource.SRV, DebugName);
+
+	OutResource.Width = InWidth;
+	OutResource.Height = InHeight;
+	return true;
+}
+
+void FViewport::ReleaseBloomMip(FBloomMipResource& Resource)
+{
+	if (Resource.SRV) { Resource.SRV->Release(); Resource.SRV = nullptr; }
+	if (Resource.RTV) { Resource.RTV->Release(); Resource.RTV = nullptr; }
+	if (Resource.Texture) { Resource.Texture->Release(); Resource.Texture = nullptr; }
+	Resource.Width = 0;
+	Resource.Height = 0;
+}
+
 void FViewport::ReleaseResources()
 {
+	ReleaseBloomResources();
+
 	if (CullingHeatmapSRV) { CullingHeatmapSRV->Release(); CullingHeatmapSRV = nullptr; }
 	if (CullingHeatmapRTV) { CullingHeatmapRTV->Release(); CullingHeatmapRTV = nullptr; }
 	if (CullingHeatmapTexture) { CullingHeatmapTexture->Release(); CullingHeatmapTexture = nullptr; }

@@ -260,7 +260,8 @@ struct FFXAAConstants
 struct FGammaCorrectionConstants
 {
 	float Gamma;
-	float _pad[3];
+	float Exposure;
+	float _pad[2];
 };
 
 

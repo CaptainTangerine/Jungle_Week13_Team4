@@ -5,7 +5,8 @@
 cbuffer GammaCorrectionCB : register(b2)
 {
     float Gamma;
-    float3 _GammaPad;
+    float Exposure;
+    float2 _GammaPad;
 };
 
 PS_Input_UV VS(uint vertexID : SV_VertexID)
@@ -22,8 +23,15 @@ float3 LinearToSRGB(float3 color)
     return lerp(low, high, step(0.0031308f, color));
 }
 
+float3 ApplyToneMapping(float3 hdrColor)
+{
+    hdrColor = max(hdrColor, 0.0f);
+    return 1.0f - exp(-hdrColor * max(Exposure, 0.0f));
+}
+
 float4 PS(PS_Input_UV input) : SV_TARGET
 {
     float4 sceneColor = SceneColorTexture.SampleLevel(LinearClampSampler, input.uv, 0);
-    return float4(LinearToSRGB(sceneColor.rgb), sceneColor.a);
+    float3 toneMapped = ApplyToneMapping(sceneColor.rgb);
+    return float4(LinearToSRGB(toneMapped), sceneColor.a);
 }

@@ -602,8 +602,27 @@ void FViewportToolbar::RenderShowFlags(const FToolbarRenderState& State)
 		ImGui::Checkbox("Octree", &RenderOptions.ShowFlags.bOctree);
 		ImGui::Checkbox("Fog", &RenderOptions.ShowFlags.bFog);
 		ImGui::Checkbox("Particle", &RenderOptions.ShowFlags.bParticle);
+		ImGui::Checkbox("Bloom", &RenderOptions.ShowFlags.bBloom);
+		if (RenderOptions.ShowFlags.bBloom)
+		{
+			ImGui::SetNextItemWidth(140.0f);
+			ImGui::SliderFloat("Bloom Threshold", &RenderOptions.BloomThreshold, 0.0f, 10.0f, "%.2f");
+			ImGui::SetNextItemWidth(140.0f);
+			ImGui::SliderFloat("Bloom Intensity", &RenderOptions.BloomIntensity, 0.0f, 3.0f, "%.2f");
+			ImGui::SetNextItemWidth(140.0f);
+			ImGui::SliderFloat("Bloom Radius", &RenderOptions.BloomBlurRadius, 0.25f, 4.0f, "%.2f");
+			ImGui::SetNextItemWidth(140.0f);
+			ImGui::SliderFloat("Bloom Soft Knee", &RenderOptions.BloomSoftKnee, 0.0f, 1.0f, "%.2f");
+		}
 		ImGui::Checkbox("FXAA", &RenderOptions.ShowFlags.bFXAA);
 		ImGui::Checkbox("Gamma Correction", &RenderOptions.ShowFlags.bGammaCorrection);
+		if (RenderOptions.ShowFlags.bGammaCorrection)
+		{
+			ImGui::SetNextItemWidth(140.0f);
+			ImGui::SliderFloat("Exposure", &RenderOptions.Exposure, 0.0f, 5.0f, "%.2f");
+			ImGui::SetNextItemWidth(140.0f);
+			ImGui::SliderFloat("Gamma", &RenderOptions.Gamma, 1.0f, 3.0f, "%.2f");
+		}
 		ImGui::Checkbox("View Light Culling", &RenderOptions.ShowFlags.bViewLightCulling);
 		ImGui::Checkbox("Visualize 2.5D Culling", &RenderOptions.ShowFlags.bVisualize25DCulling);
 		ImGui::Checkbox("Show Shadow Frustum", &RenderOptions.ShowFlags.bShowShadowFrustum);

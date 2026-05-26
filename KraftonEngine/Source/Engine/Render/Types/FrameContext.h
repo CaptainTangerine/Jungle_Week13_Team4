@@ -5,6 +5,7 @@
 #include "Math/Vector.h"
 #include "Render/Types/ViewTypes.h"
 #include "Render/Types/LODContext.h"
+#include "Render/Types/BloomTypes.h"
 #include "Collision/Math/ConvexVolume.h"
 #include "GameFramework/WorldContext.h"
 #include "GameFramework/Camera/CameraTypes.h"
@@ -65,6 +66,9 @@ struct FFrameContext
 	// Culling Heatmap RT — Opaque MRT[2] 출력
 	ID3D11RenderTargetView*   CullingHeatmapRTV     = nullptr;
 	ID3D11ShaderResourceView* CullingHeatmapSRV     = nullptr;
+
+	// Bloom mip chain owned by the viewport.
+	const FBloomFrameResources* BloomResources      = nullptr;
 
 	// Cursor position relative to viewport (for debug visualization)
 	uint32 CursorViewportX = UINT32_MAX;
@@ -132,5 +136,6 @@ struct FFrameContext
 		NormalSRV               = nullptr;
 		CullingHeatmapRTV       = nullptr;
 		CullingHeatmapSRV       = nullptr;
+		BloomResources          = nullptr;
 	}
 };
