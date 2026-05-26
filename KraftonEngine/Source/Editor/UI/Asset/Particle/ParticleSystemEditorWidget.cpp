@@ -18,6 +18,7 @@
 #include "GameFramework/Actor/StaticMeshActor.h"
 #include "GameFramework/Light/DirectionalLightActor.h"
 #include "GameFramework/World.h"
+#include "Math/Rotator.h"
 #include "Object/Ptr/SoftObjectPtr.h"
 #include "Object/Reflection/ObjectFactory.h"
 #include "Object/Reflection/UClass.h"
@@ -2393,6 +2394,22 @@ bool FParticleSystemEditorWidget::RenderObjectPropertiesInline(UObject* Object)
 				if (Value)
 				{
 					bChanged = ImGui::DragFloat3("##v", Value, Prop.GetSpeed());
+				}
+				break;
+			}
+			case EPropertyType::Rotator:
+			{
+				FRotator* Value = static_cast<FRotator*>(Prop.GetValuePtr());
+				if (Value)
+				{
+					float RotationXYZ[3] = { Value->Roll, Value->Pitch, Value->Yaw };
+					if (ImGui::DragFloat3("##v", RotationXYZ, Prop.GetSpeed()))
+					{
+						Value->Roll = RotationXYZ[0];
+						Value->Pitch = RotationXYZ[1];
+						Value->Yaw = RotationXYZ[2];
+						bChanged = true;
+					}
 				}
 				break;
 			}
