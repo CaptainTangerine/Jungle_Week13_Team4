@@ -13,6 +13,7 @@ class UStaticMesh;
 */
 struct FParticleProxyParticle
 {
+	int32 SourceParticleIndex = -1;
 	FVector OldPosition = FVector::ZeroVector;
 	FVector Position = FVector::ZeroVector;
 	FVector Velocity = FVector::ZeroVector;

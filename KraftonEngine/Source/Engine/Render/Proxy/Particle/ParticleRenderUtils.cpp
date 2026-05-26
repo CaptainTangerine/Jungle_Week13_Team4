@@ -62,6 +62,7 @@ namespace ParticleRenderUtils
 			}
 
 			FParticleProxyParticle Particle;
+			Particle.SourceParticleIndex = ParticleIndex;
 			Particle.OldPosition = Source.bUseLocalSpace
 				? LocalToWorld.TransformPositionWithW(BaseParticle->OldLocation)
 				: BaseParticle->OldLocation;

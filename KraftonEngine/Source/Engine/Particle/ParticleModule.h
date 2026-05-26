@@ -261,15 +261,26 @@ class UParticleModuleBeamNoise : public UParticleModuleBeamBase
 {
 public:
 	GENERATED_BODY()
+	bool IsSpawnModule() const override { return true; }
+	bool IsUpdateModule() const override { return true; }
+	int32 GetParticlePayloadSize() const override;
+	void Spawn(const FSpawnContext& Context) override;
+	void Update(const FUpdateContext& Context) override;
 
 	UPROPERTY(Edit, Save, Category="Beam Noise", DisplayName="Frequency", Min=0.0f, Max=64.0f, Speed=1.0f)
 	int32 Frequency = 0;
+
+	UPROPERTY(Edit, Save, Category="Beam Noise", DisplayName="Frequency Low Range", Min=0.0f, Max=64.0f, Speed=1.0f)
+	int32 FrequencyLowRange = 0;
 
 	UPROPERTY(Edit, Save, Category="Beam Noise", DisplayName="Strength", Min=0.0f, Max=10000.0f, Speed=1.0f)
 	float Strength = 0.0f;
 
 	UPROPERTY(Edit, Save, Category="Beam Noise", DisplayName="Speed", Min=0.0f, Max=1000.0f, Speed=0.1f)
 	float Speed = 0.0f;
+
+	UPROPERTY(Edit, Save, Category="Beam Noise", DisplayName="Noise Lock Time", Min=0.0f, Max=1000.0f, Speed=0.1f)
+	float NoiseLockTime = 0.0f;
 };
 
 UCLASS()

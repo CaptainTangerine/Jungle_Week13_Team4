@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 
 namespace
@@ -67,6 +68,115 @@ namespace
 			FMath::Lerp(A.G, B.G, Alpha),
 			FMath::Lerp(A.B, B.B, Alpha),
 			FMath::Lerp(A.A, B.A, Alpha));
+	}
+
+	uint32 ScrambleSeed(uint32 Seed)
+	{
+		Seed ^= Seed >> 16;
+		Seed *= 0x7feb352du;
+		Seed ^= Seed >> 15;
+		Seed *= 0x846ca68bu;
+		Seed ^= Seed >> 16;
+		return Seed;
+	}
+
+	uint32 MakeBeamNoiseSeed(const UParticleModule::FSpawnContext& Context)
+	{
+		const uint32 SpawnBits = static_cast<uint32>(std::fabs(Context.SpawnTime) * 100000.0f);
+		const uint32 EmitterBits = static_cast<uint32>(std::fabs(Context.Owner.GetEmitterTime()) * 100000.0f);
+		uint32 Seed = Context.Owner.ParticleCounter * 196314165u + 907633515u;
+		Seed ^= SpawnBits * 1664525u;
+		Seed ^= EmitterBits * 1013904223u;
+		Seed ^= static_cast<uint32>(std::rand());
+		return ScrambleSeed(Seed);
+	}
+
+	float BeamNoiseRandom01(uint32& Seed)
+	{
+		Seed = Seed * 196314165u + 907633515u;
+		return static_cast<float>((Seed >> 8) & 0x00FFFFFFu) / static_cast<float>(0x01000000u);
+	}
+
+	float BeamNoiseRandomSigned(uint32& Seed)
+	{
+		return BeamNoiseRandom01(Seed) * 2.0f - 1.0f;
+	}
+
+	FVector MakeBeamNoiseOffset(uint32& Seed)
+	{
+		FVector Offset(BeamNoiseRandomSigned(Seed), BeamNoiseRandomSigned(Seed), 0.0f);
+		if (Offset.IsNearlyZero())
+		{
+			Offset = FVector(1.0f, 0.0f, 0.0f);
+		}
+		return Offset;
+	}
+
+	void PickBeamNoiseTarget(FParticleBeamNoisePayload& Payload, int32 PointIndex, bool bSnap)
+	{
+		if (PointIndex < 0 || PointIndex >= MaxParticleBeamNoisePoints)
+		{
+			return;
+		}
+
+		FParticleBeamNoisePoint& Point = Payload.Points[PointIndex];
+		Point.SourceOffset = Point.CurrentOffset;
+		Point.TargetOffset = MakeBeamNoiseOffset(Payload.RandomSeed);
+		Point.LockTimer = 0.0f;
+		if (bSnap)
+		{
+			Point.CurrentOffset = Point.TargetOffset;
+			Point.SourceOffset = Point.CurrentOffset;
+		}
+	}
+
+	int32 ResolveBeamNoiseFrequency(int32 FrequencyLowRange, int32 Frequency, uint32& Seed)
+	{
+		const int32 MaxFrequency = std::min(std::max(0, Frequency), MaxParticleBeamNoisePoints);
+		const int32 MinFrequency = std::min(std::max(0, FrequencyLowRange), MaxFrequency);
+		if (MinFrequency > 0 && MinFrequency < MaxFrequency)
+		{
+			const int32 Range = MaxFrequency - MinFrequency + 1;
+			return MinFrequency + static_cast<int32>(BeamNoiseRandom01(Seed) * static_cast<float>(Range)) % Range;
+		}
+		return MaxFrequency;
+	}
+
+	void AdvanceBeamNoisePoint(FParticleBeamNoisePayload& Payload, int32 PointIndex, float DeltaTime)
+	{
+		if (PointIndex < 0 || PointIndex >= Payload.Frequency || PointIndex >= MaxParticleBeamNoisePoints)
+		{
+			return;
+		}
+
+		FParticleBeamNoisePoint& Point = Payload.Points[PointIndex];
+		Point.LockTimer += DeltaTime;
+
+		const bool bHasLockTime = Payload.NoiseLockTime > FMath::Epsilon;
+		const bool bHasSpeed = Payload.NoiseSpeed > FMath::Epsilon;
+		if (bHasLockTime && Point.LockTimer >= Payload.NoiseLockTime)
+		{
+			PickBeamNoiseTarget(Payload, PointIndex, !bHasSpeed);
+		}
+
+		if (bHasSpeed)
+		{
+			const FVector ToTarget = Point.TargetOffset - Point.CurrentOffset;
+			const float Distance = ToTarget.Length();
+			const float MaxStep = Payload.NoiseSpeed * DeltaTime;
+			if (Distance <= FMath::Epsilon || Distance <= MaxStep)
+			{
+				Point.CurrentOffset = Point.TargetOffset;
+				if (!bHasLockTime)
+				{
+					PickBeamNoiseTarget(Payload, PointIndex, false);
+				}
+			}
+			else
+			{
+				Point.CurrentOffset += ToTarget * (MaxStep / Distance);
+			}
+		}
 	}
 }
 
@@ -128,6 +238,47 @@ UParticleModuleTypeDataRibbon::UParticleModuleTypeDataRibbon()
 {
 }
 
+int32 UParticleModuleBeamNoise::GetParticlePayloadSize() const
+{
+	return sizeof(FParticleBeamNoisePayload);
+}
+
+void UParticleModuleBeamNoise::Spawn(const FSpawnContext& Context)
+{
+	if (!Context.ParticleBase)
+	{
+		return;
+	}
+
+	SPAWN_INIT
+	PARTICLE_ELEMENT(FParticleBeamNoisePayload, BeamNoisePayload)
+	BeamNoisePayload = FParticleBeamNoisePayload();
+	BeamNoisePayload.RandomSeed = MakeBeamNoiseSeed(Context);
+	BeamNoisePayload.Frequency = ResolveBeamNoiseFrequency(FrequencyLowRange, Frequency, BeamNoisePayload.RandomSeed);
+	BeamNoisePayload.Strength = std::max(0.0f, Strength);
+	BeamNoisePayload.NoiseSpeed = std::max(0.0f, Speed);
+	BeamNoisePayload.NoiseLockTime = std::max(0.0f, NoiseLockTime);
+
+	for (int32 PointIndex = 0; PointIndex < BeamNoisePayload.Frequency; ++PointIndex)
+	{
+		PickBeamNoiseTarget(BeamNoisePayload, PointIndex, true);
+	}
+}
+
+void UParticleModuleBeamNoise::Update(const FUpdateContext& Context)
+{
+	BEGIN_UPDATE_LOOP
+		FParticleBeamNoisePayload& BeamNoisePayload = *reinterpret_cast<FParticleBeamNoisePayload*>(
+			ParticleBase + Context.Offset);
+		const int32 FrequencyCount = std::min(std::max(0, BeamNoisePayload.Frequency), MaxParticleBeamNoisePoints);
+		BeamNoisePayload.Frequency = FrequencyCount;
+		for (int32 PointIndex = 0; PointIndex < FrequencyCount; ++PointIndex)
+		{
+			AdvanceBeamNoisePoint(BeamNoisePayload, PointIndex, DeltaTime);
+		}
+	END_UPDATE_LOOP
+}
+
 UParticleModuleSpawn::UParticleModuleSpawn()
 {
 	Rate.SetDistribution(NewFloatConstant(this, 10.0f));
@@ -152,9 +303,9 @@ UParticleModuleLocation::UParticleModuleLocation()
 
 UParticleModuleVelocity::UParticleModuleVelocity()
 {
-	StartVelocity.SetDistribution(NewVectorUniform(this, FVector(0.0f, 0.0f, 100.0f), FVector(0.0f, 0.0f, 100.0f)));
-}
+	StartVelocity.SetDistribution(NewVectorConstant(this, FVector(0.0f, 0.0f, 10.0f)));
 
+}
 UParticleModuleColor::UParticleModuleColor()
 {
 	StartColor.SetDistribution(NewVectorConstant(this, FVector(1.0f, 1.0f, 1.0f)));

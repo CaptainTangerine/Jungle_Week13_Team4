@@ -440,6 +440,11 @@ FDynamicEmitterDataBase* FParticleEmitterInstance::CreateDynamicData(int32 Emitt
 				BeamSource.NoiseFrequency = std::max(0, NoiseModule->Frequency);
 				BeamSource.NoiseStrength = std::max(0.0f, NoiseModule->Strength);
 				BeamSource.NoiseSpeed = std::max(0.0f, NoiseModule->Speed);
+				if (const FParticleModuleCache* Cache = LODData.FindModuleCache(NoiseModule))
+				{
+					BeamSource.NoisePayloadOffset = Cache->ParticlePayloadOffset;
+					BeamSource.NoisePayloadSize = Cache->ParticlePayloadSize;
+				}
 			}
 		}
 	}

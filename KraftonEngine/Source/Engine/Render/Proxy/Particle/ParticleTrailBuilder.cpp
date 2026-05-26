@@ -101,6 +101,61 @@ namespace
 
 		return MakeCameraFacingSide(Tangent, Particle.Position, Frame);
 	}
+
+	FVector GetBeamNoiseAnchorOffset(const FParticleBeamNoisePayload& Payload, int32 AnchorIndex)
+	{
+		const int32 Frequency = std::min(std::max(0, Payload.Frequency), MaxParticleBeamNoisePoints);
+		if (AnchorIndex <= 0 || AnchorIndex > Frequency)
+		{
+			return FVector::ZeroVector;
+		}
+		return Payload.Points[AnchorIndex - 1].CurrentOffset;
+	}
+
+	const FParticleBeamNoisePayload* GetBeamNoisePayload(const FDynamicBeamEmitterReplayData& Source,
+		const FParticleProxyParticle& Particle)
+	{
+		if (Source.NoisePayloadOffset < 0
+			|| Source.NoisePayloadSize < static_cast<int32>(sizeof(FParticleBeamNoisePayload))
+			|| Source.ParticleStride <= 0
+			|| Particle.SourceParticleIndex < 0
+			|| !Source.DataContainer.ParticleData)
+		{
+			return nullptr;
+		}
+
+		const int32 PayloadEnd = Source.NoisePayloadOffset + static_cast<int32>(sizeof(FParticleBeamNoisePayload));
+		if (PayloadEnd > Source.ParticleStride)
+		{
+			return nullptr;
+		}
+
+		const uint8* ParticleBase = Source.DataContainer.ParticleData
+			+ static_cast<size_t>(Particle.SourceParticleIndex) * Source.ParticleStride;
+		return reinterpret_cast<const FParticleBeamNoisePayload*>(ParticleBase + Source.NoisePayloadOffset);
+	}
+
+	FVector SampleBeamNoiseOffset(const FParticleBeamNoisePayload& Payload, float T,
+		const FVector& Side, const FVector& Normal, const FVector& Tangent)
+	{
+		const int32 Frequency = std::min(std::max(0, Payload.Frequency), MaxParticleBeamNoisePoints);
+		if (Frequency <= 0 || Payload.Strength <= ParticleTinyNumber || T <= 0.0f || T >= 1.0f)
+		{
+			return FVector::ZeroVector;
+		}
+
+		const float ScaledPosition = std::max(0.0f, std::min(T, 1.0f)) * static_cast<float>(Frequency + 1);
+		const int32 AnchorA = std::min(static_cast<int32>(std::floor(ScaledPosition)), Frequency);
+		const int32 AnchorB = std::min(AnchorA + 1, Frequency + 1);
+		const float Alpha = std::max(0.0f, std::min(ScaledPosition - static_cast<float>(AnchorA), 1.0f));
+		const FVector OffsetA = GetBeamNoiseAnchorOffset(Payload, AnchorA);
+		const FVector OffsetB = GetBeamNoiseAnchorOffset(Payload, AnchorB);
+		const FVector LocalOffset = (OffsetA + (OffsetB - OffsetA) * Alpha) * Payload.Strength;
+
+		return Side * LocalOffset.X
+			+ Normal * LocalOffset.Y
+			+ Tangent * LocalOffset.Z;
+	}
 }
 
 FParticleTrailBuilder::FParticleTrailBuilder(const FFrameContext& InFrame, const FMatrix& InLocalToWorld, FParticleMaterialCache& InMaterialCache,
@@ -221,13 +276,15 @@ void FParticleTrailBuilder::BuildBeamVertices(const TArray<FParticleProxyParticl
 
 	const int32 BeamCount = std::min(std::max(1, Source.MaxBeamCount), static_cast<int32>(Particles.size()));
 	const int32 ClampedSheetCount = std::min(std::max(1, Source.Sheets), 16);
-	const int32 SegmentCount = std::max(1, Source.InterpolationPoints + std::max(0, Source.NoiseFrequency));
-	Vertices.reserve(Vertices.size() + static_cast<size_t>(BeamCount) * static_cast<size_t>(ClampedSheetCount) * static_cast<size_t>(SegmentCount) * 4);
-	Indices.reserve(Indices.size() + static_cast<size_t>(BeamCount) * static_cast<size_t>(ClampedSheetCount) * static_cast<size_t>(SegmentCount) * 6);
+	const int32 MaxSegmentCount = std::max(1,
+		(std::max(0, Source.NoiseFrequency) + 1) * std::max(1, Source.InterpolationPoints));
+	Vertices.reserve(Vertices.size() + static_cast<size_t>(BeamCount) * static_cast<size_t>(ClampedSheetCount) * static_cast<size_t>(MaxSegmentCount) * 4);
+	Indices.reserve(Indices.size() + static_cast<size_t>(BeamCount) * static_cast<size_t>(ClampedSheetCount) * static_cast<size_t>(MaxSegmentCount) * 6);
 
 	for (int32 BeamIndex = 0; BeamIndex < BeamCount; ++BeamIndex)
 	{
 		const FParticleProxyParticle& Particle = Particles[BeamIndex];
+		const FParticleBeamNoisePayload* NoisePayload = GetBeamNoisePayload(Source, Particle);
 		FVector BeamStart = ResolveBeamEndpoint(Source.SourceMethod, Source.SourcePoint, Particle, true);
 		FVector BeamEnd = ResolveBeamEndpoint(Source.TargetMethod, Source.TargetPoint, Particle, false);
 
@@ -250,10 +307,15 @@ void FParticleTrailBuilder::BuildBeamVertices(const TArray<FParticleProxyParticl
 		const FVector Tangent = SafeNormal(Segment, Frame.CameraForward);
 		const FVector MidPoint = (BeamStart + BeamEnd) * 0.5f;
 		const FVector BaseSide = MakeCameraFacingSide(Tangent, MidPoint, Frame);
+		const FVector BaseNormal = SafeNormal(BaseSide.Cross(Tangent), Frame.CameraForward * -1.0f);
 		const float HalfWidth = std::max(0.001f, Particle.Size.X * 0.5f);
 		const FVector4 Color = Particle.Color.ToVector4();
-		const float NoisePhase = Source.EmitterTime * Source.NoiseSpeed + static_cast<float>(BeamIndex) * 0.6180339f;
-		const bool bUseNoise = Source.NoiseFrequency > 0 && Source.NoiseStrength > ParticleTinyNumber;
+		const int32 NoiseFrequency = NoisePayload
+			? std::min(std::max(0, NoisePayload->Frequency), MaxParticleBeamNoisePoints)
+			: 0;
+		const bool bUseNoise = NoisePayload && NoiseFrequency > 0 && NoisePayload->Strength > ParticleTinyNumber;
+		const int32 SegmentCount = std::max(1,
+			(NoiseFrequency + 1) * std::max(1, Source.InterpolationPoints));
 
 		for (int32 SheetIndex = 0; SheetIndex < ClampedSheetCount; ++SheetIndex)
 		{
@@ -282,8 +344,7 @@ void FParticleTrailBuilder::BuildBeamVertices(const TArray<FParticleProxyParticl
 
 				if (bUseNoise && T > 0.0f && T < 1.0f)
 				{
-					const float Wave = std::sin((T * static_cast<float>(Source.NoiseFrequency) + NoisePhase) * ParticlePi * 2.0f);
-					Point += BaseSide * (Wave * Source.NoiseStrength);
+					Point += SampleBeamNoiseOffset(*NoisePayload, T, BaseSide, BaseNormal, Tangent);
 				}
 				return Point;
 			};

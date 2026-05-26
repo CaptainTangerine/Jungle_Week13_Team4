@@ -101,6 +101,8 @@ struct FDynamicBeamEmitterReplayData : public FDynamicSpriteEmitterReplayDataBas
 	int32 NoiseFrequency = 0;
 	float NoiseStrength = 0.0f;
 	float NoiseSpeed = 0.0f;
+	int32 NoisePayloadOffset = -1;
+	int32 NoisePayloadSize = 0;
 };
 
 struct FDynamicTrailsEmitterReplayData : public FDynamicSpriteEmitterReplayDataBase
