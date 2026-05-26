@@ -4,6 +4,8 @@
 #include "Editor/Viewport/Asset/ParticleEditorViewportClient.h"
 #include "Object/FName.h"
 
+struct FFloatCurve;
+
 class FParticleSystemEditorWidget : public FAssetEditorWidget
 {
 public:
@@ -26,6 +28,7 @@ private:
 	void RenderPanel(const char* Title, const struct ImVec2& Size);
 	void RenderEmitterPanel(class UParticleSystem* ParticleSystem, const struct ImVec2& Size);
 	void RenderDetailsPanel(class UParticleSystem* ParticleSystem, const struct ImVec2& Size);
+	void RenderCurveEditorPanel(class UParticleSystem* ParticleSystem, const struct ImVec2& Size);
 	void RenderViewportPanel(const struct ImVec2& Size);
 	void RenderViewportMenus();
 	void RenderVerticalSplitter(const char* Id, float Height, float& InOutRatio, float UsableWidth);
@@ -42,6 +45,11 @@ private:
 	void SelectParticleLOD(class UParticleSystem* ParticleSystem, int32 Index);
 	void AddParticleModule(class UParticleSystem* ParticleSystem, class UParticleEmitter* Emitter, class UClass* ModuleClass);
 	void MoveParticleModule(class UParticleSystem* ParticleSystem, class UParticleLODLevel* SourceLODLevel, class UParticleLODLevel* TargetLODLevel, class UParticleModule* Module, int32 TargetIndex);
+	bool HasCurveEditableValues(class UParticleModule* Module) const;
+	void AddModuleCurvesToEditor(class UParticleSystem* ParticleSystem, class UParticleModule* Module);
+	FFloatCurve* ResolveCurveTrack(int32 TrackIndex) const;
+	void FitCurveEditorView();
+	void RemoveInvalidCurveTracks();
 	bool RenderLODDistanceProperties(class UParticleSystem* ParticleSystem);
 	bool RenderObjectPropertiesInline(class UObject* Object);
 
@@ -55,6 +63,32 @@ private:
 		float Duration = 0.0f;
 		float CurrentTime = 0.0f;
 		float AccumulatedTime = 0.0f;
+	};
+
+	enum class EParticleCurveChannel : uint8
+	{
+		FloatValue,
+		FloatMin,
+		FloatMax,
+		VectorX,
+		VectorY,
+		VectorZ,
+		VectorMinX,
+		VectorMinY,
+		VectorMinZ,
+		VectorMaxX,
+		VectorMaxY,
+		VectorMaxZ,
+	};
+
+	struct FParticleCurveTrack
+	{
+		class UParticleModule* Module = nullptr;
+		FString PropertyName;
+		FString Label;
+		EParticleCurveChannel Channel = EParticleCurveChannel::FloatValue;
+		uint32 Color = 0;
+		bool bVisible = true;
 	};
 
 	FParticleEditorViewportClient ViewportClient;
@@ -72,10 +106,24 @@ private:
 	class UParticleModule* SelectedModule = nullptr;
 
 	bool bOpenParticleAssetSearchPopup = false;
+	bool bOpenBackgroundColorPopup = false;
 	char ParticleAssetSearchBuffer[128] = {};
 
 	bool bShowParticleCount = false;
 	bool bShowParticleTime = false;
 	bool bShowParticleMemory = false;
 	FPreviewPlaybackState PreviewPlayback;
+
+	TArray<FParticleCurveTrack> CurveTracks;
+	int32 SelectedCurveTrackIndex = -1;
+	int32 SelectedCurveKeyIndex = -1;
+	float CurveViewMinTime = 0.0f;
+	float CurveViewMaxTime = 1.0f;
+	float CurveViewMinValue = -0.25f;
+	float CurveViewMaxValue = 1.25f;
+	bool bCurveKeyDragging = false;
+	bool bCurvePanning = false;
+	bool bSuppressCurveContextMenu = false;
+	float PendingCurveTime = 0.0f;
+	float PendingCurveValue = 0.0f;
 };

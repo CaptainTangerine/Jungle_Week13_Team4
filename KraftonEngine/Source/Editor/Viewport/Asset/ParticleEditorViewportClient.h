@@ -36,6 +36,7 @@ public:
 	void NotifyViewportResized(int32 NewWidth, int32 NewHeight) override;
 	bool GetCameraView(FMinimalViewInfo& OutPOV) const override;
 	void GetClearColor(float OutClearColor[4]) const override;
+	float* GetBackgroundColor() { return BackgroundColor; }
 
 	void Tick(float DeltaTime);
 
@@ -49,6 +50,7 @@ private:
 	FViewport* Viewport = nullptr;
 	FWindowsWindow* Window = nullptr;
 	FViewportRenderOptions RenderOptions;
+	float BackgroundColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 
 	UWorld* PreviewWorld = nullptr;
 	AActor* PreviewActor = nullptr;

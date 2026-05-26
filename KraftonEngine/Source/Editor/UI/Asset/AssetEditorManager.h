@@ -8,11 +8,13 @@
 
 class UObject;
 class IEditorPreviewViewportClient;
+class UEditorEngine;
 
 class FAssetEditorManager
 {
 public:
 	~FAssetEditorManager();
+	void Initialize(UEditorEngine* InEditorEngine) { EditorEngine = InEditorEngine; }
 
 	template<typename TEditor, typename... TArgs>
 	void RegisterEditor(TArgs&&... Args)
@@ -38,4 +40,7 @@ public:
 private:
 	TArray<std::function<std::unique_ptr<FAssetEditorWidget>()>> EditorFactories;
 	TArray<std::unique_ptr<FAssetEditorWidget>> OpenEditors;
+	TArray<UObject*> PendingOpenObjects;
+	UEditorEngine* EditorEngine = nullptr;
+	bool bIsRendering = false;
 };

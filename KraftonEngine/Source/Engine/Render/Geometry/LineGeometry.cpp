@@ -161,7 +161,7 @@ void FLineGeometry::AddWorldHelpers(const FShowFlags& ShowFlags, float GridSpaci
 		for (int32 I = Min1Idx; I <= Max1Idx; ++I)
 		{
 			const float W1 = Center1 + (static_cast<float>(I) * Spacing);
-			if (bShowAxis0 && IsAxisLine(W1, Spacing)) continue;
+			if (ShowFlags.bWorldAxis && bShowAxis0 && IsAxisLine(W1, Spacing)) continue;
 			AddLine(
 				MakeGridPoint(A0, A1, N, Min0, W1, PlaneOffset),
 				MakeGridPoint(A0, A1, N, Max0, W1, PlaneOffset),
@@ -171,7 +171,7 @@ void FLineGeometry::AddWorldHelpers(const FShowFlags& ShowFlags, float GridSpaci
 		for (int32 I = Min0Idx; I <= Max0Idx; ++I)
 		{
 			const float W0 = Center0 + (static_cast<float>(I) * Spacing);
-			if (bShowAxis1 && IsAxisLine(W0, Spacing)) continue;
+			if (ShowFlags.bWorldAxis && bShowAxis1 && IsAxisLine(W0, Spacing)) continue;
 			AddLine(
 				MakeGridPoint(A0, A1, N, W0, Min1, PlaneOffset),
 				MakeGridPoint(A0, A1, N, W0, Max1, PlaneOffset),
@@ -195,6 +195,26 @@ void FLineGeometry::AddWorldHelpers(const FShowFlags& ShowFlags, float GridSpaci
 
 		AddLine(
 			MakeGridPoint(A0, A1, N, 0.0f, 0.0f, -AxisLen),
+			MakeGridPoint(A0, A1, N, 0.0f, 0.0f, AxisLen),
+			AxisColor(N));
+	}
+
+	if (ShowFlags.bOriginAxisGizmo)
+	{
+		const float AxisLen = Spacing * 1.0f;
+
+		AddLine(
+			MakeGridPoint(A0, A1, N, 0.0f, 0.0f, AxisBias),
+			MakeGridPoint(A0, A1, N, AxisLen, 0.0f, AxisBias),
+			AxisColor(A0));
+
+		AddLine(
+			MakeGridPoint(A0, A1, N, 0.0f, 0.0f, AxisBias),
+			MakeGridPoint(A0, A1, N, 0.0f, AxisLen, AxisBias),
+			AxisColor(A1));
+
+		AddLine(
+			MakeGridPoint(A0, A1, N, 0.0f, 0.0f, 0.0f),
 			MakeGridPoint(A0, A1, N, 0.0f, 0.0f, AxisLen),
 			AxisColor(N));
 	}

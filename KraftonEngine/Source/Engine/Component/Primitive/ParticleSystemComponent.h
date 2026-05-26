@@ -64,6 +64,9 @@ public:
 	const TArray<FDynamicEmitterDataBase*>& GetDynamicEmitterDataArray() const { return DynamicEmitterDataArray; }
 	uint64 GetTemplateMemoryBytes() const;
 	uint64 GetInstanceMemoryBytes() const;
+	uint32 GetParticleDrawCallCount() const;
+	double GetLastRenderBuildTimeMs() const;
+	double GetLastSimulationTimeMs() const { return LastSimulationTimeMs; }
 
 	const FTransform& GetComponentTransformForParticles() const { return GetRelativeTransform(); }
 	FString GetInstanceNameForParticles() const;
@@ -101,4 +104,5 @@ private:
 	int32 CurrentLODIndex = 0;
 	float LastLODDistance = 0.0f;
 	uint32 CachedTemplateVersion = 0;
+	double LastSimulationTimeMs = 0.0;
 };

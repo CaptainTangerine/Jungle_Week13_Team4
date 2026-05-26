@@ -20,9 +20,18 @@ void FAssetEditorManager::Tick(float DeltaTime)
 
 void FAssetEditorManager::Render(float DeltaTime)
 {
+	bIsRendering = true;
 	for (const auto& Editor : OpenEditors)
 	{
 		Editor->Render(DeltaTime);
+	}
+	bIsRendering = false;
+
+	TArray<UObject*> Requests = PendingOpenObjects;
+	PendingOpenObjects.clear();
+	for (UObject* Object : Requests)
+	{
+		OpenEditorForObject(Object);
 	}
 }
 
@@ -40,8 +49,6 @@ void FAssetEditorManager::CloseAll()
 
 bool FAssetEditorManager::OpenEditorForObject(UObject* Object)
 {
-	RemoveClosedEditors();
-
 	for (const auto& Editor : OpenEditors)
 	{
 		if (Editor && Editor->IsEditingObject(Object))
@@ -50,6 +57,17 @@ bool FAssetEditorManager::OpenEditorForObject(UObject* Object)
 			return true;
 		}
 	}
+
+	if (bIsRendering)
+	{
+		if (std::find(PendingOpenObjects.begin(), PendingOpenObjects.end(), Object) == PendingOpenObjects.end())
+		{
+			PendingOpenObjects.push_back(Object);
+		}
+		return true;
+	}
+
+	RemoveClosedEditors();
 
 	for (const auto& Editor : OpenEditors)
 	{
@@ -65,6 +83,7 @@ bool FAssetEditorManager::OpenEditorForObject(UObject* Object)
 		auto Editor = Factory();
 		if (!Editor || !Editor->CanEdit(Object)) continue;
 
+		Editor->Initialize(EditorEngine);
 		Editor->Open(Object);
 		OpenEditors.push_back(std::move(Editor));
 		return true;
