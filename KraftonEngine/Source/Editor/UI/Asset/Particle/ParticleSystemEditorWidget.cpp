@@ -16,6 +16,7 @@
 #include "Component/Light/DirectionalLightComponent.h"
 #include "Core/Property/ArrayProperty.h"
 #include "Core/Property/ObjectProperty.h"
+#include "Core/Property/StructProperty.h"
 #include "Editor/Slate/SlateApplication.h"
 #include "GameFramework/Actor/StaticMeshActor.h"
 #include "GameFramework/Light/DirectionalLightActor.h"
@@ -255,6 +256,27 @@ namespace
 	const char* GetParticleModuleCategory(UClass* Class)
 	{
 		return GetParticleModuleCategoryName(GetParticleModuleType(Class));
+	}
+
+	const char* GetParticleEventTypeLabel(EParticleEventType Type)
+	{
+		switch (Type)
+		{
+		case EParticleEventType::Any:
+			return "Any";
+		case EParticleEventType::Spawn:
+			return "Spawn";
+		case EParticleEventType::Death:
+			return "Death";
+		case EParticleEventType::Collision:
+			return "Collision";
+		case EParticleEventType::Burst:
+			return "Burst";
+		case EParticleEventType::Kismet:
+			return "Kismet";
+		default:
+			return "Unknown";
+		}
 	}
 
 	std::string GetParticleModuleDisplayName(UClass* Class)
@@ -1834,7 +1856,7 @@ bool FParticleSystemEditorWidget::RenderObjectPropertiesInline(UObject* Object)
 	TArray<const FProperty*> Properties;
 	if (Object->GetClass())
 	{
-		Object->GetClass()->GetPropertyRefs(Properties, false);
+		Object->GetClass()->GetPropertyRefs(Properties, true);
 	}
 	for (const FProperty* Property : Properties)
 	{
@@ -2123,16 +2145,7 @@ bool FParticleSystemEditorWidget::RenderObjectPropertiesInline(UObject* Object)
 			}
 			case EPropertyType::Array:
 			{
-				const FArrayProperty* ArrayProperty = Prop.Property ? Prop.Property->AsArrayProperty() : nullptr;
-				const FArrayProperty::FArrayOps* ArrayOps = ArrayProperty ? ArrayProperty->GetArrayOps() : nullptr;
-				if (ArrayOps && ArrayOps->GetNum && Prop.GetValuePtr())
-				{
-					ImGui::Text("%zu elements", ArrayOps->GetNum(Prop.GetValuePtr()));
-				}
-				else
-				{
-					ImGui::TextDisabled("(array)");
-				}
+				bChanged = RenderArrayPropertyInline(Prop, Object);
 				break;
 			}
 			case EPropertyType::Enum:
@@ -2168,6 +2181,8 @@ bool FParticleSystemEditorWidget::RenderObjectPropertiesInline(UObject* Object)
 				break;
 			}
 			case EPropertyType::Struct:
+				bChanged = RenderStructPropertyInline(Prop, Object);
+				break;
 			case EPropertyType::ClassRef:
 			default:
 				ImGui::TextDisabled("(unsupported)");
@@ -2195,6 +2210,304 @@ bool FParticleSystemEditorWidget::RenderObjectPropertiesInline(UObject* Object)
 	ImGui::PopID();
 
 	return bAnyChanged;
+}
+
+bool FParticleSystemEditorWidget::RenderInlinePropertyValue(FPropertyValue& Prop, UObject* OwnerObject)
+{
+	bool bChanged = false;
+	const bool bReadOnly = Prop.Property && (Prop.Property->Flags & PF_ReadOnly) != 0;
+	if (bReadOnly)
+	{
+		ImGui::BeginDisabled();
+	}
+
+	switch (Prop.GetType())
+	{
+	case EPropertyType::Bool:
+	{
+		bool* Value = static_cast<bool*>(Prop.GetValuePtr());
+		if (Value)
+		{
+			bChanged = ImGui::Checkbox("##v", Value);
+		}
+		break;
+	}
+	case EPropertyType::ByteBool:
+	{
+		uint8* Value = static_cast<uint8*>(Prop.GetValuePtr());
+		if (Value)
+		{
+			bool bBoolValue = *Value != 0;
+			if (ImGui::Checkbox("##v", &bBoolValue))
+			{
+				*Value = bBoolValue ? 1 : 0;
+				bChanged = true;
+			}
+		}
+		break;
+	}
+	case EPropertyType::Int:
+	{
+		int32* Value = static_cast<int32*>(Prop.GetValuePtr());
+		if (Value)
+		{
+			bChanged = ImGui::DragInt("##v", Value, Prop.GetSpeed());
+		}
+		break;
+	}
+	case EPropertyType::Float:
+	{
+		float* Value = static_cast<float*>(Prop.GetValuePtr());
+		if (Value)
+		{
+			bChanged = ImGui::DragFloat("##v", Value, Prop.GetSpeed());
+		}
+		break;
+	}
+	case EPropertyType::Vec3:
+	{
+		float* Value = static_cast<float*>(Prop.GetValuePtr());
+		if (Value)
+		{
+			bChanged = ImGui::DragFloat3("##v", Value, Prop.GetSpeed());
+		}
+		break;
+	}
+	case EPropertyType::Vec4:
+	{
+		float* Value = static_cast<float*>(Prop.GetValuePtr());
+		if (Value)
+		{
+			bChanged = ImGui::DragFloat4("##v", Value, Prop.GetSpeed());
+		}
+		break;
+	}
+	case EPropertyType::Color4:
+	{
+		float* Value = static_cast<float*>(Prop.GetValuePtr());
+		if (Value)
+		{
+			bChanged = ImGui::ColorEdit4("##v", Value);
+		}
+		break;
+	}
+	case EPropertyType::String:
+	{
+		FString* Value = static_cast<FString*>(Prop.GetValuePtr());
+		if (Value)
+		{
+			char Buffer[256];
+			strncpy_s(Buffer, sizeof(Buffer), Value->c_str(), _TRUNCATE);
+			if (ImGui::InputText("##v", Buffer, sizeof(Buffer)))
+			{
+				*Value = Buffer;
+				bChanged = true;
+			}
+		}
+		break;
+	}
+	case EPropertyType::Name:
+	{
+		FName* Value = static_cast<FName*>(Prop.GetValuePtr());
+		if (Value)
+		{
+			FString CurrentValue = Value->ToString();
+			char Buffer[256];
+			strncpy_s(Buffer, sizeof(Buffer), CurrentValue.c_str(), _TRUNCATE);
+			if (ImGui::InputText("##v", Buffer, sizeof(Buffer)))
+			{
+				*Value = FName(FString(Buffer));
+				bChanged = true;
+			}
+		}
+		break;
+	}
+	case EPropertyType::Enum:
+	{
+		const FEnum* EnumType = Prop.GetEnumType();
+		if (EnumType && EnumType->GetNames() && EnumType->GetCount() > 0 && Prop.GetValuePtr())
+		{
+			const char** EnumNames = EnumType->GetNames();
+			const uint32 EnumCount = EnumType->GetCount();
+			const uint32 EnumSize = EnumType->GetSize();
+			int32 CurrentValue = 0;
+			std::memcpy(&CurrentValue, Prop.GetValuePtr(), EnumSize);
+			const char* Preview = CurrentValue >= 0 && static_cast<uint32>(CurrentValue) < EnumCount ? EnumNames[CurrentValue] : "Unknown";
+			if (ImGui::BeginCombo("##v", Preview))
+			{
+				for (uint32 EnumIndex = 0; EnumIndex < EnumCount; ++EnumIndex)
+				{
+					const bool bSelected = CurrentValue == static_cast<int32>(EnumIndex);
+					if (ImGui::Selectable(EnumNames[EnumIndex], bSelected))
+					{
+						int32 NewValue = static_cast<int32>(EnumIndex);
+						std::memcpy(Prop.GetValuePtr(), &NewValue, EnumSize);
+						bChanged = true;
+					}
+					if (bSelected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+				}
+				ImGui::EndCombo();
+			}
+		}
+		break;
+	}
+	case EPropertyType::Struct:
+		bChanged = RenderStructPropertyInline(Prop, OwnerObject);
+		break;
+	case EPropertyType::Array:
+		bChanged = RenderArrayPropertyInline(Prop, OwnerObject);
+		break;
+	default:
+		ImGui::TextDisabled("(unsupported)");
+		break;
+	}
+
+	if (bReadOnly)
+	{
+		ImGui::EndDisabled();
+	}
+	return bChanged;
+}
+
+bool FParticleSystemEditorWidget::RenderStructPropertyInline(FPropertyValue& Prop, UObject* OwnerObject)
+{
+	const FStructProperty* StructProperty = Prop.Property ? Prop.Property->AsStructProperty() : nullptr;
+	if (!StructProperty || !StructProperty->GetStructType() || !Prop.GetValuePtr())
+	{
+		ImGui::TextDisabled("(struct)");
+		return false;
+	}
+
+	TArray<FPropertyValue> ChildProps;
+	Prop.GetStructChildren(ChildProps);
+	if (ChildProps.empty())
+	{
+		ImGui::TextDisabled("(empty)");
+		return false;
+	}
+
+	bool bChanged = false;
+	for (int32 ChildIndex = 0; ChildIndex < static_cast<int32>(ChildProps.size()); ++ChildIndex)
+	{
+		FPropertyValue& ChildProp = ChildProps[ChildIndex];
+		ImGui::PushID(ChildIndex);
+		const char* DisplayName = ChildProp.GetDisplayName();
+		if (!DisplayName || !DisplayName[0])
+		{
+			DisplayName = ChildProp.GetName();
+		}
+
+		ImGui::AlignTextToFramePadding();
+		ImGui::TextUnformatted(DisplayName ? DisplayName : "");
+		ImGui::SameLine(132.0f);
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (RenderInlinePropertyValue(ChildProp, OwnerObject))
+		{
+			bChanged = true;
+		}
+		ImGui::PopID();
+	}
+	return bChanged;
+}
+
+bool FParticleSystemEditorWidget::RenderArrayPropertyInline(FPropertyValue& Prop, UObject* OwnerObject)
+{
+	const FArrayProperty* ArrayProperty = Prop.Property ? Prop.Property->AsArrayProperty() : nullptr;
+	void* ArrayPtr = Prop.GetValuePtr();
+	if (!ArrayProperty || !ArrayPtr || !ArrayProperty->GetArrayOps() || !ArrayProperty->GetInnerProperty())
+	{
+		ImGui::TextDisabled("(array)");
+		return false;
+	}
+
+	const FArrayProperty::FArrayOps* Ops = ArrayProperty->GetArrayOps();
+	const FProperty* InnerProperty = ArrayProperty->GetInnerProperty();
+	if (!Ops->GetNum || !Ops->GetElementPtr)
+	{
+		ImGui::TextDisabled("(array)");
+		return false;
+	}
+
+	bool bChanged = false;
+	size_t Num = Ops->GetNum(ArrayPtr);
+	const bool bIsEventList = Prop.GetName() && std::strcmp(Prop.GetName(), "Events") == 0;
+	const char* AddLabel = bIsEventList ? "+ Add Event" : "+ Add";
+
+	if (Ops->InsertDefault && ImGui::Button(AddLabel))
+	{
+		Ops->InsertDefault(ArrayPtr, Num);
+		bChanged = true;
+		Num = Ops->GetNum(ArrayPtr);
+	}
+	ImGui::SameLine();
+	ImGui::TextDisabled("%zu element%s", Num, Num == 1 ? "" : "s");
+
+	if (Num == 0)
+	{
+		ImGui::TextDisabled(bIsEventList ? "No events. Click + Add Event." : "No elements.");
+		return bChanged;
+	}
+
+	for (int32 ElementIndex = 0; ElementIndex < static_cast<int32>(Num); ++ElementIndex)
+	{
+		void* ElementPtr = Ops->GetElementPtr(ArrayPtr, static_cast<size_t>(ElementIndex));
+		if (!ElementPtr)
+		{
+			continue;
+		}
+
+		ImGui::PushID(ElementIndex);
+		if (ElementIndex > 0)
+		{
+			ImGui::Separator();
+		}
+
+		char ElementLabel[128];
+		if (bIsEventList && InnerProperty->GetType() == EPropertyType::Struct)
+		{
+			const FParticleEventGenerateInfo* EventInfo = static_cast<const FParticleEventGenerateInfo*>(ElementPtr);
+			std::snprintf(ElementLabel, sizeof(ElementLabel), "Event %d (%s)", ElementIndex, GetParticleEventTypeLabel(EventInfo ? EventInfo->Type : EParticleEventType::Any));
+		}
+		else
+		{
+			std::snprintf(ElementLabel, sizeof(ElementLabel), "Element %d", ElementIndex);
+		}
+
+		if (Ops->RemoveAt)
+		{
+			if (ImGui::SmallButton("-"))
+			{
+				Ops->RemoveAt(ArrayPtr, static_cast<size_t>(ElementIndex));
+				bChanged = true;
+				ImGui::PopID();
+				break;
+			}
+			ImGui::SameLine();
+		}
+
+		const bool bOpen = ImGui::TreeNodeEx("##ArrayElement", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth, "%s", ElementLabel);
+		if (bOpen)
+		{
+			FPropertyValue ElementValue;
+			ElementValue.Object = Prop.Object ? Prop.Object : OwnerObject;
+			ElementValue.Property = InnerProperty;
+			ElementValue.ContainerPtr = ElementPtr;
+
+			ImGui::Indent(8.0f);
+			if (RenderInlinePropertyValue(ElementValue, OwnerObject))
+			{
+				bChanged = true;
+			}
+			ImGui::Unindent(8.0f);
+			ImGui::TreePop();
+		}
+		ImGui::PopID();
+	}
+
+	return bChanged;
 }
 
 void FParticleSystemEditorWidget::RenderPanel(const char* Title, const ImVec2& Size)
@@ -2382,6 +2695,7 @@ void FParticleSystemEditorWidget::DrawViewportStatsOverlay(ImDrawList* DrawList,
 
 	const ImU32 NameColor = IM_COL32(245, 245, 245, 255);
 	const ImU32 CountColor = IM_COL32(255, 32, 194, 255);
+	const ImU32 EventColor = IM_COL32(255, 190, 70, 255);
 	const ImU32 TimeColor = IM_COL32(60, 215, 255, 255);
 	const float LineHeight = ImGui::GetTextLineHeight();
 	int32 LineCount = bShowParticleMemory ? 1 : 0;
@@ -2389,7 +2703,21 @@ void FParticleSystemEditorWidget::DrawViewportStatsOverlay(ImDrawList* DrawList,
 	{
 		LineCount += static_cast<int32>(PreviewParticleComponent->GetEmitterInstances().size());
 	}
+	if (bShowParticleCount)
+	{
+		++LineCount;
+	}
 	float CurrentY = ViewportPos.y + ViewportSize.y - 10.0f - LineHeight * static_cast<float>(LineCount);
+
+	if (bShowParticleCount)
+	{
+		char EventBuffer[96] = {};
+		std::snprintf(EventBuffer, sizeof(EventBuffer), "Events this frame: %zu", PreviewParticleComponent->GetParticleEvents().size());
+		const ImVec2 TextSize = ImGui::CalcTextSize(EventBuffer);
+		const ImVec2 TextPos(ViewportPos.x + ViewportSize.x - TextSize.x - 10.0f, CurrentY);
+		DrawList->AddText(TextPos, EventColor, EventBuffer);
+		CurrentY += LineHeight;
+	}
 
 	if (bShowParticleCount || bShowParticleTime)
 	{
@@ -2402,6 +2730,7 @@ void FParticleSystemEditorWidget::DrawViewportStatsOverlay(ImDrawList* DrawList,
 
 			char NameBuffer[128] = {};
 			char CountBuffer[64] = {};
+			char EventBuffer[96] = {};
 			char TimeBuffer[128] = {};
 			const FString Name = Instance->GetTemplateName().empty() ? FString("Emitter") : Instance->GetTemplateName();
 			std::snprintf(NameBuffer, sizeof(NameBuffer), "%s: ", Name.c_str());
@@ -2409,6 +2738,14 @@ void FParticleSystemEditorWidget::DrawViewportStatsOverlay(ImDrawList* DrawList,
 			{
 				std::snprintf(CountBuffer, sizeof(CountBuffer), "%d / %d",
 					Instance->GetActiveParticleCount(), Instance->GetMaxActiveParticleCount());
+				if (Instance->GetLastProcessedParticleEventCount() > 0
+					|| Instance->GetLastEventReceiverSpawnRequestCount() > 0)
+				{
+					std::snprintf(EventBuffer, sizeof(EventBuffer), " / recv %d, spawned %d/%d",
+						Instance->GetLastProcessedParticleEventCount(),
+						Instance->GetLastEventReceiverSpawnedCount(),
+						Instance->GetLastEventReceiverSpawnRequestCount());
+				}
 			}
 			if (bShowParticleTime)
 			{
@@ -2420,6 +2757,7 @@ void FParticleSystemEditorWidget::DrawViewportStatsOverlay(ImDrawList* DrawList,
 			const float LineWidth =
 				ImGui::CalcTextSize(NameBuffer).x
 				+ ImGui::CalcTextSize(CountBuffer).x
+				+ ImGui::CalcTextSize(EventBuffer).x
 				+ ImGui::CalcTextSize(Separator).x
 				+ ImGui::CalcTextSize(TimeBuffer).x;
 			ImVec2 TextPos(ViewportPos.x + ViewportSize.x - LineWidth - 10.0f, CurrentY);
@@ -2429,6 +2767,11 @@ void FParticleSystemEditorWidget::DrawViewportStatsOverlay(ImDrawList* DrawList,
 			{
 				DrawList->AddText(TextPos, CountColor, CountBuffer);
 				TextPos.x += ImGui::CalcTextSize(CountBuffer).x;
+				if (EventBuffer[0] != '\0')
+				{
+					DrawList->AddText(TextPos, EventColor, EventBuffer);
+					TextPos.x += ImGui::CalcTextSize(EventBuffer).x;
+				}
 			}
 			if (Separator[0] != '\0')
 			{

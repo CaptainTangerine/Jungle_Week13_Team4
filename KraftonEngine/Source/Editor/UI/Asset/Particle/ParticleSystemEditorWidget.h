@@ -44,6 +44,9 @@ private:
 	void MoveParticleModule(class UParticleSystem* ParticleSystem, class UParticleLODLevel* SourceLODLevel, class UParticleLODLevel* TargetLODLevel, class UParticleModule* Module, int32 TargetIndex);
 	bool RenderLODDistanceProperties(class UParticleSystem* ParticleSystem);
 	bool RenderObjectPropertiesInline(class UObject* Object);
+	bool RenderInlinePropertyValue(struct FPropertyValue& Prop, class UObject* OwnerObject);
+	bool RenderStructPropertyInline(struct FPropertyValue& Prop, class UObject* OwnerObject);
+	bool RenderArrayPropertyInline(struct FPropertyValue& Prop, class UObject* OwnerObject);
 
 private:
 	struct FPreviewPlaybackState

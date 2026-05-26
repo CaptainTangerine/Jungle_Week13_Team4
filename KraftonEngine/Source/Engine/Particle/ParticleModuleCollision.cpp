@@ -66,16 +66,6 @@ namespace
 		return Vector - Normal * (2.0f * Vector.Dot(Normal));
 	}
 
-	FVector SafeNormal(const FVector& Vector, const FVector& Fallback = FVector::ZeroVector)
-	{
-		const float Length = Vector.Length();
-		if (Length <= FMath::Epsilon)
-		{
-			return Fallback;
-		}
-		return Vector / Length;
-	}
-
 	FVector ResolveHitNormal(const FHitResult& Hit, const FVector& Direction)
 	{
 		FVector Normal = Hit.WorldNormal;
@@ -286,16 +276,13 @@ void UParticleModuleCollision::Update(const FUpdateContext& Context)
 		Particle.Location = ToLocalPosition(Component, bUseLocalSpace, WorldHitLocation + ReflectedStep);
 		Particle.OldLocation = ToLocalPosition(Component, bUseLocalSpace, WorldHitLocation);
 
-		const FVector EventNormal = SafeNormal(ToLocalVector(Component, bUseLocalSpace, WorldNormal), WorldNormal);
-		const FVector EventDirection = SafeNormal(ToLocalVector(Component, bUseLocalSpace, WorldDirection), WorldDirection);
-
 		if (CollisionPayload.UsedCollisions <= 0)
 		{
 			Particle.Location = ToLocalPosition(Component, bUseLocalSpace, WorldHitLocation);
 			switch (CollisionCompletionOption)
 			{
 			case EParticleCollisionComplete::Kill:
-				DispatchCollisionEvent(Owner, Particle, Particle.Location, EventNormal, EventDirection);
+				DispatchCollisionEvent(Owner, Particle, WorldHitLocation, WorldNormal, WorldDirection);
 				Owner.KillParticle(ActiveIndex);
 				continue;
 			case EParticleCollisionComplete::Freeze:
@@ -319,7 +306,7 @@ void UParticleModuleCollision::Update(const FUpdateContext& Context)
 			}
 		}
 
-		DispatchCollisionEvent(Owner, Particle, Particle.Location, EventNormal, EventDirection);
+		DispatchCollisionEvent(Owner, Particle, WorldHitLocation, WorldNormal, WorldDirection);
 		Particle.Flags |= STATE_Particle_CollisionHasOccurred;
 	}
 }

@@ -103,6 +103,9 @@ void FParticleEmitterInstance::Init(UParticleSystemComponent* InComponent, UPart
 	ActiveParticles = 0;
 	ParticleCounter = 0;
 	EventCounter = 0;
+	LastProcessedParticleEventCount = 0;
+	LastEventReceiverSpawnRequestCount = 0;
+	LastEventReceiverSpawnedCount = 0;
 	bSpawningSuppressed = false;
 	PendingEvents.clear();
 	SetCurrentLODIndex(0);
@@ -126,6 +129,9 @@ void FParticleEmitterInstance::Reset()
 	MaxActiveParticles = 0;
 	ParticleCounter = 0;
 	EventCounter = 0;
+	LastProcessedParticleEventCount = 0;
+	LastEventReceiverSpawnRequestCount = 0;
+	LastEventReceiverSpawnedCount = 0;
 	EmitterTime = 0.0f;
 	SpawnFraction = 0.0f;
 	bBurstFired = false;
@@ -141,14 +147,50 @@ void FParticleEmitterInstance::Tick(float DeltaTime)
 	}
 
 	UParticleModuleSpawn* SpawnRateModule = GetSpawnRateModule();
+	const UParticleModuleRequired* RequiredModule = CurrentLODLevel->GetRequiredModule();
 	const float PreviousEmitterTime = EmitterTime;
+	const float EmitterDuration = RequiredModule ? (std::max)(0.0f, RequiredModule->EmitterDuration) : 0.0f;
+	const bool bEmitterLooping = RequiredModule ? RequiredModule->bLooping : true;
+	float SpawnDeltaTime = DeltaTime;
 	EmitterTime += DeltaTime;
+	bool bEmitterWrapped = false;
+
+	if (EmitterDuration > FMath::Epsilon)
+	{
+		if (bEmitterLooping)
+		{
+			if (EmitterTime >= EmitterDuration)
+			{
+				EmitterTime = std::fmod(EmitterTime, EmitterDuration);
+				if (EmitterTime < 0.0f)
+				{
+					EmitterTime += EmitterDuration;
+				}
+
+				bEmitterWrapped = true;
+				bBurstFired = false;
+			}
+		}
+		else
+		{
+			if (PreviousEmitterTime >= EmitterDuration)
+			{
+				SpawnDeltaTime = 0.0f;
+			}
+			else if (EmitterTime > EmitterDuration)
+			{
+				SpawnDeltaTime = (std::max)(0.0f, EmitterDuration - PreviousEmitterTime);
+				EmitterTime = EmitterDuration;
+			}
+		}
+	}
+
 	ClearPendingEvents();
 
-	if (SpawnRateModule && !bSpawningSuppressed)
+	if (SpawnRateModule && !bSpawningSuppressed && SpawnDeltaTime > 0.0f)
 	{
 		FVector InitialLocation = FVector::ZeroVector;
-		if (const UParticleModuleRequired* RequiredModule = CurrentLODLevel->GetRequiredModule())
+		if (RequiredModule)
 		{
 			if (!RequiredModule->bUseLocalSpace)
 			{
@@ -160,7 +202,10 @@ void FParticleEmitterInstance::Tick(float DeltaTime)
 
 		// 버스트
 		const int32 BurstCount = std::max(0, static_cast<int32>(std::floor(SpawnRateModule->BurstCount.GetValue(SpawnRateModule->BurstTime, DistributionData) + 0.5f)));
-		if (!bBurstFired && BurstCount > 0 && PreviousEmitterTime <= SpawnRateModule->BurstTime && EmitterTime >= SpawnRateModule->BurstTime)
+		const bool bCrossedBurstTime = bEmitterWrapped
+			? (SpawnRateModule->BurstTime >= PreviousEmitterTime || SpawnRateModule->BurstTime <= EmitterTime)
+			: (PreviousEmitterTime <= SpawnRateModule->BurstTime && EmitterTime >= SpawnRateModule->BurstTime);
+		if (!bBurstFired && BurstCount > 0 && bCrossedBurstTime)
 		{
 			NotifyParticleBurst(BurstCount, InitialLocation);
 			SpawnParticles(BurstCount, SpawnRateModule->BurstTime, 0.0f, InitialLocation, FVector::ZeroVector);
@@ -172,13 +217,13 @@ void FParticleEmitterInstance::Tick(float DeltaTime)
 		const float Rate = SpawnRateModule->Rate.GetValue(EmitterTime, DistributionData);
 		const float RateScale = SpawnRateModule->RateScale.GetValue(EmitterTime, DistributionData);
 		const float SpawnRate = std::max(0.0f, Rate * RateScale);
-		SpawnFraction += SpawnRate * DeltaTime;
+		SpawnFraction += SpawnRate * SpawnDeltaTime;
 		const int32 SpawnCount = static_cast<int32>(SpawnFraction);
 		SpawnFraction -= static_cast<float>(SpawnCount);
 
 		if (SpawnCount > 0)
 		{
-			const float SpawnIncrement = DeltaTime / static_cast<float>(SpawnCount);
+			const float SpawnIncrement = SpawnDeltaTime / static_cast<float>(SpawnCount);
 			SpawnParticles(SpawnCount, PreviousEmitterTime, SpawnIncrement, InitialLocation, FVector::ZeroVector);
 		}
 	}
@@ -201,6 +246,10 @@ void FParticleEmitterInstance::Tick(float DeltaTime)
 
 void FParticleEmitterInstance::ProcessParticleEvents(const TArray<FParticleEventData>& Events)
 {
+	LastProcessedParticleEventCount = 0;
+	LastEventReceiverSpawnRequestCount = 0;
+	LastEventReceiverSpawnedCount = 0;
+
 	if (!CurrentLODLevel || Events.empty())
 	{
 		return;
@@ -218,6 +267,7 @@ void FParticleEmitterInstance::ProcessParticleEvents(const TArray<FParticleEvent
 		{
 			if (Receiver->WillProcessParticleEvent(EventData))
 			{
+				++LastProcessedParticleEventCount;
 				Receiver->ProcessParticleEvent(EventData, *this);
 			}
 		}
@@ -340,6 +390,7 @@ FDynamicEmitterDataBase* FParticleEmitterInstance::CreateDynamicData(int32 Emitt
 			SpriteSource.SubImagesX = std::max(1, SpriteTypeData->SubImagesX);
 			SpriteSource.SubImagesY = std::max(1, SpriteTypeData->SubImagesY);
 			SpriteSource.SubUVFrameRate = std::max(0.0f, SpriteTypeData->SubUVFrameRate);
+			SpriteSource.bLoopSubUV = SpriteTypeData->bLoopSubUV;
 		}
 
 		if (const UParticleModuleTypeDataMesh* MeshTypeData = Cast<UParticleModuleTypeDataMesh>(CurrentLODLevel->GetTypeDataModule()))
@@ -569,7 +620,13 @@ void FParticleEmitterInstance::InitializeParticleIndices()
 	}
 }
 
-void FParticleEmitterInstance::SpawnParticles(int32 Count, float StartTime, float Increment, const FVector& InitialLocation, const FVector& InitialVelocity)
+void FParticleEmitterInstance::SpawnParticles(
+	int32 Count,
+	float StartTime,
+	float Increment,
+	const FVector& InitialLocation,
+	const FVector& InitialVelocity,
+	bool bLockInitialLocation)
 {
 	if (!CurrentLODLevel || !ParticleData || !ParticleIndices || Count <= 0 || bSpawningSuppressed)
 	{
@@ -603,7 +660,7 @@ void FParticleEmitterInstance::SpawnParticles(int32 Count, float StartTime, floa
 
 			const FParticleModuleCache* Cache = LODData.FindModuleCache(Module);
 			const int32 Offset = Cache ? Cache->ParticlePayloadOffset : 0;
-			UParticleModule::FSpawnContext Context(*this, Offset, SpawnTime, Particle);
+			UParticleModule::FSpawnContext Context(*this, Offset, SpawnTime, Particle, bLockInitialLocation);
 			Module->Spawn(Context);
 		}
 
@@ -679,6 +736,12 @@ void FParticleEmitterInstance::QueueParticleEvent(const FParticleEventData& Even
 void FParticleEmitterInstance::ClearPendingEvents()
 {
 	PendingEvents.clear();
+}
+
+void FParticleEmitterInstance::RecordEventReceiverSpawn(int32 RequestedCount, int32 SpawnedCount)
+{
+	LastEventReceiverSpawnRequestCount += std::max(0, RequestedCount);
+	LastEventReceiverSpawnedCount += std::max(0, SpawnedCount);
 }
 
 void FParticleEmitterInstance::NotifyParticleKilled(const FBaseParticle* Particle)

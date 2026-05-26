@@ -79,6 +79,7 @@ struct FDynamicSpriteEmitterReplayDataBase : public FDynamicEmitterReplayDataBas
 	int32 SubImagesX = 1;
 	int32 SubImagesY = 1;
 	float SubUVFrameRate = 16.0f;
+	bool bLoopSubUV = false;
 };
 
 struct FDynamicBeamEmitterReplayData : public FDynamicSpriteEmitterReplayDataBase

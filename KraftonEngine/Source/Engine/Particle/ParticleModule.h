@@ -59,7 +59,15 @@ public:
 		int32 Offset;
 		float SpawnTime;
 		FBaseParticle* ParticleBase;
-		FSpawnContext(FParticleEmitterInstance& Ow, int32 Of, float St, FBaseParticle* Pb) : FContext(Ow), Offset(Of), SpawnTime(St), ParticleBase(Pb) {}
+		bool bLockInitialLocation = false;
+		FSpawnContext(FParticleEmitterInstance& Ow, int32 Of, float St, FBaseParticle* Pb, bool bInLockInitialLocation = false)
+			: FContext(Ow)
+			, Offset(Of)
+			, SpawnTime(St)
+			, ParticleBase(Pb)
+			, bLockInitialLocation(bInLockInitialLocation)
+		{
+		}
 	};
 	virtual void Spawn(const FSpawnContext& Context) {}
 
@@ -125,8 +133,11 @@ public:
 	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="Sub Images Y", Min=1.0f, Max=64.0f, Speed=1.0f)
 	int32 SubImagesY = 1;
 
-	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="SubUV Frame Rate", Min=0.0f, Max=120.0f, Speed=1.0f)
+	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="SubUV Frame Rate (FPS)", Min=0.0f, Max=120.0f, Speed=1.0f)
 	float SubUVFrameRate = 16.0f;
+
+	UPROPERTY(Edit, Save, Category="Sprite", DisplayName="Loop SubUV")
+	bool bLoopSubUV = false;
 
 	bool ShouldExposeProperty(const FProperty& Property) const override;
 };
@@ -283,7 +294,7 @@ public:
 	UPROPERTY(Edit, Save, Category="Required", DisplayName="Blend Mode", Enum=EParticleBlendMode)
 	EParticleBlendMode BlendMode = EParticleBlendMode::AlphaBlend;
 
-	UPROPERTY(Edit, Save, Category="Required", DisplayName="Duration", Min=0.0f, Max=1000.0f, Speed=0.1f)
+	UPROPERTY(Edit, Save, Category="Required", DisplayName="Emitter Duration (sec)", Min=0.0f, Max=1000.0f, Speed=0.1f)
 	float EmitterDuration = 1.0f;
 
 	UPROPERTY(Edit, Save, Category="Required", DisplayName="Looping")
@@ -299,7 +310,7 @@ public:
 	bool IsSpawnModule() const override { return true; }
 	EParticleModuleType GetModuleType() const override { return EParticleModuleType::Spawn; }
 
-	UPROPERTY(Edit, Save, Instanced, Category="Spawn", DisplayName="Rate", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=Rate.Distribution, CppType=UDistributionFloat*)
+	UPROPERTY(Edit, Save, Instanced, Category="Spawn", DisplayName="Rate (per sec)", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=Rate.Distribution, CppType=UDistributionFloat*)
 	;
 	FRawDistributionFloat Rate;
 
@@ -352,7 +363,7 @@ public:
 	bool IsSpawnModule() const override { return true; }
 	void Spawn(const FSpawnContext& Context) override;
 
-	UPROPERTY(Edit, Save, Instanced, Category="Lifetime", DisplayName="Lifetime", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=Lifetime.Distribution, CppType=UDistributionFloat*)
+	UPROPERTY(Edit, Save, Instanced, Category="Lifetime", DisplayName="Lifetime (sec)", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=Lifetime.Distribution, CppType=UDistributionFloat*)
 	;
 	FRawDistributionFloat Lifetime;
 };

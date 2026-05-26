@@ -130,6 +130,15 @@ public:
 	UPROPERTY(Edit, Save, Category="Event Receiver Spawn", DisplayName="Use Particle System Location")
 	bool bUsePSysLocation = false;
 
+	UPROPERTY(Edit, Save, Category="Event Receiver Spawn", DisplayName="Use Event Location Only")
+	bool bUseEventLocationOnly = true;
+
+	UPROPERTY(Edit, Save, Category="Event Receiver Spawn", DisplayName="Event Location Offset")
+	FVector EventLocationOffset = FVector::ZeroVector;
+
+	UPROPERTY(Edit, Save, Category="Event Receiver Spawn", DisplayName="Event Normal Offset", Min=0.0f, Max=10000.0f, Speed=0.1f)
+	float EventNormalOffset = 0.0f;
+
 	UPROPERTY(Edit, Save, Category="Event Receiver Spawn", DisplayName="Inherit Velocity")
 	bool bInheritVelocity = false;
 
