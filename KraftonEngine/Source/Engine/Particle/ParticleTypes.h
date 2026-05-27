@@ -69,6 +69,14 @@ enum class EParticleTrailRenderAxis : uint8
 	WorldUp,
 };
 
+UENUM()
+enum class ETrail2SourceMethod : uint8
+{
+	Default,
+	Particle,
+	Actor,
+};
+
 struct FBaseParticle
 {
 	FVector OldLocation = FVector(0.0f, 0.0f, 0.0f);
@@ -93,6 +101,14 @@ struct FBaseParticle
 	float OneOverMaxLifetime = 1.0f;
 	float Placeholder0 = 0.0f;
 	float Placeholder1 = 0.0f;
+	uint32 ParticleId = 0;
+};
+
+struct FRibbonParticlePayload
+{
+	uint32 SpawnSerial = 0;
+	uint32 SourceParticleId = 0;
+	int32 TrailIndex = 0;
 };
 
 enum EParticleStates

@@ -1,6 +1,8 @@
 ﻿#include "ParticleEmitterInstance.h"
 
 #include "Component/Primitive/ParticleSystemComponent.h"
+#include "Component/SceneComponent.h"
+#include "GameFramework/AActor.h"
 #include "Math/MathUtils.h"
 #include "Particle/ParticleEmitter.h"
 #include "Particle/ParticleHelper.h"
@@ -11,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 
 namespace
 {
@@ -123,6 +126,7 @@ void FParticleEmitterInstance::Reset()
 	InstanceData = nullptr;
 	InstancePayloadSize = 0;
 	PayloadOffset = 0;
+	IntrinsicPayloadOffset = -1;
 	ParticleSize = sizeof(FBaseParticle);
 	ParticleStride = FMath::AlignBytes(ParticleSize, 16);
 	ActiveParticles = 0;
@@ -194,7 +198,7 @@ void FParticleEmitterInstance::Tick(float DeltaTime)
 		{
 			if (!RequiredModule->bUseLocalSpace)
 			{
-				InitialLocation = GetComponentLocation();
+				InitialLocation = GetSpawnReferenceLocation();
 			}
 		}
 
@@ -322,6 +326,15 @@ void FParticleEmitterInstance::BuildLODData(UParticleLODLevel* LODLevel)
 	ParticleStride = LODData.ParticleStride;
 	PayloadOffset = ParticleSize;
 	InstancePayloadSize = 0;
+	IntrinsicPayloadOffset = -1;
+
+	const int32 IntrinsicPayloadSize = GetIntrinsicParticlePayloadSize();
+	if (IntrinsicPayloadSize > 0)
+	{
+		LODData.ParticleSize = FMath::AlignBytes(LODData.ParticleSize, 16);
+		IntrinsicPayloadOffset = LODData.ParticleSize;
+		LODData.ParticleSize += IntrinsicPayloadSize;
+	}
 
 	for (UParticleModule* Module : LODLevel->GetModules())
 	{
@@ -483,6 +496,7 @@ FDynamicEmitterDataBase* FParticleEmitterInstance::CreateDynamicData(int32 Emitt
 			RibbonSource.RenderAxis = RibbonTypeData->RenderAxis;
 		}
 		RibbonSource.MaxActiveParticleCount = MaxActiveParticles;
+		RibbonSource.RibbonPayloadOffset = IntrinsicPayloadOffset;
 	}
 
 	const int32 ParticleDataBytes = MaxActiveParticles * ParticleStride;
@@ -505,6 +519,21 @@ const FTransform& FParticleEmitterInstance::GetComponentTransform() const
 FVector FParticleEmitterInstance::GetComponentLocation() const
 {
 	return Component ? Component->GetWorldLocation() : FVector::ZeroVector;
+}
+
+FVector FParticleEmitterInstance::GetSpawnReferenceLocation() const
+{
+	return GetComponentLocation();
+}
+
+FVector FParticleEmitterInstance::ConvertWorldLocationToParticleSpace(const FVector& WorldLocation) const
+{
+	const UParticleModuleRequired* Required = CurrentLODLevel ? CurrentLODLevel->GetRequiredModule() : nullptr;
+	if (Required && Required->bUseLocalSpace && Component)
+	{
+		return Component->GetWorldInverseMatrix().TransformPositionWithW(WorldLocation);
+	}
+	return WorldLocation;
 }
 
 uint8* FParticleEmitterInstance::GetModuleInstanceData(const UParticleModule* Module)
@@ -585,6 +614,15 @@ const FBaseParticle* FParticleEmitterInstance::GetParticleDirect(int32 ParticleI
 }
 
 FBaseParticle* FParticleEmitterInstance::GetActiveParticle(int32 ActiveIndex)
+{
+	if (ActiveIndex < 0 || ActiveIndex >= ActiveParticles || !ParticleIndices)
+	{
+		return nullptr;
+	}
+	return GetParticleDirect(ParticleIndices[ActiveIndex]);
+}
+
+const FBaseParticle* FParticleEmitterInstance::GetActiveParticle(int32 ActiveIndex) const
 {
 	if (ActiveIndex < 0 || ActiveIndex >= ActiveParticles || !ParticleIndices)
 	{
@@ -712,7 +750,7 @@ void FParticleEmitterInstance::PreSpawn(FBaseParticle* Particle, const FVector& 
 	Particle->OldLocation = InitialLocation;
 	Particle->Velocity = InitialVelocity;
 	Particle->BaseVelocity = InitialVelocity;
-	++ParticleCounter;
+	Particle->ParticleId = ++ParticleCounter;
 }
 
 void FParticleEmitterInstance::PostSpawn(FBaseParticle* Particle, float Interp, float SpawnTime)
@@ -853,4 +891,389 @@ FDynamicEmitterDataBase* FParticleBeamEmitterInstance::CreateDynamicEmitterData(
 FDynamicEmitterDataBase* FParticleRibbonEmitterInstance::CreateDynamicEmitterData(const UParticleModuleRequired* RequiredModule) const
 {
 	return new FDynamicRibbonEmitterData(RequiredModule);
+}
+
+void FParticleRibbonEmitterInstance::Init(UParticleSystemComponent* InComponent, UParticleEmitter* InTemplate)
+{
+	CurrentSourceLocation = FVector::ZeroVector;
+	bHasCurrentSource = false;
+	PendingTrailIndex = 0;
+	PendingSourceParticleId = 0;
+	RibbonSpawnSerial = 0;
+	bSingleSourceInitialized = false;
+	SourceTrails.clear();
+	FParticleEmitterInstance::Init(InComponent, InTemplate);
+}
+
+void FParticleRibbonEmitterInstance::Reset()
+{
+	CurrentSourceLocation = FVector::ZeroVector;
+	bHasCurrentSource = false;
+	PendingTrailIndex = 0;
+	PendingSourceParticleId = 0;
+	RibbonSpawnSerial = 0;
+	bSingleSourceInitialized = false;
+	SourceTrails.clear();
+	FParticleEmitterInstance::Reset();
+}
+
+const UParticleModuleTrailSource* FParticleRibbonEmitterInstance::FindTrailSourceModule() const
+{
+	if (!CurrentLODLevel)
+	{
+		return nullptr;
+	}
+
+	for (UParticleModule* Module : CurrentLODLevel->GetModules())
+	{
+		if (const UParticleModuleTrailSource* Source = Cast<UParticleModuleTrailSource>(Module))
+		{
+			return Source->IsEnabled() ? Source : nullptr;
+		}
+	}
+	return nullptr;
+}
+
+const UParticleModuleSpawnPerUnit* FParticleRibbonEmitterInstance::FindSpawnPerUnitModule() const
+{
+	if (!CurrentLODLevel)
+	{
+		return nullptr;
+	}
+
+	for (UParticleModule* Module : CurrentLODLevel->GetModules())
+	{
+		if (const UParticleModuleSpawnPerUnit* SpawnPerUnit = Cast<UParticleModuleSpawnPerUnit>(Module))
+		{
+			return SpawnPerUnit->IsEnabled() ? SpawnPerUnit : nullptr;
+		}
+	}
+	return nullptr;
+}
+
+bool FParticleRibbonEmitterInstance::ResolveSingleSourceLocation(FVector& OutLocation) const
+{
+	const UParticleModuleTrailSource* Source = FindTrailSourceModule();
+	if (!Source || Source->SourceMethod == ETrail2SourceMethod::Default)
+	{
+		OutLocation = GetComponentLocation() + (Source ? Source->SourceOffset : FVector::ZeroVector);
+		return true;
+	}
+	if (Source->SourceMethod != ETrail2SourceMethod::Actor || !Component)
+	{
+		return false;
+	}
+
+	UObject* ObjectSource = nullptr;
+	if (!Component->GetObjectParameter(Source->SourceName, ObjectSource))
+	{
+		return false;
+	}
+	if (const USceneComponent* SourceComponent = Cast<USceneComponent>(ObjectSource))
+	{
+		OutLocation = SourceComponent->GetWorldLocation() + Source->SourceOffset;
+		return true;
+	}
+	if (const AActor* SourceActor = Cast<AActor>(ObjectSource))
+	{
+		OutLocation = SourceActor->GetActorLocation() + Source->SourceOffset;
+		return true;
+	}
+	return false;
+}
+
+FVector FParticleRibbonEmitterInstance::GetSpawnReferenceLocation() const
+{
+	return bHasCurrentSource ? CurrentSourceLocation : GetComponentLocation();
+}
+
+void FParticleRibbonEmitterInstance::Tick(float DeltaTime)
+{
+	const UParticleModuleTrailSource* Source = FindTrailSourceModule();
+	if (Source && Source->SourceMethod == ETrail2SourceMethod::Particle)
+	{
+		const bool bWasSuppressed = bSpawningSuppressed;
+		bSpawningSuppressed = true;
+		FParticleEmitterInstance::Tick(DeltaTime);
+		bSpawningSuppressed = bWasSuppressed;
+		UpdateParticleSourceTrails();
+		return;
+	}
+
+	bHasCurrentSource = ResolveSingleSourceLocation(CurrentSourceLocation);
+	const bool bWasSuppressed = bSpawningSuppressed;
+	if (!bHasCurrentSource)
+	{
+		bSpawningSuppressed = true;
+	}
+	FParticleEmitterInstance::Tick(DeltaTime);
+	bSpawningSuppressed = bWasSuppressed;
+	if (bHasCurrentSource)
+	{
+		const UParticleModuleTypeDataRibbon* TypeData = CurrentLODLevel
+			? Cast<UParticleModuleTypeDataRibbon>(CurrentLODLevel->GetTypeDataModule())
+			: nullptr;
+		if (!bSingleSourceInitialized && FindSpawnPerUnitModule()
+			&& (!TypeData || TypeData->bSpawnInitialParticle))
+		{
+			SpawnTrailPoint(0, 0, CurrentSourceLocation);
+		}
+		bSingleSourceInitialized = true;
+		TrimTrail(0);
+	}
+	else
+	{
+		bSingleSourceInitialized = false;
+	}
+}
+
+void FParticleRibbonEmitterInstance::PostSpawn(FBaseParticle* Particle, float Interp, float SpawnTime)
+{
+	FParticleEmitterInstance::PostSpawn(Particle, Interp, SpawnTime);
+	if (FRibbonParticlePayload* Payload = GetRibbonPayload(Particle))
+	{
+		Payload->SpawnSerial = ++RibbonSpawnSerial;
+		Payload->SourceParticleId = PendingSourceParticleId;
+		Payload->TrailIndex = PendingTrailIndex;
+	}
+}
+
+FRibbonParticlePayload* FParticleRibbonEmitterInstance::GetRibbonPayload(FBaseParticle* Particle) const
+{
+	if (!Particle || IntrinsicPayloadOffset < 0)
+	{
+		return nullptr;
+	}
+	return reinterpret_cast<FRibbonParticlePayload*>(
+		reinterpret_cast<uint8*>(Particle) + IntrinsicPayloadOffset);
+}
+
+const FRibbonParticlePayload* FParticleRibbonEmitterInstance::GetRibbonPayload(const FBaseParticle* Particle) const
+{
+	return GetRibbonPayload(const_cast<FBaseParticle*>(Particle));
+}
+
+void FParticleRibbonEmitterInstance::SpawnTrailPoint(int32 TrailIndex, uint32 SourceParticleId, const FVector& WorldLocation)
+{
+	const int32 PreviousTrailIndex = PendingTrailIndex;
+	const uint32 PreviousSourceParticleId = PendingSourceParticleId;
+	PendingTrailIndex = TrailIndex;
+	PendingSourceParticleId = SourceParticleId;
+	SpawnParticles(1, EmitterTime, 0.0f, ConvertWorldLocationToParticleSpace(WorldLocation), FVector::ZeroVector, true);
+	PendingTrailIndex = PreviousTrailIndex;
+	PendingSourceParticleId = PreviousSourceParticleId;
+	TrimTrail(TrailIndex);
+}
+
+void FParticleRibbonEmitterInstance::TrimTrail(int32 TrailIndex)
+{
+	const UParticleModuleTypeDataRibbon* TypeData = CurrentLODLevel
+		? Cast<UParticleModuleTypeDataRibbon>(CurrentLODLevel->GetTypeDataModule())
+		: nullptr;
+	const int32 MaxParticles = TypeData ? std::max(2, TypeData->MaxParticlesInTrail) : 64;
+
+	while (true)
+	{
+		int32 Count = 0;
+		int32 OldestActiveIndex = -1;
+		uint32 OldestSerial = (std::numeric_limits<uint32>::max)();
+		for (int32 ActiveIndex = 0; ActiveIndex < ActiveParticles; ++ActiveIndex)
+		{
+			const FRibbonParticlePayload* Payload = GetRibbonPayload(GetActiveParticle(ActiveIndex));
+			if (!Payload || Payload->TrailIndex != TrailIndex)
+			{
+				continue;
+			}
+			++Count;
+			if (Payload->SpawnSerial < OldestSerial)
+			{
+				OldestSerial = Payload->SpawnSerial;
+				OldestActiveIndex = ActiveIndex;
+			}
+		}
+		if (Count <= MaxParticles || OldestActiveIndex < 0)
+		{
+			return;
+		}
+		KillParticle(OldestActiveIndex);
+	}
+}
+
+void FParticleRibbonEmitterInstance::SampleParticleSource(
+	FSourceTrailState& Trail, const FVector& WorldLocation, const UParticleModuleSpawnPerUnit* SpawnPerUnit)
+{
+	const UParticleModuleTypeDataRibbon* TypeData = CurrentLODLevel
+		? Cast<UParticleModuleTypeDataRibbon>(CurrentLODLevel->GetTypeDataModule())
+		: nullptr;
+	if (!Trail.bInitialized)
+	{
+		Trail.PreviousLocation = WorldLocation;
+		Trail.bInitialized = true;
+		if (!TypeData || TypeData->bSpawnInitialParticle)
+		{
+			SpawnTrailPoint(Trail.TrailIndex, Trail.SourceParticleId, WorldLocation);
+		}
+		return;
+	}
+
+	FVector Travel = WorldLocation - Trail.PreviousLocation;
+	const FVector PreviousLocation = Trail.PreviousLocation;
+	Trail.PreviousLocation = WorldLocation;
+	if (SpawnPerUnit && SpawnPerUnit->bIgnoreMovementAlongZ)
+	{
+		Travel.Z = 0.0f;
+	}
+	const float Distance = Travel.Length();
+	if (Distance <= (SpawnPerUnit ? SpawnPerUnit->MovementTolerance : FMath::Epsilon))
+	{
+		return;
+	}
+	if (SpawnPerUnit && SpawnPerUnit->MaxFrameDistance > 0.0f && Distance > SpawnPerUnit->MaxFrameDistance)
+	{
+		Trail.SpawnRemainder = 0.0f;
+		return;
+	}
+
+	int32 SpawnCount = 1;
+	if (SpawnPerUnit)
+	{
+		const float SpawnValue = SpawnPerUnit->SpawnPerUnit.GetValue(EmitterTime, GetDistributionData());
+		if (SpawnValue <= 0.0f || SpawnPerUnit->UnitScalar <= 0.0f)
+		{
+			return;
+		}
+		const float SpawnFloat = Trail.SpawnRemainder
+			+ (Distance / std::max(0.001f, SpawnPerUnit->UnitScalar)) * SpawnValue;
+		SpawnCount = static_cast<int32>(std::floor(SpawnFloat));
+		Trail.SpawnRemainder = SpawnFloat - static_cast<float>(SpawnCount);
+	}
+	SpawnCount = std::min(SpawnCount, std::max(0, MaxActiveParticles - ActiveParticles));
+	for (int32 SpawnIndex = 0; SpawnIndex < SpawnCount; ++SpawnIndex)
+	{
+		const float Alpha = static_cast<float>(SpawnIndex + 1) / static_cast<float>(SpawnCount + 1);
+		SpawnTrailPoint(Trail.TrailIndex, Trail.SourceParticleId, PreviousLocation + (WorldLocation - PreviousLocation) * Alpha);
+	}
+}
+
+void FParticleRibbonEmitterInstance::UpdateParticleSourceTrails()
+{
+	const UParticleModuleTrailSource* TrailSource = FindTrailSourceModule();
+	if (!TrailSource || !Component)
+	{
+		return;
+	}
+	const UParticleModuleTypeDataRibbon* TypeData = CurrentLODLevel
+		? Cast<UParticleModuleTypeDataRibbon>(CurrentLODLevel->GetTypeDataModule())
+		: nullptr;
+	const int32 MaxTrails = TypeData ? std::max(1, TypeData->MaxTrailCount) : 1;
+	const FParticleEmitterInstance* SourceEmitter = Component->FindEmitterInstanceByName(TrailSource->SourceName);
+	for (FSourceTrailState& Trail : SourceTrails)
+	{
+		Trail.bSeenThisFrame = false;
+	}
+	if (!SourceEmitter || SourceEmitter == this)
+	{
+		for (FSourceTrailState& Trail : SourceTrails)
+		{
+			Trail.bSourceAlive = false;
+		}
+		return;
+	}
+
+	const UParticleModuleRequired* SourceRequired = SourceEmitter->GetCurrentLODLevel()
+		? SourceEmitter->GetCurrentLODLevel()->GetRequiredModule()
+		: nullptr;
+	const bool bSourceUsesLocalSpace = SourceRequired && SourceRequired->bUseLocalSpace;
+	const UParticleModuleSpawnPerUnit* SpawnPerUnit = FindSpawnPerUnitModule();
+	int32 TrackedCount = 0;
+	for (int32 ActiveIndex = 0; ActiveIndex < SourceEmitter->GetActiveParticleCount() && TrackedCount < MaxTrails; ++ActiveIndex)
+	{
+		const int32 ParticleIndex = SourceEmitter->GetParticleIndices()[ActiveIndex];
+		const FBaseParticle* SourceParticle = reinterpret_cast<const FBaseParticle*>(
+			SourceEmitter->GetParticleData() + static_cast<size_t>(ParticleIndex) * SourceEmitter->GetParticleStride());
+		if (!SourceParticle)
+		{
+			continue;
+		}
+
+		FSourceTrailState* State = nullptr;
+		for (FSourceTrailState& Existing : SourceTrails)
+		{
+			if (Existing.SourceParticleId == SourceParticle->ParticleId)
+			{
+				State = &Existing;
+				break;
+			}
+		}
+		if (!State)
+		{
+			for (FSourceTrailState& Existing : SourceTrails)
+			{
+				if (Existing.bSourceAlive)
+				{
+					continue;
+				}
+				bool bHasRemainingPoints = false;
+				for (int32 RibbonActiveIndex = 0; RibbonActiveIndex < ActiveParticles; ++RibbonActiveIndex)
+				{
+					const FRibbonParticlePayload* Payload = GetRibbonPayload(GetActiveParticle(RibbonActiveIndex));
+					if (Payload && Payload->TrailIndex == Existing.TrailIndex)
+					{
+						bHasRemainingPoints = true;
+						break;
+					}
+				}
+				if (!bHasRemainingPoints)
+				{
+					const int32 ReusedTrailIndex = Existing.TrailIndex;
+					Existing = FSourceTrailState();
+					Existing.TrailIndex = ReusedTrailIndex;
+					Existing.SourceParticleId = SourceParticle->ParticleId;
+					State = &Existing;
+					break;
+				}
+			}
+			if (!State)
+			{
+				if (static_cast<int32>(SourceTrails.size()) >= MaxTrails)
+				{
+					continue;
+				}
+				FSourceTrailState NewState;
+				NewState.TrailIndex = static_cast<int32>(SourceTrails.size());
+				NewState.SourceParticleId = SourceParticle->ParticleId;
+				SourceTrails.push_back(NewState);
+				State = &SourceTrails.back();
+			}
+		}
+
+		FVector SourceLocation = SourceParticle->Location;
+		if (bSourceUsesLocalSpace)
+		{
+			SourceLocation = Component->GetWorldMatrix().TransformPositionWithW(SourceLocation);
+		}
+		SourceLocation += TrailSource->SourceOffset;
+		State->bSeenThisFrame = true;
+		State->bSourceAlive = true;
+		SampleParticleSource(*State, SourceLocation, SpawnPerUnit);
+		++TrackedCount;
+	}
+
+	for (FSourceTrailState& Trail : SourceTrails)
+	{
+		if (!Trail.bSeenThisFrame)
+		{
+			Trail.bSourceAlive = false;
+		}
+	}
+}
+
+FDynamicEmitterDataBase* FParticleRibbonEmitterInstance::CreateDynamicData(int32 EmitterIndex) const
+{
+	FDynamicEmitterDataBase* DynamicData = FParticleEmitterInstance::CreateDynamicData(EmitterIndex);
+	if (DynamicData)
+	{
+		static_cast<FDynamicRibbonEmitterData*>(DynamicData)->GetRibbonSource().RibbonPayloadOffset = IntrinsicPayloadOffset;
+	}
+	return DynamicData;
 }

@@ -25,6 +25,9 @@ struct FParticleProxyParticle
 	float SubImageIndex = 0.0f;
 	float CameraDistanceSq = 0.0f;
 	float ViewDepth = 0.0f;
+	uint32 RibbonSpawnSerial = 0;
+	uint32 RibbonSourceParticleId = 0;
+	int32 RibbonTrailIndex = 0;
 };
 
 struct FParticleMeshRenderBatch

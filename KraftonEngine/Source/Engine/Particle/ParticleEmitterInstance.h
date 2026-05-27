@@ -12,6 +12,8 @@ class UParticleLODLevel;
 class UParticleModule;
 class UParticleModuleRequired;
 class UParticleModuleSpawn;
+class UParticleModuleSpawnPerUnit;
+class UParticleModuleTrailSource;
 class UParticleSystemComponent;
 
 struct FParticleModuleRuntimeCache
@@ -85,6 +87,8 @@ struct FParticleEmitterInstance
 
 	const FTransform& GetComponentTransform() const;
 	FVector GetComponentLocation() const;
+	virtual FVector GetSpawnReferenceLocation() const;
+	FVector ConvertWorldLocationToParticleSpace(const FVector& WorldLocation) const;
 	UObject* GetDistributionData() const;
 	FString GetTemplateName() const;
 	FString GetInstanceName() const;
@@ -137,12 +141,17 @@ struct FParticleEmitterInstance
 protected:
 	virtual EDynamicEmitterType GetDynamicEmitterType() const = 0;
 	virtual FDynamicEmitterDataBase* CreateDynamicEmitterData(const UParticleModuleRequired* RequiredModule) const;
+	virtual int32 GetIntrinsicParticlePayloadSize() const { return 0; }
+	int32 IntrinsicPayloadOffset = -1;
 
-private:
+protected:
 	UParticleModuleSpawn* GetSpawnRateModule() const;
 	FBaseParticle* GetParticleDirect(int32 ParticleIndex);
 	const FBaseParticle* GetParticleDirect(int32 ParticleIndex) const;
 	FBaseParticle* GetActiveParticle(int32 ActiveIndex);
+	const FBaseParticle* GetActiveParticle(int32 ActiveIndex) const;
+
+private:
 	void AllocateParticleDataPreservingBaseParticles();
 	void InitializeParticleIndices();
 	void UpdateParticleLifetimesAndMovement(float DeltaTime);
@@ -181,8 +190,43 @@ private:
 struct FParticleRibbonEmitterInstance : public FParticleEmitterInstance
 {
 	EParticleEmitterType GetEmitterType() const override { return EParticleEmitterType::Ribbon; }
+	void Init(UParticleSystemComponent* InComponent, UParticleEmitter* InTemplate) override;
+	void Reset() override;
+	void Tick(float DeltaTime) override;
+	void PostSpawn(FBaseParticle* Particle, float Interp, float SpawnTime) override;
+	FVector GetSpawnReferenceLocation() const override;
+	FDynamicEmitterDataBase* CreateDynamicData(int32 EmitterIndex) const override;
 
 private:
+	struct FSourceTrailState
+	{
+		int32 TrailIndex = 0;
+		uint32 SourceParticleId = 0;
+		FVector PreviousLocation = FVector::ZeroVector;
+		float SpawnRemainder = 0.0f;
+		bool bInitialized = false;
+		bool bSeenThisFrame = false;
+		bool bSourceAlive = true;
+	};
+
 	EDynamicEmitterType GetDynamicEmitterType() const override { return EDynamicEmitterType::Ribbon; }
 	FDynamicEmitterDataBase* CreateDynamicEmitterData(const UParticleModuleRequired* RequiredModule) const override;
+	int32 GetIntrinsicParticlePayloadSize() const override { return sizeof(FRibbonParticlePayload); }
+	const UParticleModuleTrailSource* FindTrailSourceModule() const;
+	const UParticleModuleSpawnPerUnit* FindSpawnPerUnitModule() const;
+	bool ResolveSingleSourceLocation(FVector& OutLocation) const;
+	void UpdateParticleSourceTrails();
+	void SampleParticleSource(FSourceTrailState& Trail, const FVector& WorldLocation, const UParticleModuleSpawnPerUnit* SpawnPerUnit);
+	void SpawnTrailPoint(int32 TrailIndex, uint32 SourceParticleId, const FVector& WorldLocation);
+	void TrimTrail(int32 TrailIndex);
+	FRibbonParticlePayload* GetRibbonPayload(FBaseParticle* Particle) const;
+	const FRibbonParticlePayload* GetRibbonPayload(const FBaseParticle* Particle) const;
+
+	FVector CurrentSourceLocation = FVector::ZeroVector;
+	bool bHasCurrentSource = false;
+	int32 PendingTrailIndex = 0;
+	uint32 PendingSourceParticleId = 0;
+	uint32 RibbonSpawnSerial = 0;
+	bool bSingleSourceInitialized = false;
+	TArray<FSourceTrailState> SourceTrails;
 };

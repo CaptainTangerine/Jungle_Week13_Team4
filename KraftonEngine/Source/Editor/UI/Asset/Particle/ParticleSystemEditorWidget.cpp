@@ -916,7 +916,7 @@ void FParticleSystemEditorWidget::Render(float DeltaTime)
 		ImGui::SetNextWindowFocus();
 	}
 
-	ImGui::SetNextWindowSize(ImVec2(1280.0f, 760.0f), ImGuiCond_Once);
+	ImGui::SetNextWindowSize(ImVec2(1600.0f, 900.0f), ImGuiCond_Once);
 	if (!ImGui::Begin(WindowTitle.c_str(), &bWindowOpen, WindowFlags))
 	{
 		ImGui::End();

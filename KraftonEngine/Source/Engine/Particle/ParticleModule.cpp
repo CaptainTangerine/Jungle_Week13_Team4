@@ -275,6 +275,11 @@ void UParticleModuleSubUV::Spawn(const FSpawnContext& Context)
 
 void UParticleModuleSubUV::Update(const FUpdateContext& Context)
 {
+	if (bLockSubImageOnSpawn)
+	{
+		return;
+	}
+
 	BEGIN_UPDATE_LOOP
 		FParticleSubUVPayload& SubUVPayload = *reinterpret_cast<FParticleSubUVPayload*>(
 			ParticleBase + Context.Offset);
@@ -466,7 +471,7 @@ void UParticleModuleSpawnPerUnit::Update(const FUpdateContext& Context)
 		return;
 	}
 
-	const FVector CurrentLocation = Context.Owner.GetComponentLocation();
+	const FVector CurrentLocation = Context.Owner.GetSpawnReferenceLocation();
 	if (Payload->bInitialized <= 0.0f)
 	{
 		Payload->PreviousLocation = CurrentLocation;
@@ -506,16 +511,11 @@ void UParticleModuleSpawnPerUnit::Update(const FUpdateContext& Context)
 		return;
 	}
 
-	const bool bUseLocalSpace = Context.Owner.GetCurrentLODLevel()
-		&& Context.Owner.GetCurrentLODLevel()->GetRequiredModule()
-		&& Context.Owner.GetCurrentLODLevel()->GetRequiredModule()->bUseLocalSpace;
 	const FVector RawTravel = CurrentLocation - PreviousLocation;
 	for (int32 SpawnIndex = 0; SpawnIndex < SpawnCount; ++SpawnIndex)
 	{
 		const float Alpha = static_cast<float>(SpawnIndex + 1) / static_cast<float>(SpawnCount + 1);
-		const FVector SpawnLocation = bUseLocalSpace
-			? FVector::ZeroVector
-			: PreviousLocation + RawTravel * Alpha;
+		const FVector SpawnLocation = Context.Owner.ConvertWorldLocationToParticleSpace(PreviousLocation + RawTravel * Alpha);
 		Context.Owner.SpawnParticles(1, Context.Owner.EmitterTime, 0.0f, SpawnLocation, FVector::ZeroVector);
 	}
 }

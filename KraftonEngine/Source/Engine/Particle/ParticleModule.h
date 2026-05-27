@@ -177,6 +177,9 @@ public:
 	UPROPERTY(Edit, Save, Instanced, Category="SubUV", DisplayName="SubImage Index", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=SubImageIndex.Distribution, CppType=UDistributionFloat*)
 	;
 	FRawDistributionFloat SubImageIndex;
+
+	UPROPERTY(Edit, Save, Category="SubUV", DisplayName="Lock SubImage On Spawn")
+	bool bLockSubImageOnSpawn = false;
 };
 
 UCLASS()
@@ -231,6 +234,9 @@ public:
 
 	UPROPERTY(Edit, Save, Category="Ribbon", DisplayName="Render Axis", Enum=EParticleTrailRenderAxis)
 	EParticleTrailRenderAxis RenderAxis = EParticleTrailRenderAxis::CameraFacing;
+
+	UPROPERTY(Edit, Save, Category="Ribbon", DisplayName="Spawn Initial Particle")
+	bool bSpawnInitialParticle = true;
 };
 
 UCLASS()
@@ -247,6 +253,22 @@ class UParticleModuleTrailBase : public UParticleModule
 public:
 	GENERATED_BODY()
 	EParticleModuleType GetModuleType() const override { return EParticleModuleType::Trail; }
+};
+
+UCLASS()
+class UParticleModuleTrailSource : public UParticleModuleTrailBase
+{
+public:
+	GENERATED_BODY()
+
+	UPROPERTY(Edit, Save, Category="Trail Source", DisplayName="Source Method", Enum=ETrail2SourceMethod)
+	ETrail2SourceMethod SourceMethod = ETrail2SourceMethod::Default;
+
+	UPROPERTY(Edit, Save, Category="Trail Source", DisplayName="Source Name")
+	FName SourceName;
+
+	UPROPERTY(Edit, Save, Category="Trail Source", DisplayName="Source Offset")
+	FVector SourceOffset = FVector::ZeroVector;
 };
 
 UCLASS()
