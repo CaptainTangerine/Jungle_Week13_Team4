@@ -23,6 +23,7 @@
 #include "GameFramework/Light/DirectionalLightActor.h"
 #include "GameFramework/World.h"
 #include "Math/Rotator.h"
+#include "Materials/Material.h"
 #include "Materials/MaterialManager.h"
 #include "Object/Ptr/SoftObjectPtr.h"
 #include "Object/Reflection/ObjectFactory.h"
@@ -1210,7 +1211,7 @@ void FParticleSystemEditorWidget::RenderParticleAssetSearchPopup()
 
 void FParticleSystemEditorWidget::RenderToolbar(UParticleSystem* ParticleSystem)
 {
-	constexpr float ToolbarHeight = 73.0f;
+	constexpr float ToolbarHeight = 38.0f;
 	const ImVec2 ToolbarPos = ImGui::GetCursorScreenPos();
 	const float ToolbarWidth = ImGui::GetContentRegionAvail().x;
 	ImGui::GetWindowDrawList()->AddRectFilled(
@@ -1230,7 +1231,7 @@ void FParticleSystemEditorWidget::RenderToolbar(UParticleSystem* ParticleSystem)
 	SameLineToolbar();
 	DrawIconTextButton("FindInContentBrowser", MakeCascadeIconPath(L"icon_toolbar_genericfinder_40px.png"), "", "Find in Content Browser");
 
-	ToolbarSeparator(ToolbarHeight / 2.0f - 6.0f);
+	ToolbarSeparator(ToolbarHeight - 6.0f);
 
 	if (DrawIconTextButton("RestartSim", MakeCascadeIconPath(L"icon_Cascade_RestartSim_40x.png"), "Restart Sim"))
 	{
@@ -1242,7 +1243,7 @@ void FParticleSystemEditorWidget::RenderToolbar(UParticleSystem* ParticleSystem)
 		RestartLevelParticleSystems(ParticleSystem);
 	}
 
-	ToolbarSeparator(ToolbarHeight / 2.0f - 6.0f);
+	ToolbarSeparator(ToolbarHeight - 6.0f);
 
 	if (DrawIconTextButton("Thumbnail", MakeCascadeIconPath(L"icon_Cascade_Thumbnail_40x.png"), "Thumbnail"))
 	{
@@ -1283,12 +1284,7 @@ void FParticleSystemEditorWidget::RenderToolbar(UParticleSystem* ParticleSystem)
 		ImGui::EndPopup();
 	}
 
-	ImGui::SetCursorScreenPos(ImVec2(ToolbarPos.x + 6.0f, ToolbarPos.y + 38.0f));
-
-	DrawIconTextButton("RegenLOD", MakeCascadeIconPath(L"icon_Cascade_RegenLOD1_40x.png"), "Regen LOD");
-	SameLineToolbar();
-	DrawIconTextButton("RegenLODDupe", MakeCascadeIconPath(L"icon_Cascade_RegenLOD2_40x.png"), "Regen LOD");
-	SameLineToolbar();
+	ToolbarSeparator(ToolbarHeight - 6.0f);
 	if (DrawIconTextButton("LowestLOD", MakeCascadeIconPath(L"icon_Cascade_LowestLOD_40x.png"), "Lowest LOD"))
 	{
 		SelectParticleLOD(ParticleSystem, 0);
@@ -2004,6 +2000,7 @@ void FParticleSystemEditorWidget::RenderEmitterPanel(UParticleSystem* ParticleSy
 			ImGui::BeginChild("##EmitterCard", ImVec2(CardWidth, CardHeight), false, ImGuiWindowFlags_NoScrollbar);
 
 			const bool bSelectedEmitter = SelectedEmitterIndex == EmitterIndex;
+			UParticleLODLevel* LODLevel = Emitter->GetLODLevel(SelectedLODIndex);
 			const ImVec2 HeaderOuterMin = ImGui::GetCursorScreenPos();
 			const ImVec2 HeaderMin(HeaderOuterMin.x + CardPad, HeaderOuterMin.y + CardPad);
 			constexpr float HeaderHeight = 58.0f;
@@ -2012,10 +2009,34 @@ void FParticleSystemEditorWidget::RenderEmitterPanel(UParticleSystem* ParticleSy
 				HeaderMin,
 				ImVec2(HeaderMin.x + CardInnerWidth, HeaderMin.y + HeaderHeight - CardPad),
 				bSelectedEmitter ? IM_COL32(122, 92, 110, 255) : IM_COL32(178, 178, 178, 255));
-			DrawList->AddRectFilled(
-				ImVec2(HeaderMin.x + CardInnerWidth - 56.0f, HeaderMin.y + 4.0f),
-				ImVec2(HeaderMin.x + CardInnerWidth - 6.0f, HeaderMin.y + HeaderHeight - 7.0f),
-				IM_COL32(4, 4, 4, 255));
+			const ImVec2 MaterialPreviewMin(HeaderMin.x + CardInnerWidth - 56.0f, HeaderMin.y + 4.0f);
+			const ImVec2 MaterialPreviewMax(HeaderMin.x + CardInnerWidth - 6.0f, HeaderMin.y + HeaderHeight - 7.0f);
+			DrawList->AddRectFilled(MaterialPreviewMin, MaterialPreviewMax, IM_COL32(4, 4, 4, 255));
+			if (LODLevel)
+			{
+				const UParticleModuleRequired* RequiredModule = LODLevel->GetRequiredModule();
+				const FString MaterialPath = RequiredModule
+					? RequiredModule->MaterialPath.ToString()
+					: FString();
+				if (!MaterialPath.empty())
+				{
+					if (UMaterial* Material = FMaterialManager::Get().GetOrCreateMaterial(MaterialPath))
+					{
+						const ID3D11ShaderResourceView* const* MaterialSRVs = Material->GetCachedSRVs();
+						ID3D11ShaderResourceView* DiffuseSRV = MaterialSRVs
+							? const_cast<ID3D11ShaderResourceView*>(MaterialSRVs[static_cast<int32>(EMaterialTextureSlot::Diffuse)])
+							: nullptr;
+						if (DiffuseSRV)
+						{
+							constexpr float MaterialPreviewPadding = 9.0f;
+							DrawList->AddImage(
+								reinterpret_cast<ImTextureID>(DiffuseSRV),
+								ImVec2(MaterialPreviewMin.x + MaterialPreviewPadding, MaterialPreviewMin.y + MaterialPreviewPadding),
+								ImVec2(MaterialPreviewMax.x - MaterialPreviewPadding, MaterialPreviewMax.y - MaterialPreviewPadding));
+						}
+					}
+				}
+			}
 
 			ImGui::SetCursorScreenPos(ImVec2(HeaderMin.x + 6.0f, HeaderMin.y + 5.0f));
 			FString EmitterName = Emitter->GetEmitterName().ToString();
@@ -2122,7 +2143,6 @@ void FParticleSystemEditorWidget::RenderEmitterPanel(UParticleSystem* ParticleSy
 
 			const float ModuleX = HeaderOuterMin.x + CardPad;
 			float ModuleY = HeaderOuterMin.y + HeaderHeight + 8.0f;
-			UParticleLODLevel* LODLevel = Emitter->GetLODLevel(SelectedLODIndex);
 			auto RenderModuleRow = [&](UParticleModule* Module, const char* FallbackLabel, ImU32 RowColor, bool bCanDrag, int32 DropIndex)
 			{
 				if (!Module)
