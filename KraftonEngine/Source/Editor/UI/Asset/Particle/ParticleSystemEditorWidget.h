@@ -38,6 +38,7 @@ private:
 	float CalculatePreviewDuration() const;
 	void RestartPreviewSimulation();
 	void RestartLevelParticleSystems(class UParticleSystem* ParticleSystem);
+	bool CaptureThumbnail(class UParticleSystem* ParticleSystem);
 	void AddParticleEmitter(class UParticleSystem* ParticleSystem);
 	void InsertParticleEmitter(class UParticleSystem* ParticleSystem, int32 Index);
 	void DeleteParticleEmitter(class UParticleSystem* ParticleSystem, int32 Index);
