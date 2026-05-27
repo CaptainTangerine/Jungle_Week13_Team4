@@ -480,7 +480,7 @@ void FDrawCommandBuilder::BuildProxyCommands(const FFrameContext& Frame, FScene&
 		}
 		else if (Proxy->HasProxyFlag(EPrimitiveProxyFlags::ParticleSystem))
 		{
-			if (Frame.RenderOptions.ShowFlags.bDebugDraw)
+			if (Frame.RenderOptions.ShowFlags.bDebugDraw && Frame.RenderOptions.bParticleVectorFieldDebug)
 			{
 				static_cast<FParticleSystemSceneProxy*>(Proxy)->AppendDebugLines(Scene);
 			}

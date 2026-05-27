@@ -783,6 +783,7 @@ void FParticleSystemEditorWidget::Open(UObject* Object)
 	}
 
 	WorldContext.World->BeginPlay();
+	ParticleComponent->SetComponentTickEnabled(false);
 
 	ViewportClient.Initialize(GEngine->GetRenderer().GetFD3DDevice().GetDevice(), 640, 360);
 	ViewportClient.SetPreviewWorld(WorldContext.World);
@@ -3562,6 +3563,7 @@ void FParticleSystemEditorWidget::RenderViewportMenus()
 		{
 			ViewportClient.GetRenderOptions().ShowFlags.bGrid = bShowGrid;
 		}
+		ImGui::Checkbox("Vector Field", &ViewportClient.GetRenderOptions().bParticleVectorFieldDebug);
 
 		ImGui::Dummy(ImVec2(0.0f, 1.0f));
 		ImGui::EndPopup();
