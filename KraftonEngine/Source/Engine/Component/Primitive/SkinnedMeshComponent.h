@@ -48,6 +48,7 @@ public:
 	void EnsureBoneEditPose();
 	void ResetBoneEditPose();
 
+	int32 FindBoneIndex(const FString& BoneName) const;
 	FVector GetBoneLocationByIndex(int32 BoneIndex) const;
 	FRotator GetBoneRotationByIndex(int32 BoneIndex) const;
 	FQuat GetBoneQuatByIndex(int32 BoneIndex) const;

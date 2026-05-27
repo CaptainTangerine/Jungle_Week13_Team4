@@ -1,5 +1,6 @@
 ﻿#include "ParticleSystemComponent.h"
 
+#include "Component/Primitive/SkinnedMeshComponent.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
 #include "Particle/Asset/ParticleSystemManager.h"
@@ -342,7 +343,29 @@ void UParticleSystemComponent::ClearParticleEvents()
 void UParticleSystemComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
 {
 	UPrimitiveComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	UpdateBoneAttachment();
 	AdvanceSimulation(DeltaTime);
+}
+
+void UParticleSystemComponent::UpdateBoneAttachment()
+{
+	const FString BoneName = AttachBoneName.ToString();
+	if (BoneName.empty())
+	{
+		return;
+	}
+
+	const USkinnedMeshComponent* ParentMesh = Cast<USkinnedMeshComponent>(GetParent());
+	if (!ParentMesh)
+	{
+		return;
+	}
+
+	const int32 BoneIndex = ParentMesh->FindBoneIndex(BoneName);
+	if (BoneIndex >= 0)
+	{
+		SetWorldLocation(ParentMesh->GetBoneLocationByIndex(BoneIndex));
+	}
 }
 
 void UParticleSystemComponent::AdvanceSimulation(float DeltaTime)

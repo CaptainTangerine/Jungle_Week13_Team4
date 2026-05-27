@@ -9,6 +9,16 @@
 #include <algorithm>
 #include <cmath>
 
+USpringArmComponent::USpringArmComponent()
+{
+	// CharacterMovement rotates the parent capsule during physics. Evaluate the camera afterward.
+	PrimaryComponentTick.SetTickGroup(TG_PostPhysics);
+	PrimaryComponentTick.SetEndTickGroup(TG_PostPhysics);
+
+	// A scaled pawn must not scale the camera rig or corrupt rotation extraction.
+	SetAbsoluteScale(true);
+}
+
 void USpringArmComponent::BeginPlay()
 {
 	Super::BeginPlay();
@@ -29,9 +39,8 @@ void USpringArmComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 	// (1) 부모 World transform 추출. 두 개 분리:
 	//   - ParentActualRot: capsule 의 실제 world rotation (RelativeRotation 환산용 — 불변).
 	//   - DesiredParentRot: SpringArm 이 사용할 desired rotation (control rotation 적용 후).
-	const FMatrix& ParentWorld = ParentComponent->GetWorldMatrix();
 	const FVector ParentWorldLoc = ParentComponent->GetWorldLocation();
-	const FQuat   ParentActualRot  = ParentWorld.ToQuat().GetNormalized();
+	const FQuat   ParentActualRot  = ParentComponent->GetWorldRotation().ToQuaternion().GetNormalized();
 	FQuat         DesiredParentRot = ParentActualRot;
 
 	// bUsePawnControlRotation — capsule rotation 대신 owner APawn 의 ControlRotation 을

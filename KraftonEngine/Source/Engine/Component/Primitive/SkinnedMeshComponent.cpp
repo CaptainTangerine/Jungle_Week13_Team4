@@ -273,6 +273,24 @@ void USkinnedMeshComponent::ResetBoneEditPose()
 	}
 }
 
+int32 USkinnedMeshComponent::FindBoneIndex(const FString& BoneName) const
+{
+	FSkeletalMesh* Asset = SkeletalMesh ? SkeletalMesh->GetSkeletalMeshAsset() : nullptr;
+	if (!Asset || BoneName.empty())
+	{
+		return -1;
+	}
+
+	for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(Asset->Bones.size()); ++BoneIndex)
+	{
+		if (Asset->Bones[BoneIndex].Name == BoneName)
+		{
+			return BoneIndex;
+		}
+	}
+	return -1;
+}
+
 FVector USkinnedMeshComponent::GetBoneLocationByIndex(int32 BoneIndex) const
 {
 	FSkeletalMesh* Asset = SkeletalMesh ? SkeletalMesh->GetSkeletalMeshAsset() : nullptr;

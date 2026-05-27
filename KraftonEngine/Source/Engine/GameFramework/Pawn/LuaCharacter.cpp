@@ -8,6 +8,11 @@ void ALuaCharacter::InitDefaultComponents(const FString& SkeletalMeshFileName, c
 {
 	Super::InitDefaultComponents(SkeletalMeshFileName);
 
+	// Third-person camera rotation is consumed by the spring arm, not the capsule.
+	bUseControllerRotationPitch = false;
+	bUseControllerRotationYaw = false;
+	bUseControllerRotationRoll = false;
+
 	// 3인칭 카메라 체인 — Capsule → SpringArm → Camera. lag 적용해 부드럽게 따라옴.
 	SpringArm = AddComponent<USpringArmComponent>();
 	SpringArm->AttachToComponent(CapsuleComponent);

@@ -93,12 +93,17 @@ protected:
 
 private:
 	void ResolveTemplate();
+	void UpdateBoneAttachment();
 	void UpdateLODSelection();
 	float CalculateLODDistance() const;
 	void RebuildDynamicData();
 
 	UPROPERTY(Edit, Save, Category="Particles", DisplayName="Particle System", AssetType="UParticleSystem")
 	FSoftObjectPtr TemplatePath = "None";
+
+	// When parented to a skinned mesh, an assigned bone supplies this component's source position.
+	UPROPERTY(Edit, Save, Category="Particles|Attachment", DisplayName="Attach Bone Name")
+	FName AttachBoneName;
 
 	UPROPERTY(Edit, Save, Category="Particles", DisplayName="Float Parameters", Type=Array, Struct=FParticleFloatParameter)
 	TArray<FParticleFloatParameter> FloatParameters;
