@@ -53,6 +53,7 @@ struct FShowFlags
 	bool bGizmo = true;
 	bool bBillboardText = true;
 	bool bBoundingVolume = false;
+	bool bParticleEditorBounds = false;
 	bool bDebugDraw = true;
 	bool bOctree = false;
 	bool bFog = true;

@@ -875,6 +875,49 @@ void FParticleSystemEditorWidget::Tick(float DeltaTime)
 	}
 }
 
+void FParticleSystemEditorWidget::RestartPreviewSimulation()
+{
+	if (!PreviewParticleComponent)
+	{
+		return;
+	}
+
+	PreviewParticleComponent->ResetSystem();
+	PreviewPlayback.bPaused = false;
+	PreviewPlayback.bComplete = false;
+	PreviewPlayback.CurrentTime = 0.0f;
+	PreviewPlayback.AccumulatedTime = 0.0f;
+}
+
+void FParticleSystemEditorWidget::RestartLevelParticleSystems(UParticleSystem* ParticleSystem)
+{
+	RestartPreviewSimulation();
+
+	UWorld* ActiveWorld = EditorEngine ? EditorEngine->GetWorld() : nullptr;
+	if (!ActiveWorld || !ParticleSystem)
+	{
+		return;
+	}
+
+	for (AActor* Actor : ActiveWorld->GetActors())
+	{
+		if (!Actor)
+		{
+			continue;
+		}
+
+		for (UActorComponent* Component : Actor->GetComponents())
+		{
+			UParticleSystemComponent* ParticleComponent = Cast<UParticleSystemComponent>(Component);
+			if (ParticleComponent && ParticleComponent->GetTemplate() == ParticleSystem)
+			{
+				ParticleComponent->ResetSystem();
+				ParticleComponent->AdvanceSimulation(0.0f);
+			}
+		}
+	}
+}
+
 void FParticleSystemEditorWidget::CollectPreviewViewports(TArray<IEditorPreviewViewportClient*>& OutClients) const
 {
 	if (IsOpen())
@@ -1120,21 +1163,25 @@ void FParticleSystemEditorWidget::RenderToolbar(UParticleSystem* ParticleSystem)
 
 	ToolbarSeparator(ToolbarHeight / 2.0f - 6.0f);
 
-	DrawIconTextButton("RestartSim", MakeCascadeIconPath(L"icon_Cascade_RestartSim_40x.png"), "Restart Sim");
+	if (DrawIconTextButton("RestartSim", MakeCascadeIconPath(L"icon_Cascade_RestartSim_40x.png"), "Restart Sim"))
+	{
+		RestartPreviewSimulation();
+	}
 	SameLineToolbar();
-	DrawIconTextButton("RestartInLevel", MakeCascadeIconPath(L"icon_Cascade_RestartInLevel_40x.png"), "Restart Level");
-
-	ToolbarSeparator(ToolbarHeight / 2.0f - 6.0f);
-
-	DrawIconTextButton("Undo", MakeCascadeIconPath(L"icon_Generic_Undo_40x.png"), "Undo");
-	SameLineToolbar();
-	DrawIconTextButton("Redo", MakeCascadeIconPath(L"icon_Generic_Redo_40x.png"), "Redo");
+	if (DrawIconTextButton("RestartInLevel", MakeCascadeIconPath(L"icon_Cascade_RestartInLevel_40x.png"), "Restart Level"))
+	{
+		RestartLevelParticleSystems(ParticleSystem);
+	}
 
 	ToolbarSeparator(ToolbarHeight / 2.0f - 6.0f);
 
 	DrawIconTextButton("Thumbnail", MakeCascadeIconPath(L"icon_Cascade_Thumbnail_40x.png"), "Thumbnail");
 	SameLineToolbar();
-	DrawIconTextButton("Bounds", MakeCascadeIconPath(L"icon_Cascade_Bounds_40x.png"), "Bounds");
+	if (DrawIconTextButton("Bounds", MakeCascadeIconPath(L"icon_Cascade_Bounds_40x.png"), "Bounds"))
+	{
+		FShowFlags& ShowFlags = ViewportClient.GetRenderOptions().ShowFlags;
+		ShowFlags.bParticleEditorBounds = !ShowFlags.bParticleEditorBounds;
+	}
 	SameLineToolbar();
 	if (DrawIconTextButton("Axis", MakeCascadeIconPath(L"icon_Cascade_Axis_40x.png"), "Origin Axis"))
 	{
