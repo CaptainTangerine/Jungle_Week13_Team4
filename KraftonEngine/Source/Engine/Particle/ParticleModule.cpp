@@ -357,6 +357,12 @@ UParticleModuleVelocity::UParticleModuleVelocity()
 	StartVelocity.SetDistribution(NewVectorConstant(this, FVector(0.0f, 0.0f, 10.0f)));
 
 }
+
+UParticleModuleDrag::UParticleModuleDrag()
+{
+	DragCoefficient.SetDistribution(NewFloatConstant(this, 1.0f));
+}
+
 UParticleModuleColor::UParticleModuleColor()
 {
 	StartColor.SetDistribution(NewVectorConstant(this, FVector(1.0f, 1.0f, 1.0f)));
@@ -417,6 +423,20 @@ void UParticleModuleAccelerationConstant::Update(const FUpdateContext& Context)
 {
 	BEGIN_UPDATE_LOOP
 		Particle.BaseVelocity += Acceleration * DeltaTime;
+	END_UPDATE_LOOP
+}
+
+void UParticleModuleDrag::Update(const FUpdateContext& Context)
+{
+	UObject* DistributionData = Context.GetDistributionData();
+	BEGIN_UPDATE_LOOP
+		const float RelativeTime = FMath::Clamp(Particle.RelativeTime, 0.0f, 1.0f);
+		const float Coefficient = std::max(0.0f, DragCoefficient.GetValue(RelativeTime, DistributionData));
+		if (Coefficient > 0.0f)
+		{
+			const float Damping = std::exp(-Coefficient * DeltaTime);
+			Particle.BaseVelocity *= Damping;
+		}
 	END_UPDATE_LOOP
 }
 

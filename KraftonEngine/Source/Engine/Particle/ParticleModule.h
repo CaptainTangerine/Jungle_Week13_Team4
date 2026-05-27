@@ -498,6 +498,20 @@ public:
 };
 
 UCLASS()
+class UParticleModuleDrag : public UParticleModule
+{
+public:
+	GENERATED_BODY()
+	UParticleModuleDrag();
+	bool IsUpdateModule() const override { return true; }
+	void Update(const FUpdateContext& Context) override;
+
+	UPROPERTY(Edit, Save, Instanced, Category="Drag", DisplayName="Drag Coefficient", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=DragCoefficient.Distribution, CppType=UDistributionFloat*)
+	;
+	FRawDistributionFloat DragCoefficient;
+};
+
+UCLASS()
 class UParticleModuleColor : public UParticleModule
 {
 public:
