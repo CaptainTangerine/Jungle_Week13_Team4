@@ -512,6 +512,23 @@ public:
 };
 
 UCLASS()
+class UParticleModulePointAttractor : public UParticleModule
+{
+public:
+	GENERATED_BODY()
+	UParticleModulePointAttractor();
+	bool IsUpdateModule() const override { return true; }
+	void Update(const FUpdateContext& Context) override;
+
+	UPROPERTY(Edit, Save, Category="Point Attractor", DisplayName="Attractor Position", Type=Vec3)
+	FVector AttractorPosition = FVector::ZeroVector;
+
+	UPROPERTY(Edit, Save, Instanced, Category="Point Attractor", DisplayName="Strength", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=Strength.Distribution, CppType=UDistributionFloat*)
+	;
+	FRawDistributionFloat Strength;
+};
+
+UCLASS()
 class UParticleModuleColor : public UParticleModule
 {
 public:

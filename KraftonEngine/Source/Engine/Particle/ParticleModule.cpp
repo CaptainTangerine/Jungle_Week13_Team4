@@ -1,6 +1,8 @@
 ﻿#include "ParticleModule.h"
 
+#include "Component/Primitive/ParticleSystemComponent.h"
 #include "Math/MathUtils.h"
+#include "Math/Matrix.h"
 #include "Particle/ParticleEmitterInstance.h"
 #include "Particle/ParticleHelper.h"
 #include "Particle/ParticleLODLevel.h"
@@ -363,6 +365,11 @@ UParticleModuleDrag::UParticleModuleDrag()
 	DragCoefficient.SetDistribution(NewFloatConstant(this, 1.0f));
 }
 
+UParticleModulePointAttractor::UParticleModulePointAttractor()
+{
+	Strength.SetDistribution(NewFloatConstant(this, 1.0f));
+}
+
 UParticleModuleColor::UParticleModuleColor()
 {
 	StartColor.SetDistribution(NewVectorConstant(this, FVector(1.0f, 1.0f, 1.0f)));
@@ -436,6 +443,36 @@ void UParticleModuleDrag::Update(const FUpdateContext& Context)
 		{
 			const float Damping = std::exp(-Coefficient * DeltaTime);
 			Particle.BaseVelocity *= Damping;
+		}
+	END_UPDATE_LOOP
+}
+
+void UParticleModulePointAttractor::Update(const FUpdateContext& Context)
+{
+	const UParticleLODLevel* LODLevel = Context.Owner.GetCurrentLODLevel();
+	const UParticleModuleRequired* RequiredModule = LODLevel ? LODLevel->GetRequiredModule() : nullptr;
+	const bool bParticleDataIsLocalSpace = RequiredModule && RequiredModule->bUseLocalSpace;
+	const FMatrix ComponentToWorld = Context.Owner.Component
+		? Context.Owner.Component->GetWorldMatrix()
+		: FMatrix::Identity;
+	const FMatrix WorldToComponent = bParticleDataIsLocalSpace
+		? FMatrix::Identity
+		: ComponentToWorld.GetInverse();
+
+	UObject* DistributionData = Context.GetDistributionData();
+	BEGIN_UPDATE_LOOP
+		const float RelativeTime = FMath::Clamp(Particle.RelativeTime, 0.0f, 1.0f);
+		const float StrengthValue = std::max(0.0f, Strength.GetValue(RelativeTime, DistributionData));
+		if (StrengthValue > 0.0f)
+		{
+			const FVector ParticlePositionLocal = bParticleDataIsLocalSpace
+				? Particle.Location
+				: WorldToComponent.TransformPositionWithW(Particle.Location);
+			const FVector LocalAcceleration = (AttractorPosition - ParticlePositionLocal) * StrengthValue;
+			const FVector AppliedAcceleration = bParticleDataIsLocalSpace
+				? LocalAcceleration
+				: ComponentToWorld.TransformVector(LocalAcceleration);
+			Particle.BaseVelocity += AppliedAcceleration * DeltaTime;
 		}
 	END_UPDATE_LOOP
 }
