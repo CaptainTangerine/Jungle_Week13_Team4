@@ -3,6 +3,7 @@
 #include "Asset/AssetRegistry.h"
 #include "Component/Primitive/ParticleSystemComponent.h"
 #include "Component/Shape/BoxComponent.h"
+#include "Core/Logging/Log.h"
 #include "Core/Types/CollisionTypes.h"
 #include "Distributions/DistributionFloat.h"
 #include "Distributions/DistributionVector.h"
@@ -31,6 +32,8 @@
 #include "Runtime/Engine.h"
 #include "Viewport/Viewport.h"
 #include "Platform/Paths.h"
+#include <wincodec.h>
+#include "ScreenGrab.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -38,6 +41,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <unordered_map>
 #include <imgui.h>
 
@@ -51,6 +55,31 @@ namespace
 	FString MakeToolIconPath(const wchar_t* FileName)
 	{
 		return FPaths::ToUtf8(FPaths::Combine(FPaths::AssetDir(), L"Editor/ToolIcons/", FileName));
+	}
+
+	bool ContainsParentDirectoryReference(const std::filesystem::path& Path)
+	{
+		for (const std::filesystem::path& Part : Path)
+		{
+			if (Part == L"..")
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	std::filesystem::path MakeParticleThumbnailPath(const FString& AssetPath)
+	{
+		std::filesystem::path RelativePath(FPaths::ToWide(FPaths::MakeProjectRelative(AssetPath)));
+		RelativePath = RelativePath.lexically_normal();
+		if (RelativePath.is_absolute() || ContainsParentDirectoryReference(RelativePath))
+		{
+			RelativePath = std::filesystem::path(FPaths::ToWide(AssetPath)).filename();
+		}
+		RelativePath.replace_extension(L".png");
+		return std::filesystem::path(FPaths::SaveDir()) / L"Thumbnails" / L"ParticleSystem" / RelativePath;
 	}
 
 	ID3D11ShaderResourceView* LoadIcon(const FString& Path)
@@ -783,6 +812,7 @@ void FParticleSystemEditorWidget::Open(UObject* Object)
 	}
 
 	WorldContext.World->BeginPlay();
+	ParticleComponent->SetComponentTickEnabled(false);
 
 	ViewportClient.Initialize(GEngine->GetRenderer().GetFD3DDevice().GetDevice(), 640, 360);
 	ViewportClient.SetPreviewWorld(WorldContext.World);
@@ -872,6 +902,89 @@ void FParticleSystemEditorWidget::Tick(float DeltaTime)
 	{
 		ViewportClient.Tick(DeltaTime);
 	}
+}
+
+void FParticleSystemEditorWidget::RestartPreviewSimulation()
+{
+	if (!PreviewParticleComponent)
+	{
+		return;
+	}
+
+	PreviewParticleComponent->ResetSystem();
+	PreviewPlayback.bPaused = false;
+	PreviewPlayback.bComplete = false;
+	PreviewPlayback.CurrentTime = 0.0f;
+	PreviewPlayback.AccumulatedTime = 0.0f;
+}
+
+void FParticleSystemEditorWidget::RestartLevelParticleSystems(UParticleSystem* ParticleSystem)
+{
+	RestartPreviewSimulation();
+
+	UWorld* ActiveWorld = EditorEngine ? EditorEngine->GetWorld() : nullptr;
+	if (!ActiveWorld || !ParticleSystem)
+	{
+		return;
+	}
+
+	for (AActor* Actor : ActiveWorld->GetActors())
+	{
+		if (!Actor)
+		{
+			continue;
+		}
+
+		for (UActorComponent* Component : Actor->GetComponents())
+		{
+			UParticleSystemComponent* ParticleComponent = Cast<UParticleSystemComponent>(Component);
+			if (ParticleComponent && ParticleComponent->GetTemplate() == ParticleSystem)
+			{
+				ParticleComponent->ResetSystem();
+				ParticleComponent->AdvanceSimulation(0.0f);
+			}
+		}
+	}
+}
+
+bool FParticleSystemEditorWidget::CaptureThumbnail(UParticleSystem* ParticleSystem)
+{
+	if (!ParticleSystem || ParticleSystem->GetSourcePath().empty())
+	{
+		return false;
+	}
+
+	FViewport* Viewport = ViewportClient.GetViewport();
+	ID3D11Texture2D* RenderTarget = Viewport ? Viewport->GetRTTexture() : nullptr;
+	ID3D11DeviceContext* DeviceContext = GEngine
+		? GEngine->GetRenderer().GetFD3DDevice().GetDeviceContext()
+		: nullptr;
+	if (!RenderTarget || !DeviceContext)
+	{
+		return false;
+	}
+
+	const std::filesystem::path ThumbnailPath = MakeParticleThumbnailPath(ParticleSystem->GetSourcePath());
+	FPaths::CreateDir(ThumbnailPath.parent_path().wstring());
+
+	const HRESULT Result = DirectX::SaveWICTextureToFile(
+		DeviceContext,
+		RenderTarget,
+		GUID_ContainerFormatPng,
+		ThumbnailPath.c_str());
+	if (FAILED(Result))
+	{
+		UE_LOG("[ParticleSystemEditor] Failed to save thumbnail: %s (HRESULT=0x%08X)",
+			FPaths::ToUtf8(ThumbnailPath.wstring()).c_str(),
+			static_cast<uint32>(Result));
+		return false;
+	}
+
+	if (EditorEngine)
+	{
+		EditorEngine->RefreshContentBrowser();
+	}
+	return true;
 }
 
 void FParticleSystemEditorWidget::CollectPreviewViewports(TArray<IEditorPreviewViewportClient*>& OutClients) const
@@ -1119,21 +1232,28 @@ void FParticleSystemEditorWidget::RenderToolbar(UParticleSystem* ParticleSystem)
 
 	ToolbarSeparator(ToolbarHeight / 2.0f - 6.0f);
 
-	DrawIconTextButton("RestartSim", MakeCascadeIconPath(L"icon_Cascade_RestartSim_40x.png"), "Restart Sim");
+	if (DrawIconTextButton("RestartSim", MakeCascadeIconPath(L"icon_Cascade_RestartSim_40x.png"), "Restart Sim"))
+	{
+		RestartPreviewSimulation();
+	}
 	SameLineToolbar();
-	DrawIconTextButton("RestartInLevel", MakeCascadeIconPath(L"icon_Cascade_RestartInLevel_40x.png"), "Restart Level");
+	if (DrawIconTextButton("RestartInLevel", MakeCascadeIconPath(L"icon_Cascade_RestartInLevel_40x.png"), "Restart Level"))
+	{
+		RestartLevelParticleSystems(ParticleSystem);
+	}
 
 	ToolbarSeparator(ToolbarHeight / 2.0f - 6.0f);
 
-	DrawIconTextButton("Undo", MakeCascadeIconPath(L"icon_Generic_Undo_40x.png"), "Undo");
+	if (DrawIconTextButton("Thumbnail", MakeCascadeIconPath(L"icon_Cascade_Thumbnail_40x.png"), "Thumbnail"))
+	{
+		CaptureThumbnail(ParticleSystem);
+	}
 	SameLineToolbar();
-	DrawIconTextButton("Redo", MakeCascadeIconPath(L"icon_Generic_Redo_40x.png"), "Redo");
-
-	ToolbarSeparator(ToolbarHeight / 2.0f - 6.0f);
-
-	DrawIconTextButton("Thumbnail", MakeCascadeIconPath(L"icon_Cascade_Thumbnail_40x.png"), "Thumbnail");
-	SameLineToolbar();
-	DrawIconTextButton("Bounds", MakeCascadeIconPath(L"icon_Cascade_Bounds_40x.png"), "Bounds");
+	if (DrawIconTextButton("Bounds", MakeCascadeIconPath(L"icon_Cascade_Bounds_40x.png"), "Bounds"))
+	{
+		FShowFlags& ShowFlags = ViewportClient.GetRenderOptions().ShowFlags;
+		ShowFlags.bParticleEditorBounds = !ShowFlags.bParticleEditorBounds;
+	}
 	SameLineToolbar();
 	if (DrawIconTextButton("Axis", MakeCascadeIconPath(L"icon_Cascade_Axis_40x.png"), "Origin Axis"))
 	{
@@ -3562,6 +3682,7 @@ void FParticleSystemEditorWidget::RenderViewportMenus()
 		{
 			ViewportClient.GetRenderOptions().ShowFlags.bGrid = bShowGrid;
 		}
+		ImGui::Checkbox("Vector Field", &ViewportClient.GetRenderOptions().bParticleVectorFieldDebug);
 
 		FViewportRenderOptions& RenderOptions = ViewportClient.GetRenderOptions();
 		ImGui::Checkbox("Bloom", &RenderOptions.ShowFlags.bBloom);

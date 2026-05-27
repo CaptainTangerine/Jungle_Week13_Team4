@@ -36,6 +36,9 @@ private:
 	void DrawViewportAxisOverlay(struct ImDrawList* DrawList, const struct ImVec2& ViewportPos, const struct ImVec2& ViewportSize) const;
 	void DrawViewportStatsOverlay(struct ImDrawList* DrawList, const struct ImVec2& ViewportPos, const struct ImVec2& ViewportSize) const;
 	float CalculatePreviewDuration() const;
+	void RestartPreviewSimulation();
+	void RestartLevelParticleSystems(class UParticleSystem* ParticleSystem);
+	bool CaptureThumbnail(class UParticleSystem* ParticleSystem);
 	void AddParticleEmitter(class UParticleSystem* ParticleSystem);
 	void InsertParticleEmitter(class UParticleSystem* ParticleSystem, int32 Index);
 	void DeleteParticleEmitter(class UParticleSystem* ParticleSystem, int32 Index);

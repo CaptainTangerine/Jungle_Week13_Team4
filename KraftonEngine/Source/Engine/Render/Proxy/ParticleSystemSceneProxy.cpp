@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 
 namespace
 {
@@ -177,6 +178,99 @@ void FParticleSystemSceneProxy::AppendDebugLines(FScene& Scene) const
 			{
 				VectorField->AppendFieldDebugLines(Scene, ComponentToWorld, LODLevel, EmitterTime);
 			}
+		}
+	}
+}
+
+void FParticleSystemSceneProxy::AppendBoundsDebugLines(FScene& Scene) const
+{
+	const UParticleSystemComponent* Component = GetParticleComponent();
+	if (!Component)
+	{
+		return;
+	}
+
+	const FMatrix LocalToWorld = Component->GetWorldMatrix();
+	FBoundingBox Bounds;
+	bool bHasBounds = false;
+
+	for (const FDynamicEmitterDataBase* EmitterData : DynamicEmitters)
+	{
+		if (!EmitterData)
+		{
+			continue;
+		}
+
+		const FDynamicEmitterReplayDataBase& Source = EmitterData->GetSource();
+		const uint8* ParticleData = Source.DataContainer.ParticleData;
+		const uint16* ParticleIndices = Source.DataContainer.ParticleIndices;
+		if (!ParticleData || Source.ActiveParticleCount <= 0 || Source.ParticleStride <= 0)
+		{
+			continue;
+		}
+
+		for (int32 ParticleIndex = 0; ParticleIndex < Source.ActiveParticleCount; ++ParticleIndex)
+		{
+			const int32 DataIndex = ParticleIndices ? ParticleIndices[ParticleIndex] : ParticleIndex;
+			const FBaseParticle* Particle = reinterpret_cast<const FBaseParticle*>(
+				ParticleData + static_cast<size_t>(DataIndex) * Source.ParticleStride);
+			const FVector Position = Source.bUseLocalSpace
+				? LocalToWorld.TransformPositionWithW(Particle->Location)
+				: Particle->Location;
+			const FVector Extent(
+				std::abs(Particle->Size.X * Source.Scale.X) * 0.5f,
+				std::abs(Particle->Size.Y * Source.Scale.Y) * 0.5f,
+				std::abs(Particle->Size.Z * Source.Scale.Z) * 0.5f);
+
+			if (!bHasBounds)
+			{
+				Bounds = FBoundingBox(Position - Extent, Position + Extent);
+				bHasBounds = true;
+			}
+			else
+			{
+				Bounds.Expand(Position - Extent);
+				Bounds.Expand(Position + Extent);
+			}
+		}
+	}
+
+	if (bHasBounds)
+	{
+		const FColor BoxColor = FColor::White();
+		const FColor SphereColor = FColor::Yellow();
+		const FVector Center = Bounds.GetCenter();
+		const float Radius = Bounds.GetExtent().Length();
+		constexpr int32 SphereSegments = 32;
+		constexpr float FullCircle = 6.28318530717958647692f;
+
+		Scene.AddDebugAABB(Bounds.Min, Bounds.Max, BoxColor);
+		if (Radius <= 0.0f)
+		{
+			return;
+		}
+
+		for (int32 Segment = 0; Segment < SphereSegments; ++Segment)
+		{
+			const float Angle0 = FullCircle * static_cast<float>(Segment) / static_cast<float>(SphereSegments);
+			const float Angle1 = FullCircle * static_cast<float>(Segment + 1) / static_cast<float>(SphereSegments);
+			const float Cos0 = std::cos(Angle0) * Radius;
+			const float Sin0 = std::sin(Angle0) * Radius;
+			const float Cos1 = std::cos(Angle1) * Radius;
+			const float Sin1 = std::sin(Angle1) * Radius;
+
+			Scene.AddDebugLine(
+				Center + FVector(Cos0, Sin0, 0.0f),
+				Center + FVector(Cos1, Sin1, 0.0f),
+				SphereColor);
+			Scene.AddDebugLine(
+				Center + FVector(Cos0, 0.0f, Sin0),
+				Center + FVector(Cos1, 0.0f, Sin1),
+				SphereColor);
+			Scene.AddDebugLine(
+				Center + FVector(0.0f, Cos0, Sin0),
+				Center + FVector(0.0f, Cos1, Sin1),
+				SphereColor);
 		}
 	}
 }

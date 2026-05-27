@@ -1,4 +1,4 @@
-﻿#include "DrawCommandBuilder.h"
+#include "DrawCommandBuilder.h"
 
 #include "Resource/ResourceManager.h"
 #include "Render/Types/RenderTypes.h"
@@ -481,9 +481,14 @@ void FDrawCommandBuilder::BuildProxyCommands(const FFrameContext& Frame, FScene&
 		}
 		else if (Proxy->HasProxyFlag(EPrimitiveProxyFlags::ParticleSystem))
 		{
-			if (Frame.RenderOptions.ShowFlags.bDebugDraw)
+			FParticleSystemSceneProxy* ParticleProxy = static_cast<FParticleSystemSceneProxy*>(Proxy);
+			if (Frame.RenderOptions.ShowFlags.bDebugDraw && Frame.RenderOptions.bParticleVectorFieldDebug)
 			{
-				static_cast<FParticleSystemSceneProxy*>(Proxy)->AppendDebugLines(Scene);
+				ParticleProxy->AppendDebugLines(Scene);
+			}
+			if (Frame.RenderOptions.ShowFlags.bParticleEditorBounds)
+			{
+				ParticleProxy->AppendBoundsDebugLines(Scene);
 			}
 			BuildMeshCommands(Scene, Proxy);
 		}

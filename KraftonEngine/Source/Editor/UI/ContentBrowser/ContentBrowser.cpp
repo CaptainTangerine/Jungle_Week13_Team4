@@ -77,6 +77,18 @@ namespace
 		return FPaths::RootDir();
 	}
 
+	std::filesystem::path MakeParticleThumbnailPath(const FString& PackagePath)
+	{
+		std::filesystem::path RelativePath(FPaths::ToWide(FPaths::MakeProjectRelative(PackagePath)));
+		RelativePath = RelativePath.lexically_normal();
+		if (RelativePath.is_absolute() || IsParentDirectoryReference(RelativePath))
+		{
+			RelativePath = std::filesystem::path(FPaths::ToWide(PackagePath)).filename();
+		}
+		RelativePath.replace_extension(L".png");
+		return std::filesystem::path(FPaths::SaveDir()) / L"Thumbnails" / L"ParticleSystem" / RelativePath;
+	}
+
 	bool IsSubPath(const std::filesystem::path& Parent, const std::filesystem::path& Child)
 	{
 		std::filesystem::path P = std::filesystem::weakly_canonical(Parent);
@@ -437,6 +449,13 @@ void FEditorContentBrowserWidget::RefreshContent()
 					break;
 				case EAssetPackageType::ParticleSystem:
 					Element = std::make_shared<ParticleSystemElement>();
+					{
+						const std::filesystem::path ThumbnailPath = MakeParticleThumbnailPath(PackagePath);
+						if (std::filesystem::exists(ThumbnailPath))
+						{
+							Icon = FEditorTextureManager::Get().GetOrLoadThumbnail(FPaths::ToUtf8(ThumbnailPath.wstring()));
+						}
+					}
 					break;
 				case EAssetPackageType::VectorField:
 					Element = std::make_shared<VectorFieldElement>();

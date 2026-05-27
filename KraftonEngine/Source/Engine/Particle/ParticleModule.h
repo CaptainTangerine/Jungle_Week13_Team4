@@ -498,6 +498,37 @@ public:
 };
 
 UCLASS()
+class UParticleModuleDrag : public UParticleModule
+{
+public:
+	GENERATED_BODY()
+	UParticleModuleDrag();
+	bool IsUpdateModule() const override { return true; }
+	void Update(const FUpdateContext& Context) override;
+
+	UPROPERTY(Edit, Save, Instanced, Category="Drag", DisplayName="Drag Coefficient", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=DragCoefficient.Distribution, CppType=UDistributionFloat*)
+	;
+	FRawDistributionFloat DragCoefficient;
+};
+
+UCLASS()
+class UParticleModulePointAttractor : public UParticleModule
+{
+public:
+	GENERATED_BODY()
+	UParticleModulePointAttractor();
+	bool IsUpdateModule() const override { return true; }
+	void Update(const FUpdateContext& Context) override;
+
+	UPROPERTY(Edit, Save, Category="Point Attractor", DisplayName="Attractor Position", Type=Vec3)
+	FVector AttractorPosition = FVector::ZeroVector;
+
+	UPROPERTY(Edit, Save, Instanced, Category="Point Attractor", DisplayName="Strength", Type=ObjectRef, AllowedClass=UDistributionFloat, Member=Strength.Distribution, CppType=UDistributionFloat*)
+	;
+	FRawDistributionFloat Strength;
+};
+
+UCLASS()
 class UParticleModuleColor : public UParticleModule
 {
 public:

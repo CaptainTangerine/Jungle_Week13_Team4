@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Particle/ParticleModule.h"
 
@@ -67,8 +67,9 @@ public:
 	bool bDrawVectors = false;
 
 	UPROPERTY(Edit, Save, Category="Local Vector Field", DisplayName="Vector Draw Scale", Min=0.0f, Max=10000.0f, Speed=0.1f)
-	float DebugVectorScale = 1.0f;
+	float DebugVectorScale = 0.3f;
 
+	bool ShouldExposeProperty(const FProperty& Property) const override;
 	void AppendFieldDebugLines(FScene& Scene, const FMatrix& ComponentToWorld, const UParticleLODLevel* LODLevel, float EmitterTime);
 
 private:

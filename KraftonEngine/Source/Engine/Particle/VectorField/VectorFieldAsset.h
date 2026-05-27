@@ -46,6 +46,16 @@ public:
 	bool SampleTrilinear(const FVector& LocalPosition, FVector& OutVector) const;
 
 private:
+	inline int32 GetVectorIndexUnchecked(int32 X, int32 Y, int32 Z) const
+	{
+		return X + Y * SizeX + Z * SizeX * SizeY;
+	}
+
+	inline const FVector& GetVectorAtUnchecked(int32 X, int32 Y, int32 Z) const
+	{
+		return Vectors[GetVectorIndexUnchecked(X, Y, Z)];
+	}
+
 	int32 SizeX = 0;
 	int32 SizeY = 0;
 	int32 SizeZ = 0;

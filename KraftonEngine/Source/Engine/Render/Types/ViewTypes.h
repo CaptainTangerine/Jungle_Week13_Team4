@@ -53,6 +53,7 @@ struct FShowFlags
 	bool bGizmo = true;
 	bool bBillboardText = true;
 	bool bBoundingVolume = false;
+	bool bParticleEditorBounds = false;
 	bool bDebugDraw = true;
 	bool bOctree = false;
 	bool bFog = true;
@@ -92,6 +93,7 @@ struct FViewportRenderOptions
 	float CameraMoveSensitivity = 1.0f;
 	float CameraRotateSensitivity = 1.0f;
 	ELevelViewportType ViewportType = ELevelViewportType::Perspective;
+	bool bParticleVectorFieldDebug = false;
 
 	// Scene Depth 전용 설정
 	int32 SceneDepthVisMode = 0;

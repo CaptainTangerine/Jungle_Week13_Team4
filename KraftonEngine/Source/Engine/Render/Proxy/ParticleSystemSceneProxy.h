@@ -72,6 +72,7 @@ public:
 	// View-dependent particle
 	virtual void UpdatePerViewport(const FFrameContext& Frame) override;
 	void AppendDebugLines(FScene& Scene) const;
+	void AppendBoundsDebugLines(FScene& Scene) const;
 
 	// proxy가 만든 CPU-expanded vertex/index와 mesh instance 데이터를
 	// GPU dynamic buffer로 업로드한다.
