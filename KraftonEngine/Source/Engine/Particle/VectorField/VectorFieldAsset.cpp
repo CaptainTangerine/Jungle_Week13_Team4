@@ -160,12 +160,8 @@ bool UVectorFieldAsset::SampleNearest(const FVector& LocalPosition, FVector& Out
 	const int32 X = ClampIndex(static_cast<int32>(std::floor(GX + 0.5f)), SizeX);
 	const int32 Y = ClampIndex(static_cast<int32>(std::floor(GY + 0.5f)), SizeY);
 	const int32 Z = ClampIndex(static_cast<int32>(std::floor(GZ + 0.5f)), SizeZ);
-	if (const FVector* Sample = GetVectorAt(X, Y, Z))
-	{
-		OutVector = *Sample;
-		return true;
-	}
-	return false;
+	OutVector = GetVectorAtUnchecked(X, Y, Z);
+	return true;
 }
 
 bool UVectorFieldAsset::SampleTrilinear(const FVector& LocalPosition, FVector& OutVector) const
@@ -199,23 +195,19 @@ bool UVectorFieldAsset::SampleTrilinear(const FVector& LocalPosition, FVector& O
 	ComputeLerpAxis(GY, SizeY, Y0, Y1, FY);
 	ComputeLerpAxis(GZ, SizeZ, Z0, Z1, FZ);
 
-	const FVector* V000 = GetVectorAt(X0, Y0, Z0);
-	const FVector* V100 = GetVectorAt(X1, Y0, Z0);
-	const FVector* V010 = GetVectorAt(X0, Y1, Z0);
-	const FVector* V110 = GetVectorAt(X1, Y1, Z0);
-	const FVector* V001 = GetVectorAt(X0, Y0, Z1);
-	const FVector* V101 = GetVectorAt(X1, Y0, Z1);
-	const FVector* V011 = GetVectorAt(X0, Y1, Z1);
-	const FVector* V111 = GetVectorAt(X1, Y1, Z1);
-	if (!V000 || !V100 || !V010 || !V110 || !V001 || !V101 || !V011 || !V111)
-	{
-		return false;
-	}
+	const FVector& V000 = GetVectorAtUnchecked(X0, Y0, Z0);
+	const FVector& V100 = GetVectorAtUnchecked(X1, Y0, Z0);
+	const FVector& V010 = GetVectorAtUnchecked(X0, Y1, Z0);
+	const FVector& V110 = GetVectorAtUnchecked(X1, Y1, Z0);
+	const FVector& V001 = GetVectorAtUnchecked(X0, Y0, Z1);
+	const FVector& V101 = GetVectorAtUnchecked(X1, Y0, Z1);
+	const FVector& V011 = GetVectorAtUnchecked(X0, Y1, Z1);
+	const FVector& V111 = GetVectorAtUnchecked(X1, Y1, Z1);
 
-	const FVector V00 = LerpVector(*V000, *V100, FX);
-	const FVector V10 = LerpVector(*V010, *V110, FX);
-	const FVector V01 = LerpVector(*V001, *V101, FX);
-	const FVector V11 = LerpVector(*V011, *V111, FX);
+	const FVector V00 = LerpVector(V000, V100, FX);
+	const FVector V10 = LerpVector(V010, V110, FX);
+	const FVector V01 = LerpVector(V001, V101, FX);
+	const FVector V11 = LerpVector(V011, V111, FX);
 	const FVector V0 = LerpVector(V00, V10, FY);
 	const FVector V1 = LerpVector(V01, V11, FY);
 	OutVector = LerpVector(V0, V1, FZ);

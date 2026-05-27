@@ -219,12 +219,25 @@ void UParticleModuleVectorFieldLocal::Update(const FUpdateContext& Context)
 		return;
 	}
 
+	const FQuat InvFieldRotation = FieldRotation.Inverse();
+	const FVector SafeScale = GetSafeFieldBoundsScale();
+	const FVector InvSafeScale(
+		1.0f / SafeScale.X,
+		1.0f / SafeScale.Y,
+		1.0f / SafeScale.Z);
+	const FVector FieldOffset = FieldBoundsOffset;
 	const float DeltaVelocityScale = Intensity * Context.DeltaTime;
+
 	BEGIN_UPDATE_LOOP
 		const FVector ComponentLocalParticlePosition = bParticleDataIsLocalSpace
 			? Particle.Location
 			: WorldToComponent.TransformPositionWithW(Particle.Location);
-		const FVector FieldSamplePosition = TransformComponentLocalToFieldLocal(ComponentLocalParticlePosition, FieldRotation);
+		const FVector RelativePosition = ComponentLocalParticlePosition - FieldOffset;
+		const FVector RotatedFieldSamplePosition = InvFieldRotation.RotateVector(RelativePosition);
+		const FVector FieldSamplePosition(
+			RotatedFieldSamplePosition.X * InvSafeScale.X,
+			RotatedFieldSamplePosition.Y * InvSafeScale.Y,
+			RotatedFieldSamplePosition.Z * InvSafeScale.Z);
 
 		FVector LocalFieldVector = FVector::ZeroVector;
 		const bool bSampled = bUseTrilinearSampling
@@ -235,7 +248,7 @@ void UParticleModuleVectorFieldLocal::Update(const FUpdateContext& Context)
 			CONTINUE_UPDATE_LOOP
 		}
 
-		const FVector ComponentLocalFieldVector = TransformFieldVectorToComponentLocal(LocalFieldVector, FieldRotation);
+		const FVector ComponentLocalFieldVector = FieldRotation.RotateVector(LocalFieldVector);
 		const FVector AppliedVector = bParticleDataIsLocalSpace
 			? ComponentLocalFieldVector
 			: ComponentToWorld.TransformVector(ComponentLocalFieldVector);
