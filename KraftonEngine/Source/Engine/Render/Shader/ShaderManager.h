@@ -318,6 +318,7 @@ public:
 	FShader* GetOrCreateUberLitPermutation(EUberLitDefines::ELightingModel LightingModel, EUberLitDefines::EVertexFactory VertexFactory,
 		EShaderErrorMode ErrorMode = EShaderErrorMode::Notification, bool bWeightBoneHeatMap = false, bool bColorOnly = false);
 	FShader* FindOrCreate(const FString& Path);
+	bool IsShaderFromPath(const FShader* Shader, const FString& Path) const;
 
 	// Compute Shader — 캐시 기반. 호출자는 포인터만 보관, FShaderManager가 소유 + 핫 리로드.
 	FComputeShader* GetOrCreateCS(const FString& Path, const FString& EntryPoint);

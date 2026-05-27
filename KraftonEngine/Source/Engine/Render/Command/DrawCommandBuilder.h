@@ -73,6 +73,7 @@ private:
 	EViewMode CollectViewMode = EViewMode::Lit_Phong;
 	bool bCollectWeightBoneHeatMap = false;
 	int32 CollectWeightBoneHeatMapBoneIndex = -1;
+	bool bCollectHasMRT = false;
 
 	bool bHasSelectionMaskCommands = false;
 

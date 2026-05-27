@@ -114,7 +114,7 @@ FShader* FShaderManager::GetOrCreate(const FShaderKey& Key, EShaderErrorMode Err
 	auto It = ShaderCache.find(Key);
 	if (It != ShaderCache.end())
 	{
-		return It->second.Shader.get();
+		return It->second.Shader && It->second.Shader->IsValid() ? It->second.Shader.get() : nullptr;
 	}
 
 	if (!CachedDevice) return nullptr;
@@ -128,6 +128,11 @@ FShader* FShaderManager::GetOrCreate(const FShaderKey& Key, EShaderErrorMode Err
 	{
 		const D3D_SHADER_MACRO* Defines = nullptr;
 		CacheEntry.Shader->Create(CachedDevice, WidePath.c_str(), Key.VSEntryPoint.c_str(), Key.PSEntryPoint.c_str(), Defines, &CacheEntry.Includes, ErrorMode);
+		if (!CacheEntry.Shader->IsValid())
+		{
+			UE_LOG("[ShaderManager] Failed to create shader. Path=%s VS=%s PS=%s", Key.Path.c_str(), Key.VSEntryPoint.c_str(), Key.PSEntryPoint.c_str());
+			return nullptr;
+		}
 		CacheEntry.StoredDefines = CopyDefines(Defines);
 	}
 	else
@@ -149,7 +154,7 @@ FShader* FShaderManager::PreCompile(const FShaderKey& Key, const D3D_SHADER_MACR
 	auto It = ShaderCache.find(Key);
 	if (It != ShaderCache.end())
 	{
-		return It->second.Shader.get();
+		return It->second.Shader && It->second.Shader->IsValid() ? It->second.Shader.get() : nullptr;
 	}
 
 	if (!CachedDevice) return nullptr;
@@ -158,6 +163,11 @@ FShader* FShaderManager::PreCompile(const FShaderKey& Key, const D3D_SHADER_MACR
 	CacheEntry.Shader = std::make_unique<FShader>();
 	std::wstring WidePath = FPaths::ToWide(Key.Path);
 	CacheEntry.Shader->Create(CachedDevice, WidePath.c_str(), Key.VSEntryPoint.c_str(), Key.PSEntryPoint.c_str(), Defines, &CacheEntry.Includes, ErrorMode);
+	if (!CacheEntry.Shader->IsValid())
+	{
+		UE_LOG("[ShaderManager] Failed to create shader permutation. Path=%s VS=%s PS=%s", Key.Path.c_str(), Key.VSEntryPoint.c_str(), Key.PSEntryPoint.c_str());
+		return nullptr;
+	}
 	CacheEntry.StoredDefines = CopyDefines(Defines);
 
 	auto* RawPtr = CacheEntry.Shader.get();
@@ -187,6 +197,24 @@ FShader* FShaderManager::GetOrCreateUberLitPermutation(EUberLitDefines::ELightin
 FShader* FShaderManager::FindOrCreate(const FString& Path)
 {
 	return GetOrCreate(Path);
+}
+
+bool FShaderManager::IsShaderFromPath(const FShader* Shader, const FString& Path) const
+{
+	if (!Shader)
+	{
+		return false;
+	}
+
+	for (const auto& [Key, Entry] : ShaderCache)
+	{
+		if (Entry.Shader.get() == Shader && Key.Path == Path)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 // ============================================================

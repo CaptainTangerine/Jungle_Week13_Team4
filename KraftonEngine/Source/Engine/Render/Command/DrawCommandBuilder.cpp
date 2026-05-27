@@ -141,6 +141,7 @@ void FDrawCommandBuilder::BeginCollect(const FFrameContext& Frame)
 	CollectViewMode = Frame.RenderOptions.ViewMode;
 	bCollectWeightBoneHeatMap = Frame.RenderOptions.bWeightBoneHeatMap;
 	CollectWeightBoneHeatMapBoneIndex = Frame.RenderOptions.WeightBoneHeatMapBoneIndex;
+	bCollectHasMRT = Frame.NormalRTV != nullptr && Frame.CullingHeatmapRTV != nullptr;
 
 	bHasSelectionMaskCommands = false;
 
@@ -161,7 +162,7 @@ void FDrawCommandBuilder::BeginCollect(const FFrameContext& Frame)
 FShader* FDrawCommandBuilder::SelectEffectiveShader(FShader* ProxyShader, ERenderPass Pass, EViewMode ViewMode,
 	bool bUseSkeletalVertexFactory, bool bWeightBoneHeatMap, bool bUseMeshParticleInstancing)
 {
-	if (ProxyShader != FShaderManager::Get().GetOrCreate(EShaderPath::UberLit))
+	if (!FShaderManager::Get().IsShaderFromPath(ProxyShader, EShaderPath::UberLit))
 		return ProxyShader;
 
 	EUberLitDefines::EVertexFactory VertexFactory = EUberLitDefines::EVertexFactory::StaticMesh;
@@ -173,7 +174,7 @@ FShader* FDrawCommandBuilder::SelectEffectiveShader(FShader* ProxyShader, ERende
 	{
 		VertexFactory = EUberLitDefines::EVertexFactory::MeshParticleInstanced;
 	}
-	const bool bColorOnly = (Pass == ERenderPass::AlphaBlend || Pass == ERenderPass::AdditiveDecal);
+	const bool bColorOnly = Pass != ERenderPass::Opaque || !bCollectHasMRT;
 
 	switch (ViewMode)
 	{

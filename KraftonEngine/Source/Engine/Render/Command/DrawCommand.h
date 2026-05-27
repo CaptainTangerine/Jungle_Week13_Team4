@@ -127,11 +127,11 @@ struct FDrawCommand
 		};
 
 		uint64 Key = 0;
-		Key |= (static_cast<uint64>(InPass) & 0xF) << 60;           // [63:60] Pass
-		Key |= (static_cast<uint64>(PtrHash16(InShader))) << 44;     // [59:44] Shader
-		Key |= (static_cast<uint64>(PtrHash16(InMeshId))) << 28;      // [43:28] MeshBuffer
-		Key |= (static_cast<uint64>(PtrHash16(InSRV))) << 12;        // [27:12] SRV
-		Key |= (static_cast<uint64>(UserBits) & 0xFFF);              // [11:0]  User
+		Key |= (static_cast<uint64>(InPass) & 0x1F) << 59;           // [63:59] Pass
+		Key |= (static_cast<uint64>(PtrHash16(InShader))) << 43;     // [58:43] Shader
+		Key |= (static_cast<uint64>(PtrHash16(InMeshId))) << 27;     // [42:27] MeshBuffer
+		Key |= (static_cast<uint64>(PtrHash16(InSRV))) << 11;        // [26:11] SRV
+		Key |= (static_cast<uint64>(UserBits) & 0x7FF);              // [10:0]  User
 		return Key;
 	}
 };

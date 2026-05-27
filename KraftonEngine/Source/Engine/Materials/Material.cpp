@@ -1,15 +1,25 @@
-#include "Materials/Material.h"
+﻿#include "Materials/Material.h"
 #include "Serialization/Archive.h"
 #include "Render/Shader/Shader.h"
 #include "Texture/Texture2D.h"
 #include "Engine/Runtime/Engine.h"
 #include "Render/Pipeline/Renderer.h"
 #include "Render/Types/MaterialTextureSlot.h"
+#include "Core/Logging/Log.h"
 
 // ─── FMaterialTemplate ───
 
 void FMaterialTemplate::Create(FShader* InShader)
 {
+	ParameterLayout.clear();
+	Shader = nullptr;
+
+	if (!InShader || !InShader->IsValid())
+	{
+		UE_LOG("[MaterialTemplate] Invalid shader passed to template creation.");
+		return;
+	}
+
 	ParameterLayout = InShader->GetParameterLayout(); // 셰이더에서 리플렉션된 파라미터 레이아웃 정보 확보
 	Shader = InShader;
 }

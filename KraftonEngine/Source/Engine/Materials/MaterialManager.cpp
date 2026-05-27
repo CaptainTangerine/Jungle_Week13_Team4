@@ -8,6 +8,7 @@
 #include "Texture/Texture2D.h"
 #include "Render/Pipeline/Renderer.h"
 #include "Materials/Material.h"
+#include "Core/Logging/Log.h"
 
 void FMaterialManager::ScanMaterialAssets()
 {
@@ -56,6 +57,11 @@ UMaterial* FMaterialManager::GetOrCreateMaterial(const FString& MatFilePath)
 		// 기본 머티리얼 생성
 		UMaterial* DefaultMaterial = UObjectManager::Get().CreateObject<UMaterial>();
 		FMaterialTemplate* Template = GetOrCreateTemplate(DefaultShaderPath);
+		if (!Template)
+		{
+			UE_LOG("[MaterialManager] Failed to create default material template. ShaderPath=%s", DefaultShaderPath.c_str());
+			return nullptr;
+		}
 		TMap<FString, std::unique_ptr<FMaterialConstantBuffer>> Buffers = CreateConstantBuffers(Template);
 		DefaultMaterial->Create(GenericPath, Template, ERenderPass::Opaque, EBlendState::Opaque, EDepthStencilState::Default, ERasterizerState::SolidBackCull, std::move(Buffers));
 		// 폴백: 핑크색으로 미지정 머티리얼임을 표시
@@ -130,6 +136,10 @@ TMap<FString, std::unique_ptr<FMaterialConstantBuffer>> FMaterialManager::Create
 {
 
 	TMap<FString, std::unique_ptr<FMaterialConstantBuffer>> InjectedBuffers;
+	if (!Template)
+	{
+		return InjectedBuffers;
+	}
 
 	const auto& RequiredBuffers = Template->GetParameterInfo();
 	std::vector<FString> CreatedBuffers;
@@ -397,8 +407,9 @@ FMaterialTemplate* FMaterialManager::GetOrCreateTemplate(const FString& ShaderPa
 	// 2. 템플릿이 기존에 없다면 새로 제작
 	//    캐시에 있으면 반환, 없으면 컴파일 후 캐싱
 	FShader* Shader = FShaderManager::Get().FindOrCreate(ShaderPath);
-	if (!Shader)
+	if (!Shader || !Shader->IsValid())
 	{
+		UE_LOG("[MaterialManager] Failed to create material template. ShaderPath=%s", ShaderPath.c_str());
 		return nullptr;
 	}
 
