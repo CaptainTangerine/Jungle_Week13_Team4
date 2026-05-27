@@ -799,13 +799,15 @@ void FParticleSystemEditorWidget::Open(UObject* Object)
 		LightComp->PushToScene();
 	}
 
-	AStaticMeshActor* FloorActor = WorldContext.World->SpawnActor<AStaticMeshActor>();
-	FloorActor->InitDefaultComponents("Content/Data/BasicShape/Cube.OBJ");
-	FloorActor->SetActorLocation(FVector(0.0f, 0.0f, -0.05f));
-	FloorActor->SetActorScale(FVector(10.0f, 10.0f, 0.02f));
-	if (UBoxComponent* FloorCollision = FloorActor->AddComponent<UBoxComponent>())
+	bShowPreviewFloor = true;
+	PreviewFloorActor = WorldContext.World->SpawnActor<AStaticMeshActor>();
+	PreviewFloorActor->InitDefaultComponents("Content/Data/BasicShape/Cube.OBJ");
+	PreviewFloorActor->SetActorLocation(FVector(0.0f, 0.0f, -0.05f));
+	PreviewFloorActor->SetActorScale(FVector(10.0f, 10.0f, 0.02f));
+	PreviewFloorActor->SetVisible(bShowPreviewFloor);
+	if (UBoxComponent* FloorCollision = PreviewFloorActor->AddComponent<UBoxComponent>())
 	{
-		FloorCollision->AttachToComponent(FloorActor->GetRootComponent());
+		FloorCollision->AttachToComponent(PreviewFloorActor->GetRootComponent());
 		FloorCollision->SetBoxExtent(FVector(0.5f, 0.5f, 0.5f));
 		FloorCollision->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 		FloorCollision->SetCollisionObjectType(ECollisionChannel::WorldStatic);
@@ -850,6 +852,7 @@ void FParticleSystemEditorWidget::ReleasePreviewResources(bool bReleaseViewport)
 	ViewportClient.SetPreviewWorld(nullptr);
 	ViewportClient.SetPreviewActor(nullptr);
 	PreviewParticleComponent = nullptr;
+	PreviewFloorActor = nullptr;
 
 	if (bReleaseViewport)
 	{
@@ -3701,6 +3704,10 @@ void FParticleSystemEditorWidget::RenderViewportMenus()
 		if (ImGui::Checkbox("Grid", &bShowGrid))
 		{
 			ViewportClient.GetRenderOptions().ShowFlags.bGrid = bShowGrid;
+		}
+		if (ImGui::Checkbox("Floor", &bShowPreviewFloor) && PreviewFloorActor)
+		{
+			PreviewFloorActor->SetVisible(bShowPreviewFloor);
 		}
 		ImGui::Checkbox("Vector Field", &ViewportClient.GetRenderOptions().bParticleVectorFieldDebug);
 

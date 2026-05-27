@@ -99,6 +99,7 @@ private:
 
 	FParticleEditorViewportClient ViewportClient;
 	class UParticleSystemComponent* PreviewParticleComponent = nullptr;
+	class AStaticMeshActor* PreviewFloorActor = nullptr;
 	uint32 InstanceId = 0;
 	FName PreviewWorldHandle = FName::None;
 	FString WindowIdSuffix;
@@ -118,6 +119,7 @@ private:
 	bool bShowParticleCount = false;
 	bool bShowParticleTime = false;
 	bool bShowParticleMemory = false;
+	bool bShowPreviewFloor = true;
 	FPreviewPlaybackState PreviewPlayback;
 
 	TArray<FParticleCurveTrack> CurveTracks;
