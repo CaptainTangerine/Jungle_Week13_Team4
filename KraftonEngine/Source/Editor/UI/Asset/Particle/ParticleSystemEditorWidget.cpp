@@ -1211,7 +1211,7 @@ void FParticleSystemEditorWidget::RenderParticleAssetSearchPopup()
 
 void FParticleSystemEditorWidget::RenderToolbar(UParticleSystem* ParticleSystem)
 {
-	constexpr float ToolbarHeight = 73.0f;
+	constexpr float ToolbarHeight = 38.0f;
 	const ImVec2 ToolbarPos = ImGui::GetCursorScreenPos();
 	const float ToolbarWidth = ImGui::GetContentRegionAvail().x;
 	ImGui::GetWindowDrawList()->AddRectFilled(
@@ -1231,7 +1231,7 @@ void FParticleSystemEditorWidget::RenderToolbar(UParticleSystem* ParticleSystem)
 	SameLineToolbar();
 	DrawIconTextButton("FindInContentBrowser", MakeCascadeIconPath(L"icon_toolbar_genericfinder_40px.png"), "", "Find in Content Browser");
 
-	ToolbarSeparator(ToolbarHeight / 2.0f - 6.0f);
+	ToolbarSeparator(ToolbarHeight - 6.0f);
 
 	if (DrawIconTextButton("RestartSim", MakeCascadeIconPath(L"icon_Cascade_RestartSim_40x.png"), "Restart Sim"))
 	{
@@ -1243,7 +1243,7 @@ void FParticleSystemEditorWidget::RenderToolbar(UParticleSystem* ParticleSystem)
 		RestartLevelParticleSystems(ParticleSystem);
 	}
 
-	ToolbarSeparator(ToolbarHeight / 2.0f - 6.0f);
+	ToolbarSeparator(ToolbarHeight - 6.0f);
 
 	if (DrawIconTextButton("Thumbnail", MakeCascadeIconPath(L"icon_Cascade_Thumbnail_40x.png"), "Thumbnail"))
 	{
@@ -1284,12 +1284,7 @@ void FParticleSystemEditorWidget::RenderToolbar(UParticleSystem* ParticleSystem)
 		ImGui::EndPopup();
 	}
 
-	ImGui::SetCursorScreenPos(ImVec2(ToolbarPos.x + 6.0f, ToolbarPos.y + 38.0f));
-
-	DrawIconTextButton("RegenLOD", MakeCascadeIconPath(L"icon_Cascade_RegenLOD1_40x.png"), "Regen LOD");
-	SameLineToolbar();
-	DrawIconTextButton("RegenLODDupe", MakeCascadeIconPath(L"icon_Cascade_RegenLOD2_40x.png"), "Regen LOD");
-	SameLineToolbar();
+	ToolbarSeparator(ToolbarHeight - 6.0f);
 	if (DrawIconTextButton("LowestLOD", MakeCascadeIconPath(L"icon_Cascade_LowestLOD_40x.png"), "Lowest LOD"))
 	{
 		SelectParticleLOD(ParticleSystem, 0);
