@@ -263,7 +263,7 @@
       <UniqueIdentifier>{e1026e62-420f-6132-1259-28b52a9a0ccd}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source\Engine\Particle\VectorField">
-      <UniqueIdentifier>{d5f7f1cb-2d7a-45fe-bc93-0f780bf9e79b}</UniqueIdentifier>
+      <UniqueIdentifier>{5cfdb8b8-3fa5-56dc-3e51-883563266244}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source\Engine\Physics">
       <UniqueIdentifier>{c1985821-1144-9a46-639a-f7de31f4a1fa}</UniqueIdentifier>
@@ -561,6 +561,9 @@
     <FxCompile Include="Shaders\Lighting\VSMBlur.hlsl">
       <Filter>Shaders\Lighting</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\PostProcess\Blit.hlsl">
+      <Filter>Shaders\PostProcess</Filter>
+    </FxCompile>
     <FxCompile Include="Shaders\PostProcess\BloomBlur.hlsl">
       <Filter>Shaders\PostProcess</Filter>
     </FxCompile>
@@ -571,9 +574,6 @@
       <Filter>Shaders\PostProcess</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\PostProcess\BloomPrefilter.hlsl">
-      <Filter>Shaders\PostProcess</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostProcess\Blit.hlsl">
       <Filter>Shaders\PostProcess</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\PostProcess\CameraFade.hlsl">
@@ -1313,10 +1313,10 @@
     <ClCompile Include="Source\Engine\Particle\ParticleModuleCollision.cpp">
       <Filter>Source\Engine\Particle</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Particle\ParticleModuleVectorField.cpp">
+    <ClCompile Include="Source\Engine\Particle\ParticleModuleEvent.cpp">
       <Filter>Source\Engine\Particle</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Particle\ParticleModuleEvent.cpp">
+    <ClCompile Include="Source\Engine\Particle\ParticleModuleVectorField.cpp">
       <Filter>Source\Engine\Particle</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Particle\ParticleSystem.cpp">
