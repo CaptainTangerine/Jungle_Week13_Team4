@@ -164,3 +164,11 @@ CMakeLists.txt
 # 환경설정
 # ============================================================
 *.env
+
+
+# PhysX generated/prebuilt binaries
+/KraftonEngine/ThirdParty/PhysX/physx/bin/
+/KraftonEngine/ThirdParty/PhysX/physx/compiler/vc17win64/
+/KraftonEngine/ThirdParty/PhysX/physx/intermediate/
+
+
