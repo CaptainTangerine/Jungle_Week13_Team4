@@ -54,7 +54,7 @@ void UPrimitiveComponent::BeginPlay()
 
 	// 직렬화나 InitDefaultComponents에서 CollisionEnabled가 이미 설정된 경우 등록.
 	// 이 시점에 SimulatePhysics/ObjectType/Response/Mass/COM 등 모든 셋업이 끝나있어
-	// PhysX/Native가 정확한 값으로 body를 생성한다.
+	// PhysicsScene이 정확한 값으로 body를 생성한다.
 	if (IsQueryCollisionEnabled())
 	{
 		if (Owner)
@@ -72,7 +72,7 @@ void UPrimitiveComponent::BeginPlay()
 
 void UPrimitiveComponent::EndPlay()
 {
-	// World->DestroyActor → Actor::EndPlay → 컴포넌트 EndPlay 흐름. PhysX와 RenderState
+	// World->DestroyActor → Actor::EndPlay → 컴포넌트 EndPlay 흐름. PhysicsScene과 RenderState
 	// (SceneProxy/Octree/PickingBVH)를 안전하게 정리하지 않으면 다음 frame에 stale 포인터를
 	// 참조해 crash. dtor에도 같은 호출이 있지만 (raw 포인터라 OwnedComponents의 컴포넌트들이
 	// 자동 delete되지 않아) dtor가 안 불릴 수 있어 EndPlay에서 명시적으로 보장한다.
@@ -200,7 +200,7 @@ void UPrimitiveComponent::PostEditProperty(const char* PropertyName)
 		// 순서대로 프로퍼티를 set 하면서 매번 PostEditProperty 를 부르는데, "Collision
 		// Enabled" 는 그 중에 비교적 앞쪽에 위치해서 ObjectType / Mass / COM / BoxExtent
 		// 같은 다른 프로퍼티들이 아직 default 인 시점에 RegisterComponent 가 발화해버린다.
-		// 결과: 단위 큐브 + mass=1 + WorldStatic 으로 PhysX 본체가 만들어지고, 이후 다른
+		// 결과: 단위 큐브 + mass=1 + WorldStatic 으로 물리 body가 만들어지고, 이후 다른
 		// 프로퍼티 setter 들의 NotifyPhysicsBodyDirty 가 같은 가드에 막혀 no-op 라 영영
 		// 갱신 안 됨. BeginPlay 의 RegisterComponent 한 번에 위임하면 모든 프로퍼티가
 		// 최종 상태인 채로 등록된다 (PIE Duplicate 경로와 동일한 타이밍).

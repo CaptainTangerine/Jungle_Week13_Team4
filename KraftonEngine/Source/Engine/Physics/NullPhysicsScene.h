@@ -1,19 +1,10 @@
 #pragma once
 
 #include "Physics/IPhysicsScene.h"
-#include "Core/Types/CollisionTypes.h"
-#include "Math/Vector.h"
-#include <unordered_set>
-#include <unordered_map>
-#include <vector>
 
-// ============================================================
-// FNativePhysicsScene — 기존 hand-written 충돌 시스템 래핑
-//
-// O(N²) brute-force + CollisionMath + 채널/응답 필터링.
-// IPhysicsScene 인터페이스를 통해 교체 가능.
-// ============================================================
-class FNativePhysicsScene : public IPhysicsScene
+// Empty physics backend. It keeps existing engine call sites safe while the
+// real SDK-backed implementation is being built.
+class FNullPhysicsScene : public IPhysicsScene
 {
 public:
 	void Initialize(UWorld* InWorld) override;
@@ -45,30 +36,4 @@ public:
 
 	bool RaycastByObjectTypes(const FVector& Start, const FVector& Dir, float MaxDist, FHitResult& OutHit,
 		uint32 ObjectTypeMask, const AActor* IgnoreActor = nullptr) const override;
-
-private:
-	UWorld* World = nullptr;
-	std::vector<UPrimitiveComponent*> RegisteredComponents;
-
-	// 물리 시뮬레이션 상태
-	struct FBodyState
-	{
-		FVector Velocity = { 0, 0, 0 };
-		FVector AngularVelocity = { 0, 0, 0 };
-		FVector AccumulatedForce = { 0, 0, 0 };
-		FVector AccumulatedTorque = { 0, 0, 0 };
-		float Mass = 1.0f;
-		FVector CenterOfMassLocal = { 0, 0, 0 }; // 컴포넌트 local 좌표계 offset
-	};
-	std::unordered_map<UPrimitiveComponent*, FBodyState> BodyStates;
-
-	static constexpr float GravityZ = -9.81f;
-
-	// 이전/현재 프레임 오버랩 쌍 — Begin/End 이벤트 diff용
-	std::unordered_set<FOverlapPair> PreviousOverlaps;
-	std::unordered_set<FOverlapPair> CurrentOverlaps;
-
-	// Block 쌍 추적 — Hit 이벤트는 첫 접촉 시에만 발화
-	std::unordered_set<FOverlapPair> PreviousBlockPairs;
-	std::unordered_set<FOverlapPair> CurrentBlockPairs;
 };

@@ -4,9 +4,7 @@
 #include "Component/Primitive/StaticMeshComponent.h"
 #include "Engine/Component/Camera/CameraComponent.h"
 #include "Render/Types/LODContext.h"
-#include "Physics/NativePhysicsScene.h"
-#include "Physics/PhysXPhysicsScene.h"
-#include "Core/ProjectSettings.h"
+#include "Physics/NullPhysicsScene.h"
 #include "GameFramework/GameMode/GameModeBase.h"
 #include "GameFramework/GameMode/GameStateBase.h"
 #include "GameFramework/GameMode/PlayerController.h"
@@ -80,7 +78,7 @@ void UWorld::DestroyActor(AActor* Actor)
 	Partition.RemoveActor(Actor);
 
 	// 즉시 delete. octree / partition 측은 IsValid 가드로 stale 포인터 방어.
-	// PhysX onContact / TickManager 순회 도중에 self-destroy 하는 경로 (police HandleHit,
+	// 물리/틱 순회 도중에 self-destroy 하는 경로 (police HandleHit,
 	// meteor Tick) 는 호출자 측에서 stack 위쪽 코드가 더 이상 this 를 만지지 않도록
 	// 패턴화해뒀음 (bAlreadyCaught 가드, ElapsedTime=Lifetime 후 다음 Tick).
 	UObjectManager::Get().DestroyObject(Actor);
@@ -219,6 +217,12 @@ bool UWorld::RaycastPrimitives(const FRay& Ray, FHitResult& OutHitResult, AActor
 	return WorldPrimitivePickingBVH.Raycast(Ray, OutHitResult, OutActor);
 }
 
+IPhysicsScene* UWorld::GetPhysicsScene() const
+{
+	static FNullPhysicsScene FallbackPhysicsScene;
+	return PhysicsScene ? PhysicsScene.get() : &FallbackPhysicsScene;
+}
+
 bool UWorld::PhysicsRaycast(const FVector& Start, const FVector& Dir, float MaxDist, FHitResult& OutHit,
 	ECollisionChannel TraceChannel, const AActor* IgnoreActor) const
 {
@@ -295,11 +299,8 @@ void UWorld::InitWorld()
 
 	// E.2/3: CameraManager spawn 은 PC 의 BeginPlay 가 담당. World 는 보유하지 않음.
 
-	// 물리 시스템 초기화 — ProjectSettings 백엔드 선택
-	if (FProjectSettings::Get().Physics.Backend == EPhysicsBackend::PhysX)
-		PhysicsScene = std::make_unique<FPhysXPhysicsScene>();
-	else
-		PhysicsScene = std::make_unique<FNativePhysicsScene>();
+	// 물리 시스템 초기화.
+	PhysicsScene = std::make_unique<FNullPhysicsScene>();
 	PhysicsScene->Initialize(this);
 }
 
@@ -340,7 +341,7 @@ void UWorld::Tick(float DeltaTime, ELevelTick TickType)
 	Scene.GetDebugDrawQueue().Tick(DeltaTime);
 
 	// bPaused 동안 PhysicsScene + TickManager skip — GameMode 타이머, Lua Tick, 차량
-	// 이동, PhysX 시뮬레이션 모두 정지. Render / UI / Input poll 은 호출자 (UEngine::Tick)
+	// 이동, 물리 시뮬레이션 모두 정지. Render / UI / Input poll 은 호출자 (UEngine::Tick)
 	// 가 따로 돌리므로 영향 없음 → 메뉴/인트로 위에서 화면 보이고 클릭 가능.
 	if (bPaused)
 	{

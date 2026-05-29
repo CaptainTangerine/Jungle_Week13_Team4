@@ -138,7 +138,7 @@ private:
 	UClass* GameModeClass = nullptr;  // GameEngine 등이 BeginPlay 전에 세팅
 
 public:
-	IPhysicsScene* GetPhysicsScene() const { return PhysicsScene.get(); }
+	IPhysicsScene* GetPhysicsScene() const;
 
 	// Physics raycast convenience — delegates to IPhysicsScene::Raycast
 	bool PhysicsRaycast(const FVector& Start, const FVector& Dir, float MaxDist, FHitResult& OutHit,

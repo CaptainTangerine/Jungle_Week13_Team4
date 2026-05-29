@@ -41,9 +41,9 @@ void ATriggerVolumeBase::BeginPlay()
 		TriggerBox = Cast<UBoxComponent>(GetRootComponent());
 	}
 
-	// 씬에 잘못 직렬화된 값(GenerateOverlapEvents=false 등)이 있으면 PhysX가 trigger flag
+	// 씬에 잘못 직렬화된 값(GenerateOverlapEvents=false 등)이 있으면 trigger flag
 	// 대신 simulation shape로 등록 → Pawn과 일반 충돌 발생 → trigger 표면에서 튕김.
-	// Super::BeginPlay 전에 강제 보정해야 PrimitiveComponent::BeginPlay → PhysX
+	// Super::BeginPlay 전에 강제 보정해야 PrimitiveComponent::BeginPlay의
 	// RegisterComponent 시점에 trigger 셋업이 반영된다.
 	if (TriggerBox)
 	{

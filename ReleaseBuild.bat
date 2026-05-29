@@ -42,7 +42,7 @@ mkdir "%RELEASE_BIN%"
 echo.
 echo [3/3] Copying files...
 
-:: exe + 동봉 DLL 은 Bin\ 서브폴더로 (PhysX / RmlUi / fmod 등 — vcxproj PostBuildEvent
+:: exe + 동봉 DLL 은 Bin\ 서브폴더로 (RmlUi / fmod 등 — vcxproj PostBuildEvent
 :: 가 Bin\Release 로 복사해둔 것들).
 copy "%BUILD_OUTPUT%\KraftonEngine.exe" "%RELEASE_BIN%\" >nul
 xcopy "%BUILD_OUTPUT%\*.dll" "%RELEASE_BIN%\" /y /q >nul
