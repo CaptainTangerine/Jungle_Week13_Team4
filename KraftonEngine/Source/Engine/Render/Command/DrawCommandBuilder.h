@@ -60,7 +60,8 @@ private:
 	void EmitLineCommand(FLineGeometry& Lines, FShader* Shader, const FDrawCommandRenderState& RS);
 	void ApplyMaterialRenderState(FDrawCommandRenderState& OutState, const UMaterial* Mat, const FDrawCommandRenderState& BaseState);
 	FShader* SelectEffectiveShader(FShader* ProxyShader, ERenderPass Pass, EViewMode ViewMode,
-		bool bUseSkeletalVertexFactory, bool bWeightBoneHeatMap, bool bUseMeshParticleInstancing = false);
+		bool bUseSkeletalVertexFactory, bool bWeightBoneHeatMap, bool bUseMeshParticleInstancing = false,
+		bool bForceUnlitShader = false);
 
 	FConstantBuffer* GetPerObjectCBForProxy(FScene* Scene, const FPrimitiveSceneProxy& Proxy);
 	void EnsurePerObjectCBPoolCapacity(FScene* Scene, uint32 RequiredCount);

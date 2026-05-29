@@ -364,6 +364,9 @@ void FParticleSystemSceneProxy::RebuildSectionDrawsFromRenderPackets()
 		Draw.Material = Packet.Material;
 		Draw.FirstIndex = Packet.FirstIndex;
 		Draw.IndexCount = Packet.IndexCount;
+		Draw.bForceUnlitShader = Packet.PacketType == EParticleRenderPacketType::CpuExpandedSprite
+			|| Packet.PacketType == EParticleRenderPacketType::CpuExpandedBeam
+			|| Packet.PacketType == EParticleRenderPacketType::CpuExpandedRibbon;
 		ApplyParticleBlendModeOverride(Draw, Packet.BlendMode);
 		Draw.bHasTranslucencySort = Packet.bHasTranslucencySort;
 		Draw.SortDepth = Packet.SortDepth;

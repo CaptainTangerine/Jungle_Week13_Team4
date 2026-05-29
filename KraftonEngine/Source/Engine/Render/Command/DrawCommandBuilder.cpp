@@ -160,7 +160,7 @@ void FDrawCommandBuilder::BeginCollect(const FFrameContext& Frame)
 // SelectEffectiveShader — ViewMode에 따른 UberLit 셰이더 변형 선택
 // ============================================================
 FShader* FDrawCommandBuilder::SelectEffectiveShader(FShader* ProxyShader, ERenderPass Pass, EViewMode ViewMode,
-	bool bUseSkeletalVertexFactory, bool bWeightBoneHeatMap, bool bUseMeshParticleInstancing)
+	bool bUseSkeletalVertexFactory, bool bWeightBoneHeatMap, bool bUseMeshParticleInstancing, bool bForceUnlitShader)
 {
 	if (!FShaderManager::Get().IsShaderFromPath(ProxyShader, EShaderPath::UberLit))
 		return ProxyShader;
@@ -175,6 +175,12 @@ FShader* FDrawCommandBuilder::SelectEffectiveShader(FShader* ProxyShader, ERende
 		VertexFactory = EUberLitDefines::EVertexFactory::MeshParticleInstanced;
 	}
 	const bool bColorOnly = Pass != ERenderPass::Opaque || !bCollectHasMRT;
+
+	if (bForceUnlitShader)
+	{
+		return FShaderManager::Get().GetOrCreateUberLitPermutation(EUberLitDefines::ELightingModel::Unlit,
+			VertexFactory, EShaderErrorMode::Notification, bWeightBoneHeatMap, bColorOnly);
+	}
 
 	switch (ViewMode)
 	{
@@ -270,7 +276,7 @@ void FDrawCommandBuilder::BuildCommandForProxy(FScene& Scene, const FPrimitiveSc
 			? Section.Material->GetShader()
 			: Proxy.GetShader();
 		FShader* EffectiveShader = SelectEffectiveShader(SectionShader, Pass, CollectViewMode,
-			bGPUSkinning, bWeightBoneHeatMap, Section.bInstanced);
+			bGPUSkinning, bWeightBoneHeatMap, Section.bInstanced, Section.bForceUnlitShader);
 
 		FDrawCommand& Cmd = DrawCommandList.AddCommand();
 		Cmd.Pass = Pass;

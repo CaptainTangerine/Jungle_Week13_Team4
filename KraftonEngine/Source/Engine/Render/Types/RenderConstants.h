@@ -353,6 +353,7 @@ struct FMeshSectionDraw
 	float SortDepth = 0.0f;
 	int32 TranslucencySortPriority = 0;
 
+	bool bForceUnlitShader = false;
 	bool bHasRenderStateOverride = false;
 	ERenderPass OverrideRenderPass = ERenderPass::Opaque;
 	EBlendState OverrideBlendState = EBlendState::Opaque;
