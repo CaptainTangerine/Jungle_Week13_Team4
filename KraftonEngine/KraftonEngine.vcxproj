@@ -142,7 +142,7 @@
     <OutDir>$(ProjectDir)Bin\$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)Build\$(Configuration)\</IntDir>
     <IncludePath>Intermediate\Generated;Source\Engine;Source;ThirdParty;ThirdParty\ImGui;ThirdParty\imgui-node-editor;ThirdParty\RmlUi\Include;Source\Editor;Source\ObjViewer;Source\Game;ThirdParty\lua\include;ThirdParty\sol2\include;ThirdParty\fmod\include;ThirdParty\fbx\include;ThirdParty\PhysX\physx\include;ThirdParty\PhysX\pxshared\include;.;$(IncludePath)</IncludePath>
-    <LibraryPath>ThirdParty\RmlUi\Debug;ThirdParty\fmod\lib;ThirdParty\fbx\lib\x64\debug;ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\checked;ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\checked;$(LibraryPath)</LibraryPath>
+    <LibraryPath>ThirdParty\RmlUi\Debug;ThirdParty\fmod\lib;ThirdParty\fbx\lib\x64\debug;ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\debug;ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\debug;$(LibraryPath)</LibraryPath>
     <LocalDebuggerWorkingDirectory>$(ProjectDir)</LocalDebuggerWorkingDirectory>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -240,17 +240,21 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(ProjectDir)ThirdParty\lua\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>lua51.lib;rmlui.lib;rmlui_debugger.lib;fmodL_vc.lib;libfbxsdk.lib;PhysX_64.lib;PhysXCommon_64.lib;PhysXFoundation_64.lib;PhysXExtensions_static_64.lib;PhysXPvdSDK_static_64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>lua51.lib;rmlui.lib;rmlui_debugger.lib;fmodL_vc.lib;libfbxsdk.lib;PhysX_64.lib;PhysXCommon_64.lib;PhysXFoundation_64.lib;PhysXCooking_64.lib;PhysXExtensions_static_64.lib;PhysXPvdSDK_static_64.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /Y "$(ProjectDir)ThirdParty\RmlUi\Debug\*.dll" "$(OutDir)"
 xcopy /Y "$(ProjectDir)ThirdParty\fmod\lib\fmodL.dll" "$(OutDir)"
-if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\checked\PhysX_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\checked\PhysX_64.dll" "$(OutDir)"
-if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\checked\PhysXCommon_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\checked\PhysXCommon_64.dll" "$(OutDir)"
-if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\checked\PhysXFoundation_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\checked\PhysXFoundation_64.dll" "$(OutDir)"
-if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\checked\PhysX_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\checked\PhysX_64.dll" "$(OutDir)"
-if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\checked\PhysXCommon_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\checked\PhysXCommon_64.dll" "$(OutDir)"
-if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\checked\PhysXFoundation_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\checked\PhysXFoundation_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\debug\PhysX_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\debug\PhysX_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\debug\PhysXCommon_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\debug\PhysXCommon_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\debug\PhysXFoundation_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\debug\PhysXFoundation_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\debug\PhysXCooking_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\debug\PhysXCooking_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\debug\PhysXGpu_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\debug\PhysXGpu_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\debug\PhysX_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\debug\PhysX_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\debug\PhysXCommon_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\debug\PhysXCommon_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\debug\PhysXFoundation_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\debug\PhysXFoundation_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\debug\PhysXCooking_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\debug\PhysXCooking_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\debug\PhysXGpu_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\debug\PhysXGpu_64.dll" "$(OutDir)"
 xcopy /Y "$(ProjectDir)ThirdParty\lua\bin\lua51.dll" "$(OutDir)"
 xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\debug\libfbxsdk.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
@@ -276,7 +280,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\debug\libfbxsdk.dll" "$(OutDir)"</
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(ProjectDir)ThirdParty\lua\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>lua51.lib;rmlui.lib;rmlui_debugger.lib;fmod_vc.lib;libfbxsdk.lib;PhysX_64.lib;PhysXCommon_64.lib;PhysXFoundation_64.lib;PhysXExtensions_static_64.lib;PhysXPvdSDK_static_64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>lua51.lib;rmlui.lib;rmlui_debugger.lib;fmod_vc.lib;libfbxsdk.lib;PhysX_64.lib;PhysXCommon_64.lib;PhysXFoundation_64.lib;PhysXCooking_64.lib;PhysXExtensions_static_64.lib;PhysXPvdSDK_static_64.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /Y "$(ProjectDir)ThirdParty\RmlUi\Release\*.dll" "$(OutDir)"
@@ -284,9 +288,13 @@ xcopy /Y "$(ProjectDir)ThirdParty\fmod\lib\fmod.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysX_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysX_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXCommon_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXCommon_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXFoundation_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXFoundation_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXCooking_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXCooking_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXGpu_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXGpu_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysX_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysX_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXCommon_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXCommon_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXFoundation_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXFoundation_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXCooking_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXCooking_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXGpu_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXGpu_64.dll" "$(OutDir)"
 xcopy /Y "$(ProjectDir)ThirdParty\lua\bin\lua51.dll" "$(OutDir)"
 xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
@@ -335,7 +343,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(ProjectDir)ThirdParty\lua\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>lua51.lib;rmlui.lib;rmlui_debugger.lib;fmod_vc.lib;libfbxsdk.lib;PhysX_64.lib;PhysXCommon_64.lib;PhysXFoundation_64.lib;PhysXExtensions_static_64.lib;PhysXPvdSDK_static_64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>lua51.lib;rmlui.lib;rmlui_debugger.lib;fmod_vc.lib;libfbxsdk.lib;PhysX_64.lib;PhysXCommon_64.lib;PhysXFoundation_64.lib;PhysXCooking_64.lib;PhysXExtensions_static_64.lib;PhysXPvdSDK_static_64.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /Y "$(ProjectDir)ThirdParty\RmlUi\Release\*.dll" "$(OutDir)"
@@ -343,9 +351,13 @@ xcopy /Y "$(ProjectDir)ThirdParty\fmod\lib\fmod.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysX_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysX_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXCommon_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXCommon_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXFoundation_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXFoundation_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXCooking_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXCooking_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXGpu_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXGpu_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysX_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysX_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXCommon_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXCommon_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXFoundation_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXFoundation_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXCooking_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXCooking_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXGpu_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXGpu_64.dll" "$(OutDir)"
 xcopy /Y "$(ProjectDir)ThirdParty\lua\bin\lua51.dll" "$(OutDir)"
 xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
@@ -371,7 +383,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(ProjectDir)ThirdParty\lua\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>lua51.lib;rmlui.lib;rmlui_debugger.lib;fmod_vc.lib;libfbxsdk.lib;PhysX_64.lib;PhysXCommon_64.lib;PhysXFoundation_64.lib;PhysXExtensions_static_64.lib;PhysXPvdSDK_static_64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>lua51.lib;rmlui.lib;rmlui_debugger.lib;fmod_vc.lib;libfbxsdk.lib;PhysX_64.lib;PhysXCommon_64.lib;PhysXFoundation_64.lib;PhysXCooking_64.lib;PhysXExtensions_static_64.lib;PhysXPvdSDK_static_64.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /Y "$(ProjectDir)ThirdParty\RmlUi\Release\*.dll" "$(OutDir)"
@@ -379,9 +391,13 @@ xcopy /Y "$(ProjectDir)ThirdParty\fmod\lib\fmod.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysX_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysX_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXCommon_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXCommon_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXFoundation_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXFoundation_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXCooking_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXCooking_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXGpu_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXGpu_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysX_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysX_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXCommon_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXCommon_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXFoundation_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXFoundation_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXCooking_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXCooking_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXGpu_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXGpu_64.dll" "$(OutDir)"
 xcopy /Y "$(ProjectDir)ThirdParty\lua\bin\lua51.dll" "$(OutDir)"
 xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
@@ -407,7 +423,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(ProjectDir)ThirdParty\lua\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>lua51.lib;rmlui.lib;rmlui_debugger.lib;fmod_vc.lib;libfbxsdk.lib;PhysX_64.lib;PhysXCommon_64.lib;PhysXFoundation_64.lib;PhysXExtensions_static_64.lib;PhysXPvdSDK_static_64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>lua51.lib;rmlui.lib;rmlui_debugger.lib;fmod_vc.lib;libfbxsdk.lib;PhysX_64.lib;PhysXCommon_64.lib;PhysXFoundation_64.lib;PhysXCooking_64.lib;PhysXExtensions_static_64.lib;PhysXPvdSDK_static_64.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /Y "$(ProjectDir)ThirdParty\RmlUi\Release\*.dll" "$(OutDir)"
@@ -415,9 +431,13 @@ xcopy /Y "$(ProjectDir)ThirdParty\fmod\lib\fmod.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysX_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysX_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXCommon_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXCommon_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXFoundation_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXFoundation_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXCooking_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXCooking_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXGpu_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc142.md\release\PhysXGpu_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysX_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysX_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXCommon_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXCommon_64.dll" "$(OutDir)"
 if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXFoundation_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXFoundation_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXCooking_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXCooking_64.dll" "$(OutDir)"
+if exist "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXGpu_64.dll" xcopy /Y "$(ProjectDir)ThirdParty\PhysX\physx\bin\win.x86_64.vc143.md\release\PhysXGpu_64.dll" "$(OutDir)"
 xcopy /Y "$(ProjectDir)ThirdParty\lua\bin\lua51.dll" "$(OutDir)"
 xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"</Command>
     </PostBuildEvent>

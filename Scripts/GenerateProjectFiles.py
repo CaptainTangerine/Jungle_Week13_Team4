@@ -119,8 +119,9 @@ FMOD_RELEASE_LIB = "fmod_vc.lib"
 FMOD_DEBUG_DLL = "fmodL.dll"
 FMOD_RELEASE_DLL = "fmod.dll"
 
-# PhysX SDK config. Debug links against PhysX checked; release-like builds
-# link against PhysX release. Build it with Scripts\\BuildPhysX.bat first.
+# PhysX SDK config. Debug links against PhysX debug so the MSVC runtime
+# matches /MDd. Release-like builds link against PhysX release.
+# Build it with Scripts\\BuildPhysX.bat first.
 PHYSX_BIN_ROOTS = [
     "ThirdParty\\PhysX\\physx\\bin\\win.x86_64.vc142.md",
     "ThirdParty\\PhysX\\physx\\bin\\win.x86_64.vc143.md",
@@ -129,6 +130,7 @@ PHYSX_DEPENDENCIES = [
     "PhysX_64.lib",
     "PhysXCommon_64.lib",
     "PhysXFoundation_64.lib",
+    "PhysXCooking_64.lib",
     "PhysXExtensions_static_64.lib",
     "PhysXPvdSDK_static_64.lib",
 ]
@@ -136,7 +138,14 @@ PHYSX_RUNTIME_DLLS = [
     "PhysX_64.dll",
     "PhysXCommon_64.dll",
     "PhysXFoundation_64.dll",
+    "PhysXCooking_64.dll",
+    "PhysXGpu_64.dll",
 ]
+
+
+def physx_config_for(cfg):
+    props = CONFIG_PROPS.get(cfg, {})
+    return "release" if props.get("release_like", cfg == "Release") else "debug"
 
 # Reflection — UCLASS/UPROPERTY 매크로 → *.generated.h/.cpp 자동 생성.
 # 빌드 시작 직전(PreBuildEvent)과 ClCompile 직전(GenerateReflectionHeaders target)
@@ -354,7 +363,7 @@ def generate_vcxproj(files: dict[str, list[str]]):
         if is_x64:
             library_paths.append(FMOD_LIB_DIR)
             library_paths.append(FBX_DEBUG_LIB_DIR if cfg == "Debug" else FBX_RELEASE_LIB_DIR)
-            physx_config = "checked" if cfg == "Debug" else "release"
+            physx_config = physx_config_for(cfg)
             library_paths.extend(f"{root}\\{physx_config}" for root in PHYSX_BIN_ROOTS)
         library_path_value = ";".join(library_paths) + ";$(LibraryPath)" if library_paths else "$(LibraryPath)"
         pg = ET.SubElement(proj, "PropertyGroup", Condition=cond)
@@ -435,7 +444,7 @@ def generate_vcxproj(files: dict[str, list[str]]):
         if is_x64:
             rmlui_dir = RMLUI_DEBUG_DIR if cfg == "Debug" else RMLUI_RELEASE_DIR
             fmod_dll = FMOD_DEBUG_DLL if cfg == "Debug" else FMOD_RELEASE_DLL
-            physx_config = "checked" if cfg == "Debug" else "release"
+            physx_config = physx_config_for(cfg)
             fbx_lib_dir = FBX_DEBUG_LIB_DIR if cfg == "Debug" else FBX_RELEASE_LIB_DIR
             physx_copy_commands = [
                 f'if exist "$(ProjectDir){root}\\{physx_config}\\{dll}" '

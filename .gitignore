@@ -133,6 +133,7 @@ Intermediate/
 .idea_modules/
 # Rider 가 자동 생성하는 CMakeLists (의존성 다이어그램용)
 CMakeLists.txt
+!/KraftonEngine/ThirdParty/PhysX/**/CMakeLists.txt
 
 # VS Code
 .vscode/*
@@ -167,8 +168,13 @@ CMakeLists.txt
 
 
 # PhysX generated/prebuilt binaries
-/KraftonEngine/ThirdParty/PhysX/physx/bin/
+/KraftonEngine/ThirdParty/PhysX/physx/bin/*
+!/KraftonEngine/ThirdParty/PhysX/physx/bin/win.x86_64.vc140.mt/
+!/KraftonEngine/ThirdParty/PhysX/physx/bin/win.x86_64.vc140.mt/*/
+/KraftonEngine/ThirdParty/PhysX/physx/bin/win.x86_64.vc140.mt/*/*
+!/KraftonEngine/ThirdParty/PhysX/physx/bin/win.x86_64.vc140.mt/*/PhysXGpu_64.dll
 /KraftonEngine/ThirdParty/PhysX/physx/compiler/vc17win64/
 /KraftonEngine/ThirdParty/PhysX/physx/intermediate/
+/KraftonEngine/ThirdParty/PhysX/physx/include/PxConfig.h
 
 
