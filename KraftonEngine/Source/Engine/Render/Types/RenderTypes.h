@@ -46,7 +46,7 @@ enum class ERenderPass : uint32
 	DepthOfField,	// 피사계 심도
 	Bloom,			// HDR SceneColor bloom post process
 	FXAA,			// FXAA 안티앨리어싱 (SceneColor 복사 후 실행)
-	EditorIcon,		// Billboard icons
+	PostDOFTranscluency,		// Billboard icons
 	GizmoOuter,		// 기즈모 외곽 (깊이 테스트 O)
 	GizmoInner,		// 기즈모 내부 (깊이 무시)
 	OverlayFont,	// 스크린 공간 텍스트 (깊이 무시)
@@ -69,9 +69,9 @@ inline const char* GetRenderPassName(ERenderPass Pass)
 		"RenderPass::AdditiveDecal",
 		"RenderPass::AlphaBlend",
 		"RenderPass::DepthOfField",
+		"RenderPass::PostDOFTrans",
 		"RenderPass::Bloom",
 		"RenderPass::FXAA",
-		"RenderPass::EditorIcon",
 		"RenderPass::GizmoOuter",
 		"RenderPass::GizmoInner",
 		"RenderPass::OverlayFont",
@@ -97,9 +97,9 @@ namespace RenderStateStrings
 		{ "AdditiveDecal", (int)ERenderPass::AdditiveDecal },
 		{ "AlphaBlend",    (int)ERenderPass::AlphaBlend },
 		{ "DepthOfField",  (int)ERenderPass::DepthOfField },
+		{ "PostDOFTrans",  (int)ERenderPass::PostDOFTranscluency },
 		{ "Bloom",         (int)ERenderPass::Bloom },
 		{ "FXAA",          (int)ERenderPass::FXAA },
-		{ "EditorIcon",    (int)ERenderPass::EditorIcon },
 		{ "GizmoOuter",    (int)ERenderPass::GizmoOuter },
 		{ "GizmoInner",    (int)ERenderPass::GizmoInner },
 		{ "OverlayFont",   (int)ERenderPass::OverlayFont },

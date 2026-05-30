@@ -53,10 +53,10 @@ void FBillboardSceneProxy::UpdateMesh()
 		SectionDraws.clear();
 		SectionDraws.push_back({ Mat, 0, IndexCount });
 		FMeshSectionDraw& SectionDraw = SectionDraws.back();
-		if (Comp->GetBillboardRenderMode() == EBillboardRenderMode::BRM_EditorIcon)
+		if (Comp->GetBillboardRenderMode() == EBillboardRenderMode::BRM_PostDOFTrans)
 		{
 			SectionDraw.bHasRenderStateOverride = true;
-			SectionDraw.OverrideRenderPass = ERenderPass::EditorIcon;
+			SectionDraw.OverrideRenderPass = ERenderPass::PostDOFTranscluency;
 			SectionDraw.OverrideBlendState = EBlendState::AlphaBlend;
 			SectionDraw.OverrideDepthStencilState = EDepthStencilState::DepthReadOnly;
 		}

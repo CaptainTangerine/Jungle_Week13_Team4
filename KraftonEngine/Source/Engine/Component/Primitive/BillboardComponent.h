@@ -13,7 +13,7 @@ class FPrimitiveSceneProxy;
 enum class EBillboardRenderMode
 {
 	BRM_AlphaBlend,
-	BRM_EditorIcon,
+	BRM_PostDOFTrans,
 };
 
 UCLASS()
@@ -54,6 +54,6 @@ protected:
 	FSoftObjectPtr MaterialSlot = "None";
 	UMaterial* Material = nullptr;
 
-	EBillboardRenderMode RenderMode = EBillboardRenderMode::BRM_AlphaBlend;
+	EBillboardRenderMode RenderMode = EBillboardRenderMode::BRM_PostDOFTrans;
 };
 
