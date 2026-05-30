@@ -25,6 +25,7 @@
 #include "Animation/Sequence/AnimDataModel.h"
 #include "Asset/AssetRegistry.h"
 #include "Physics/Asset/PhysicsAsset.h"
+#include "Physics/Asset/PhysicsAssetManager.h"
 #include "Physics/Asset/BodySetup.h"
 #include "Physics/Asset/ConstraintSetup.h"
 #include "Math/MathUtils.h"
@@ -1531,6 +1532,23 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 			EnsurePhysicsAssetForCurrentSkeleton();
 		}
 		return;
+	}
+
+	// 저장 — 편집 내용을 .uasset 으로 영속화. SourcePath 가 있어야(= 디스크 에셋) 저장 가능.
+	const bool bHasSourcePath = !CurrentPhysicsAsset->GetSourcePath().empty();
+	if (!bHasSourcePath) ImGui::BeginDisabled();
+	const FString SaveLabel = IsDirty() ? "Save *" : "Save";
+	if (ImGui::Button(SaveLabel.c_str(), ImVec2(-1.0f, 0.0f)))
+	{
+		if (FPhysicsAssetManager::Get().Save(CurrentPhysicsAsset))
+		{
+			ClearDirty();
+		}
+	}
+	if (!bHasSourcePath)
+	{
+		ImGui::EndDisabled();
+		ImGui::TextDisabled("(unsaved asset — no source path)");
 	}
 
 	// 시뮬레이션 토글(런타임 연결은 §2 TODO — USkeletalMeshComponent 랙돌 통합).
