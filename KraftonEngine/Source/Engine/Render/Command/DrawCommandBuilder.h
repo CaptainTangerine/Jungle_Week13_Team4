@@ -53,6 +53,7 @@ private:
 
 	// BuildDynamicDrawCommands 서브 메서드
 	void BuildEditorLineCommands(EViewMode ViewMode);
+	void BuildFogCommands(const FFrameContext& Frame, const FScene* Scene);
 	void BuildPostProcessCommands(const FFrameContext& Frame, const FScene* Scene);
 	void BuildFontCommands(EViewMode ViewMode);
 

@@ -1,4 +1,4 @@
-#include "Render/Proxy/BillboardSceneProxy.h"
+﻿#include "Render/Proxy/BillboardSceneProxy.h"
 #include "Component/Primitive/BillboardComponent.h"
 #include "Render/Resource/MeshBufferManager.h"
 #include "Render/Types/FrameContext.h"
@@ -52,6 +52,7 @@ void FBillboardSceneProxy::UpdateMesh()
 		const uint32 IndexCount = MeshBuffer->GetIndexBuffer().GetIndexCount();
 		SectionDraws.clear();
 		SectionDraws.push_back({ Mat, 0, IndexCount });
+		FMeshSectionDraw& SectionDraw = SectionDraws.back();
 	}
 	else
 	{

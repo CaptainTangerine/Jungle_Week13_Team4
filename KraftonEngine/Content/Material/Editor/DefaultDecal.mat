@@ -34,5 +34,6 @@
   "Textures": {
     "DiffuseTexture": "Content/Editor/Icons/Pawn_64x.png"
   },
+  "TranslucencyPass": "AfterDOF",
   "Origin": "Editor"
 }
