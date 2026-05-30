@@ -6,6 +6,7 @@
 
 #include "Mesh/Skeletal/SkeletalMesh.h"
 #include "Mesh/Skeletal/SkeletalMeshAsset.h"
+#include "Mesh/MeshManager.h"
 #include "Runtime/Engine.h"
 #include "Component/Primitive/SkeletalMeshComponent.h"
 #include "Component/Light/DirectionalLightComponent.h"
@@ -23,6 +24,10 @@
 #include "Animation/AnimationManager.h"
 #include "Animation/Sequence/AnimDataModel.h"
 #include "Asset/AssetRegistry.h"
+#include "Physics/Asset/PhysicsAsset.h"
+#include "Physics/Asset/BodySetup.h"
+#include "Physics/Asset/ConstraintSetup.h"
+#include "Math/MathUtils.h"
 #include "UI/Asset/Animation/AnimationTransportBar.h"
 #include "UI/Asset/Animation/AnimationTimelinePanel.h"
 #include "UI/Asset/Animation/AnimSequencePropertyPanel.h"
@@ -136,6 +141,25 @@ namespace
 		);
 	}
 
+	// PhysicsAsset 은 스켈레톤 바인딩만 들고 있으므로, 그 스켈레톤에 호환되는
+	// 첫 스켈레탈 메시를 프리뷰로 해석한다(언리얼 PhAT 의 Preview Mesh 대응).
+	USkeletalMesh* ResolveSkeletalMeshForPhysicsAsset(const UPhysicsAsset* PhysAsset, ID3D11Device* Device)
+	{
+		if (!PhysAsset)
+		{
+			return nullptr;
+		}
+		const TArray<FAssetListItem> Meshes = FAssetRegistry::ListMeshesForSkeleton(PhysAsset->SkeletonBinding, /*bAllowSameStructure=*/true);
+		for (const FAssetListItem& Item : Meshes)
+		{
+			if (USkeletalMesh* Mesh = FMeshManager::LoadSkeletalMesh(Item.FullPath, Device))
+			{
+				return Mesh;
+			}
+		}
+		return nullptr;
+	}
+
 	EUberLitDefines::ELightingModel GetLightingModelForViewMode(EViewMode ViewMode)
 	{
 		switch (ViewMode)
@@ -182,12 +206,19 @@ FMeshEditorWidget::FMeshEditorWidget()
 
 bool FMeshEditorWidget::CanEdit(UObject* Object) const
 {
-	return Object && Object->IsA<USkeletalMesh>();
+	// 스켈레탈 메시(기본) + PhysicsAsset(Physics 탭으로 바로 진입) 둘 다 이 에디터가 연다.
+	return Object && (Object->IsA<USkeletalMesh>() || Object->IsA<UPhysicsAsset>());
 }
 
 bool FMeshEditorWidget::IsEditingObject(UObject* Object) const
 {
 	if (FAssetEditorWidget::IsEditingObject(Object))
+	{
+		return true;
+	}
+
+	// PhysicsAsset 로 연 경우 EditedObject 는 메시이므로 별도로 매칭.
+	if (IsOpen() && CurrentPhysicsAsset && Object == CurrentPhysicsAsset)
 	{
 		return true;
 	}
@@ -207,7 +238,22 @@ bool FMeshEditorWidget::IsEditingObject(UObject* Object) const
 
 void FMeshEditorWidget::Open(UObject* Object)
 {
-	FAssetEditorWidget::Open(Object);
+	// PhysicsAsset 을 열면 그 스켈레톤에 호환되는 메시를 프리뷰로 해석하고
+	// EditedObject 는 메시로 유지한다(기존 Skeleton/Mesh/Animation 탭 로직 그대로 재사용).
+	// 메시를 못 찾으면 EditedObject 를 PhysicsAsset 그대로 두어 창은 열리되 Physics 탭만 동작.
+	UPhysicsAsset* PhysAsset  = Cast<UPhysicsAsset>(Object);
+	UObject*       MeshObject = Object;
+	if (PhysAsset)
+	{
+		ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
+		if (USkeletalMesh* ResolvedMesh = ResolveSkeletalMeshForPhysicsAsset(PhysAsset, Device))
+		{
+			MeshObject = ResolvedMesh;
+		}
+	}
+
+	FAssetEditorWidget::Open(MeshObject);
+	CurrentPhysicsAsset = PhysAsset;
 
 	FWorldContext& WorldContext = GEngine->CreateWorldContext(EWorldType::EditorPreview, PreviewWorldHandle);
 	WorldContext.World->SetWorldType(EWorldType::EditorPreview);
@@ -254,9 +300,12 @@ void FMeshEditorWidget::Open(UObject* Object)
 	// 디스크의 기존 AnimSequence .uasset 들을 목록에 채워 둔다(런타임 Load/Save 만으론 안 잡힘).
 	FAnimationManager::Get().RefreshAvailableAnimations();
 
-	ActiveTab         = EMeshEditorTab::Skeleton;
-	AnimTabState      = FAnimationTabState {};
-	SelectedBoneIndex = -1;
+	// PhysicsAsset 로 열렸으면 Physics 탭부터(= "열면서 ActiveTab만 바꾸고").
+	ActiveTab               = CurrentPhysicsAsset ? EMeshEditorTab::Physics : EMeshEditorTab::Skeleton;
+	AnimTabState            = FAnimationTabState {};
+	SelectedBoneIndex       = -1;
+	SelectedConstraintIndex = -1;
+	bSimulating             = false;
 }
 
 void FMeshEditorWidget::Close()
@@ -397,6 +446,9 @@ void FMeshEditorWidget::Render(float DeltaTime)
 	case EMeshEditorTab::Animation:
 		RenderAnimationLayout(AvailableHeight);
 		break;
+	case EMeshEditorTab::Physics:
+		RenderPhysicsLayout();
+		break;
 	}
 
 	ImGui::End();
@@ -477,6 +529,7 @@ void FMeshEditorWidget::RenderTabBar()
 	TabButton("Skeleton", L"Skeleton.png", EMeshEditorTab::Skeleton);
 	TabButton("Mesh", L"SkeletalMesh.png", EMeshEditorTab::Mesh);
 	TabButton("Animation", L"Animation.png", EMeshEditorTab::Animation);
+	TabButton("Physics", L"Skeleton.png", EMeshEditorTab::Physics);
 
 	ImGui::NewLine();
 }
@@ -1386,6 +1439,378 @@ void FMeshEditorWidget::RenderBoneTree(const FSkeletalMesh* Asset, int32 Index)
 			if (Asset->Bones[i].ParentIndex == Index)
 			{
 				RenderBoneTree(Asset, i);
+			}
+		}
+		ImGui::TreePop();
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Physics tab (PhysicsAsset 저작 — 발제 2-2 / PhAT)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void FMeshEditorWidget::RenderPhysicsLayout()
+{
+	USkeletalMesh*       SkeletalMesh = Cast<USkeletalMesh>(EditedObject);
+	const FSkeletalMesh* Asset        = SkeletalMesh ? SkeletalMesh->GetSkeletalMeshAsset() : nullptr;
+
+	// Left: 본 계층 (바디 보유 본 강조)
+	ImGui::BeginChild("PhysBoneHierarchy", ImVec2(HierarchyWidth, 0), true);
+	ImGui::Text("Skeleton / Bodies");
+	ImGui::Separator();
+	if (Asset)
+	{
+		for (int32 i = 0; i < static_cast<int32>(Asset->Bones.size()); ++i)
+		{
+			if (Asset->Bones[i].ParentIndex == -1)
+			{
+				RenderPhysicsBoneTree(Asset, i);
+			}
+		}
+	}
+	else
+	{
+		ImGui::TextDisabled("No preview mesh.");
+	}
+	ImGui::EndChild();
+
+	ImGui::SameLine();
+
+	// Splitter
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+	ImGui::Button("##physSplitter", ImVec2(4.0f, -1.0f));
+	if (ImGui::IsItemActive())
+	{
+		HierarchyWidth += ImGui::GetIO().MouseDelta.x;
+		HierarchyWidth = std::max(100.0f, std::min(HierarchyWidth, ImGui::GetWindowWidth() - DetailsWidth - 100.0f));
+	}
+	if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+	{
+		ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+	}
+	ImGui::PopStyleColor(3);
+
+	ImGui::SameLine();
+
+	// Center: viewport
+	ImGui::BeginGroup();
+	{
+		float  ViewportWidth = ImGui::GetContentRegionAvail().x - DetailsWidth - ImGui::GetStyle().ItemSpacing.x;
+		ImVec2 Size          = ImVec2(ViewportWidth, ImGui::GetContentRegionAvail().y);
+		RenderViewportPanel(Size);
+	}
+	ImGui::EndGroup();
+
+	ImGui::SameLine();
+
+	// Right: physics details
+	ImGui::BeginChild("PhysDetails", ImVec2(DetailsWidth, 0), true);
+	RenderPhysicsDetails();
+	ImGui::EndChild();
+}
+
+void FMeshEditorWidget::RenderPhysicsDetails()
+{
+	ImGui::Text("Physics");
+	ImGui::Separator();
+
+	USkeletalMesh* SkeletalMesh = Cast<USkeletalMesh>(EditedObject);
+	if (!SkeletalMesh)
+	{
+		ImGui::TextDisabled("No preview mesh resolved.");
+		return;
+	}
+
+	if (!CurrentPhysicsAsset)
+	{
+		ImGui::TextDisabled("No physics asset for this skeleton.");
+		if (ImGui::Button("Create Physics Asset", ImVec2(-1.0f, 0.0f)))
+		{
+			EnsurePhysicsAssetForCurrentSkeleton();
+		}
+		return;
+	}
+
+	// 시뮬레이션 토글(런타임 연결은 §2 TODO — USkeletalMeshComponent 랙돌 통합).
+	const char* SimLabel = bSimulating ? "Stop Simulation" : "Start Simulation";
+	if (ImGui::Button(SimLabel, ImVec2(-1.0f, 0.0f)))
+	{
+		bSimulating = !bSimulating;
+		// TODO(§2): Kinematic <-> Dynamic 전환 + 본 포즈 <-> 시뮬 포즈 블렌딩.
+	}
+	ImGui::Text("Bodies: %d   Constraints: %d",
+		static_cast<int32>(CurrentPhysicsAsset->BodySetups.size()),
+		static_cast<int32>(CurrentPhysicsAsset->ConstraintSetups.size()));
+	ImGui::Separator();
+
+	if (SelectedBoneIndex == -1)
+	{
+		ImGui::TextDisabled("Select a bone to add / edit a body.");
+		return;
+	}
+
+	const FName BoneName = GetPhysicsBoneName(SelectedBoneIndex);
+	ImGui::Text("Bone: %s", BoneName.ToString().c_str());
+	ImGui::Dummy(ImVec2(0, 6));
+
+	// ── Body ──
+	const int32 BodyIdx = FindPhysicsBodyIndexForBone(SelectedBoneIndex);
+	if (BodyIdx == -1)
+	{
+		ImGui::TextDisabled("No body on this bone.");
+		if (ImGui::Button("Add Body", ImVec2(-1.0f, 0.0f)))
+		{
+			AddBodyToSelectedBone();
+		}
+	}
+	else if (UBodySetup* Body = CurrentPhysicsAsset->BodySetups[BodyIdx])
+	{
+		if (ImGui::DragFloat("Mass", &Body->Mass, 0.1f, 0.0f, 0.0f, "%.2f"))      { MarkDirty(); }
+		if (ImGui::Checkbox("Simulate Physics", &Body->bSimulatePhysics))         { MarkDirty(); }
+
+		ImGui::Text("Primitives  S:%d  B:%d  C:%d",
+			static_cast<int32>(Body->AggGeom.SphereElems.size()),
+			static_cast<int32>(Body->AggGeom.BoxElems.size()),
+			static_cast<int32>(Body->AggGeom.SphylElems.size()));
+		if (ImGui::SmallButton("+ Capsule")) { Body->AggGeom.SphylElems.push_back(FKSphylElem{}); MarkDirty(); }
+		ImGui::SameLine();
+		if (ImGui::SmallButton("+ Sphere"))  { Body->AggGeom.SphereElems.push_back(FKSphereElem{}); MarkDirty(); }
+		ImGui::SameLine();
+		if (ImGui::SmallButton("+ Box"))     { Body->AggGeom.BoxElems.push_back(FKBoxElem{}); MarkDirty(); }
+
+		if (ImGui::Button("Remove Body", ImVec2(-1.0f, 0.0f)))
+		{
+			RemoveBodyAtSelectedBone();
+		}
+	}
+
+	ImGui::Dummy(ImVec2(0, 8));
+	ImGui::Separator();
+
+	// ── Constraint (선택 본 -> 부모) ──
+	ImGui::Text("Constraint (to parent)");
+	const int32 ConIdx = FindPhysicsConstraintIndexForChild(BoneName);
+	if (ConIdx == -1)
+	{
+		if (ImGui::Button("Generate Constraint to Parent", ImVec2(-1.0f, 0.0f)))
+		{
+			GenerateConstraintForSelectedBone();
+		}
+	}
+	else
+	{
+		FConstraintSetup& C = CurrentPhysicsAsset->ConstraintSetups[ConIdx];
+		ImGui::Text("Parent: %s", C.ParentBone.ToString().c_str());
+
+		// 각도 제한(라디안). PxD6Joint 의 eTWIST / eSWING1 / eSWING2 매핑.
+		if (ImGui::SliderFloat("Twist",  &C.TwistLimit,  0.0f, FMath::Pi, "%.3f rad")) { MarkDirty(); }
+		if (ImGui::SliderFloat("Swing1", &C.Swing1Limit, 0.0f, FMath::Pi, "%.3f rad")) { MarkDirty(); }
+		if (ImGui::SliderFloat("Swing2", &C.Swing2Limit, 0.0f, FMath::Pi, "%.3f rad")) { MarkDirty(); }
+		if (ImGui::DragFloat("Drive Stiffness", &C.DriveStiffness, 1.0f, 0.0f, 0.0f, "%.1f")) { MarkDirty(); }
+		if (ImGui::DragFloat("Drive Damping",   &C.DriveDamping,   1.0f, 0.0f, 0.0f, "%.1f")) { MarkDirty(); }
+
+		if (ImGui::Button("Remove Constraint", ImVec2(-1.0f, 0.0f)))
+		{
+			CurrentPhysicsAsset->ConstraintSetups.erase(CurrentPhysicsAsset->ConstraintSetups.begin() + ConIdx);
+			SelectedConstraintIndex = -1;
+			MarkDirty();
+		}
+	}
+}
+
+UPhysicsAsset* FMeshEditorWidget::EnsurePhysicsAssetForCurrentSkeleton()
+{
+	if (CurrentPhysicsAsset)
+	{
+		return CurrentPhysicsAsset;
+	}
+	USkeletalMesh* Mesh = Cast<USkeletalMesh>(EditedObject);
+	if (!Mesh)
+	{
+		return nullptr;
+	}
+	UPhysicsAsset* Asset = UObjectManager::Get().CreateObject<UPhysicsAsset>();
+	if (!Asset)
+	{
+		return nullptr;
+	}
+	Asset->SkeletonBinding = Mesh->GetSkeletonBinding();
+	CurrentPhysicsAsset = Asset;
+	MarkDirty();
+	return CurrentPhysicsAsset;
+}
+
+void FMeshEditorWidget::AddBodyToSelectedBone()
+{
+	UPhysicsAsset* Asset = EnsurePhysicsAssetForCurrentSkeleton();
+	if (!Asset || SelectedBoneIndex == -1)
+	{
+		return;
+	}
+	if (FindPhysicsBodyIndexForBone(SelectedBoneIndex) != -1)
+	{
+		return;   // 이미 존재
+	}
+
+	UBodySetup* Body = UObjectManager::Get().CreateObject<UBodySetup>(Asset);
+	if (!Body)
+	{
+		return;
+	}
+	Body->BoneName = GetPhysicsBoneName(SelectedBoneIndex);
+	// 랙돌 기본 프리미티브로 캡슐 1개(본 로컬). 실제 크기 피팅은 추후.
+	Body->AggGeom.SphylElems.push_back(FKSphylElem{});
+	Asset->BodySetups.push_back(Body);
+	MarkDirty();
+}
+
+void FMeshEditorWidget::RemoveBodyAtSelectedBone()
+{
+	if (!CurrentPhysicsAsset)
+	{
+		return;
+	}
+	const int32 BodyIdx = FindPhysicsBodyIndexForBone(SelectedBoneIndex);
+	if (BodyIdx == -1)
+	{
+		return;
+	}
+	if (UBodySetup* Body = CurrentPhysicsAsset->BodySetups[BodyIdx])
+	{
+		UObjectManager::Get().DestroyObject(Body);
+	}
+	CurrentPhysicsAsset->BodySetups.erase(CurrentPhysicsAsset->BodySetups.begin() + BodyIdx);
+	MarkDirty();
+}
+
+void FMeshEditorWidget::GenerateConstraintForSelectedBone()
+{
+	UPhysicsAsset*       Asset     = EnsurePhysicsAssetForCurrentSkeleton();
+	USkeletalMesh*       Mesh      = Cast<USkeletalMesh>(EditedObject);
+	const FSkeletalMesh* MeshAsset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+	if (!Asset || !MeshAsset || SelectedBoneIndex == -1)
+	{
+		return;
+	}
+
+	const int32 ParentBoneIndex = MeshAsset->Bones[SelectedBoneIndex].ParentIndex;
+	if (ParentBoneIndex == -1)
+	{
+		return;   // 루트 본은 부모 조인트 없음
+	}
+
+	const FName ChildName  = GetPhysicsBoneName(SelectedBoneIndex);
+	const FName ParentName = GetPhysicsBoneName(ParentBoneIndex);
+	if (FindPhysicsConstraintIndexForChild(ChildName) != -1)
+	{
+		return;   // 중복 방지
+	}
+
+	FConstraintSetup NewConstraint;
+	NewConstraint.ParentBone = ParentName;
+	NewConstraint.ChildBone  = ChildName;
+	Asset->ConstraintSetups.push_back(NewConstraint);
+	SelectedConstraintIndex = static_cast<int32>(Asset->ConstraintSetups.size()) - 1;
+	MarkDirty();
+}
+
+int32 FMeshEditorWidget::FindPhysicsBodyIndexForBone(int32 BoneIndex) const
+{
+	if (!CurrentPhysicsAsset || BoneIndex == -1)
+	{
+		return -1;
+	}
+	const FName BoneName = GetPhysicsBoneName(BoneIndex);
+	for (int32 i = 0; i < static_cast<int32>(CurrentPhysicsAsset->BodySetups.size()); ++i)
+	{
+		const UBodySetup* Body = CurrentPhysicsAsset->BodySetups[i];
+		if (Body && Body->BoneName == BoneName)
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+int32 FMeshEditorWidget::FindPhysicsConstraintIndexForChild(const FName& ChildBone) const
+{
+	if (!CurrentPhysicsAsset)
+	{
+		return -1;
+	}
+	for (int32 i = 0; i < static_cast<int32>(CurrentPhysicsAsset->ConstraintSetups.size()); ++i)
+	{
+		if (CurrentPhysicsAsset->ConstraintSetups[i].ChildBone == ChildBone)
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+FName FMeshEditorWidget::GetPhysicsBoneName(int32 BoneIndex) const
+{
+	const USkeletalMesh* Mesh  = Cast<USkeletalMesh>(EditedObject);
+	const FSkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+	if (!Asset || BoneIndex < 0 || BoneIndex >= static_cast<int32>(Asset->Bones.size()))
+	{
+		return FName::None;
+	}
+	return FName(Asset->Bones[BoneIndex].Name);
+}
+
+void FMeshEditorWidget::RenderPhysicsBoneTree(const FSkeletalMesh* Asset, int32 Index)
+{
+	const FBone& Bone = Asset->Bones[Index];
+
+	ImGuiTreeNodeFlags Flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
+	if (Index == SelectedBoneIndex)
+	{
+		Flags |= ImGuiTreeNodeFlags_Selected;
+	}
+
+	bool bHasChildren = false;
+	for (int32 i = Index + 1; i < static_cast<int32>(Asset->Bones.size()); ++i)
+	{
+		if (Asset->Bones[i].ParentIndex == Index)
+		{
+			bHasChildren = true;
+			break;
+		}
+	}
+	if (!bHasChildren)
+	{
+		Flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+	}
+
+	const bool bHasBody = (FindPhysicsBodyIndexForBone(Index) != -1);
+	if (bHasBody)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(120, 200, 255, 255));   // 바디 보유 = 파랑
+	}
+
+	bool bOpen = ImGui::TreeNodeEx(Bone.Name.c_str(), Flags);
+
+	if (bHasBody)
+	{
+		ImGui::PopStyleColor();
+	}
+
+	if (ImGui::IsItemClicked())
+	{
+		SelectedBoneIndex = Index;
+		ViewportClient.SetSelectedBone(Cast<USkeletalMesh>(EditedObject), Index);
+	}
+
+	if (bOpen && bHasChildren)
+	{
+		for (int32 i = Index + 1; i < static_cast<int32>(Asset->Bones.size()); ++i)
+		{
+			if (Asset->Bones[i].ParentIndex == Index)
+			{
+				RenderPhysicsBoneTree(Asset, i);
 			}
 		}
 		ImGui::TreePop();
