@@ -27,6 +27,7 @@
 #include "Physics/Asset/PhysicsAsset.h"
 #include "Physics/Asset/PhysicsAssetManager.h"
 #include "Physics/Asset/BodySetup.h"
+#include "Physics/Asset/BodyConstraintGenerator.h"
 #include "Editor/UI/Panel/FPropertyTable.h"
 #include "Physics/Asset/ConstraintSetup.h"
 #include "Math/MathUtils.h"
@@ -202,77 +203,6 @@ namespace
 		case EViewMode::LightCulling:
 		default:                     return EUberLitDefines::ELightingModel::Phong;
 		}
-	}
-}
-
-// =====================================================================================
-// PhysicsAsset 초기값 계산 — 본 형상(스켈레톤 ref pose)에서 바디 캡슐과 조인트 프레임을 피팅.
-// =====================================================================================
-namespace
-{
-	int32 FindFirstChildBone(const FSkeletalMesh* Mesh, int32 BoneIndex)
-	{
-		for (int32 i = 0; i < static_cast<int32>(Mesh->Bones.size()); ++i)
-		{
-			if (Mesh->Bones[i].ParentIndex == BoneIndex)
-			{
-				return i;
-			}
-		}
-		return -1;
-	}
-
-	FVector MatrixTranslation(const FMatrix& M)
-	{
-		return FVector(M.M[3][0], M.M[3][1], M.M[3][2]);
-	}
-
-	// 본-로컬 Y축을 Dir(정규화) 로 회전시키는 쿼터니언.
-	// 엔진 캡슐 규약: Sphyl.Rotation=identity → 길이축이 본-로컬 Y (AddGeometry 가 PxQuat(90°,Z)
-	// 보정으로 PhysX X축을 Y축에 맞춤). 그래서 "Y→본방향" 회전을 Sphyl.Rotation 으로 준다.
-	FQuat RotationYToDir(const FVector& Dir)
-	{
-		const float Dot = Dir.Y;   // (0,1,0)·Dir
-		if (Dot >  0.99999f) { return FQuat(); }
-		if (Dot < -0.99999f) { return FQuat::FromAxisAngle(FVector(1.0f, 0.0f, 0.0f), 3.14159265f); }
-		FVector Axis(Dir.Z, 0.0f, -Dir.X);   // (0,1,0) × Dir
-		const float AxisLen = std::sqrt(Axis.X * Axis.X + Axis.Y * Axis.Y + Axis.Z * Axis.Z);
-		Axis = FVector(Axis.X / AxisLen, Axis.Y / AxisLen, Axis.Z / AxisLen);
-		return FQuat::FromAxisAngle(Axis, std::acos(Dot));
-	}
-
-	// 본의 첫 자식 방향/거리로 캡슐(본-로컬)을 피팅. 자식 없으면(=leaf) 작은 기본값.
-	void FitCapsuleToBone(const FSkeletalMesh* Mesh, int32 BoneIndex, FKSphylElem& Out)
-	{
-		const int32 Child = FindFirstChildBone(Mesh, BoneIndex);
-		if (Child != -1)
-		{
-			// 자식은 이 본의 자식이므로 자식 ReferenceLocalPose 의 translation = 본-로컬에서의 자식 원점.
-			const FVector ChildLocal = MatrixTranslation(Mesh->Bones[Child].ReferenceLocalPose);
-			const float Len = std::sqrt(ChildLocal.X * ChildLocal.X + ChildLocal.Y * ChildLocal.Y + ChildLocal.Z * ChildLocal.Z);
-			if (Len >= 1e-3f)
-			{
-				const FVector Dir(ChildLocal.X / Len, ChildLocal.Y / Len, ChildLocal.Z / Len);
-				Out.Center   = FVector(ChildLocal.X * 0.5f, ChildLocal.Y * 0.5f, ChildLocal.Z * 0.5f);
-				Out.Radius   = std::max(Len * 0.12f, 0.05f);
-				Out.Length   = std::max(Len - 2.0f * Out.Radius, Len * 0.1f);
-				Out.Rotation = RotationYToDir(Dir).ToRotator();
-				return;
-			}
-		}
-		// leaf 또는 길이 0 — 작은 기본 캡슐.
-		Out.Center   = FVector(0.0f, 0.0f, 0.0f);
-		Out.Rotation = FRotator(0.0f, 0.0f, 0.0f);
-		Out.Radius   = 0.5f;
-		Out.Length   = 1.0f;
-	}
-
-	// 본의 부모-상대 로컬 포즈(ReferenceLocalPose) → FTransform. 조인트 ParentFrame 용
-	// (조인트 앵커를 자식 본 원점에 둔다: ParentFrame=자식의 부모-로컬 포즈, ChildFrame=identity).
-	FTransform BoneLocalPoseTransform(const FBone& Bone)
-	{
-		return FTransform(MatrixTranslation(Bone.ReferenceLocalPose),
-			FQuat::FromMatrix(Bone.ReferenceLocalPose), FVector(1.0f, 1.0f, 1.0f));
 	}
 }
 
@@ -1694,40 +1624,12 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 		static_cast<int32>(CurrentPhysicsAsset->BodySetups.size()),
 		static_cast<int32>(CurrentPhysicsAsset->ConstraintSetups.size()));
 
-	// 전체 스켈레톤에 대해 바디/조인트 초기값을 일괄 생성(이미 있는 본은 건너뜀).
+	// 전체 스켈레톤에 대해 바디/조인트 초기값을 일괄 생성(이미 있는 본은 건너뜀) — 생성기에 위임.
 	if (ImGui::Button("Generate All (Bodies + Constraints)", ImVec2(-1.0f, 0.0f)))
 	{
 		if (const FSkeletalMesh* MeshAsset = SkeletalMesh->GetSkeletalMeshAsset())
 		{
-			const int32 BoneCount = static_cast<int32>(MeshAsset->Bones.size());
-			// 바디 — 자식 있는 본(캡슐 방향 산출 가능)에 한해, 없는 것만 생성.
-			for (int32 i = 0; i < BoneCount; ++i)
-			{
-				if (FindFirstChildBone(MeshAsset, i) == -1)   continue;   // leaf 스킵
-				if (FindPhysicsBodyIndexForBone(i) != -1)     continue;   // 이미 존재
-				UBodySetup* Body = UObjectManager::Get().CreateObject<UBodySetup>(CurrentPhysicsAsset);
-				if (!Body) continue;
-				Body->BoneName = GetPhysicsBoneName(i);
-				FKSphylElem Capsule;
-				FitCapsuleToBone(MeshAsset, i, Capsule);
-				Body->AggGeom.SphylElems.push_back(Capsule);
-				CurrentPhysicsAsset->BodySetups.push_back(Body);
-			}
-			// 조인트 — 본/부모 모두 바디가 있고 아직 없는 것만 생성.
-			for (int32 i = 0; i < BoneCount; ++i)
-			{
-				const int32 P = MeshAsset->Bones[i].ParentIndex;
-				if (P == -1)                                  continue;   // 루트
-				if (FindPhysicsBodyIndexForBone(i) == -1)     continue;
-				if (FindPhysicsBodyIndexForBone(P) == -1)     continue;
-				const FName ChildName = GetPhysicsBoneName(i);
-				if (FindPhysicsConstraintIndexForChild(ChildName) != -1) continue;
-				FConstraintSetup C;
-				C.ParentBone  = GetPhysicsBoneName(P);
-				C.ChildBone   = ChildName;
-				C.ParentFrame = BoneLocalPoseTransform(MeshAsset->Bones[i]);
-				CurrentPhysicsAsset->ConstraintSetups.push_back(C);
-			}
+			FBodyConstraintGenerator::GenerateAll(CurrentPhysicsAsset, MeshAsset);
 			MarkDirty();
 		}
 	}
@@ -1890,33 +1792,18 @@ UPhysicsAsset* FMeshEditorWidget::EnsurePhysicsAssetForCurrentSkeleton()
 
 void FMeshEditorWidget::AddBodyToSelectedBone()
 {
-	UPhysicsAsset* Asset = EnsurePhysicsAssetForCurrentSkeleton();
-	if (!Asset || SelectedBoneIndex == -1)
-	{
-		return;
-	}
-	if (FindPhysicsBodyIndexForBone(SelectedBoneIndex) != -1)
-	{
-		return;   // 이미 존재
-	}
-
-	UBodySetup* Body = UObjectManager::Get().CreateObject<UBodySetup>(Asset);
-	if (!Body)
-	{
-		return;
-	}
-	Body->BoneName = GetPhysicsBoneName(SelectedBoneIndex);
-	// 본 형상(첫 자식까지의 길이/방향)으로 캡슐 초기값 피팅. 자식 없으면 작은 기본.
-	FKSphylElem Capsule;
+	UPhysicsAsset*       Asset     = EnsurePhysicsAssetForCurrentSkeleton();
 	USkeletalMesh*       Mesh      = Cast<USkeletalMesh>(EditedObject);
 	const FSkeletalMesh* MeshAsset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
-	if (MeshAsset)
+	if (!Asset || !MeshAsset || SelectedBoneIndex == -1)
 	{
-		FitCapsuleToBone(MeshAsset, SelectedBoneIndex, Capsule);
+		return;
 	}
-	Body->AggGeom.SphylElems.push_back(Capsule);
-	Asset->BodySetups.push_back(Body);
-	MarkDirty();
+	// 바디 생성 + 본 형상 캡슐 피팅은 FBodyConstraintGenerator 가 전담(이미 있으면 nullptr).
+	if (FBodyConstraintGenerator::GenerateBody(Asset, MeshAsset, SelectedBoneIndex))
+	{
+		MarkDirty();
+	}
 }
 
 void FMeshEditorWidget::RemoveBodyAtSelectedBone()
@@ -1947,28 +1834,13 @@ void FMeshEditorWidget::GenerateConstraintForSelectedBone()
 	{
 		return;
 	}
-
-	const int32 ParentBoneIndex = MeshAsset->Bones[SelectedBoneIndex].ParentIndex;
-	if (ParentBoneIndex == -1)
+	// 조인트 생성 + 프레임 피팅은 FBodyConstraintGenerator 가 전담(루트/중복이면 -1).
+	const int32 NewIndex = FBodyConstraintGenerator::GenerateConstraint(Asset, MeshAsset, SelectedBoneIndex);
+	if (NewIndex != -1)
 	{
-		return;   // 루트 본은 부모 조인트 없음
+		SelectedConstraintIndex = NewIndex;
+		MarkDirty();
 	}
-
-	const FName ChildName  = GetPhysicsBoneName(SelectedBoneIndex);
-	const FName ParentName = GetPhysicsBoneName(ParentBoneIndex);
-	if (FindPhysicsConstraintIndexForChild(ChildName) != -1)
-	{
-		return;   // 중복 방지
-	}
-
-	FConstraintSetup NewConstraint;
-	NewConstraint.ParentBone = ParentName;
-	NewConstraint.ChildBone  = ChildName;
-	// 조인트 앵커를 자식 본 원점에 둔다: ParentFrame=자식의 부모-로컬 포즈, ChildFrame=identity(기본).
-	NewConstraint.ParentFrame = BoneLocalPoseTransform(MeshAsset->Bones[SelectedBoneIndex]);
-	Asset->ConstraintSetups.push_back(NewConstraint);
-	SelectedConstraintIndex = static_cast<int32>(Asset->ConstraintSetups.size()) - 1;
-	MarkDirty();
 }
 
 int32 FMeshEditorWidget::FindPhysicsBodyIndexForBone(int32 BoneIndex) const
