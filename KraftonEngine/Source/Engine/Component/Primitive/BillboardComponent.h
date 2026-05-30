@@ -9,13 +9,6 @@
 
 class FPrimitiveSceneProxy;
 
-// Not UPROPERTY, nor UENUM
-enum class EBillboardRenderMode
-{
-	BRM_AlphaBlend,
-	BRM_PostDOFAlpha,
-};
-
 UCLASS()
 class UBillboardComponent : public UPrimitiveComponent
 {
@@ -32,9 +25,6 @@ public:
 	bool LineTraceComponent(const FRay& Ray, FHitResult& OutHitResult) override;
 
 	void SetBillboardEnabled(bool bEnable) { bIsBillboard = bEnable; }
-
-	void SetBillboardRenderMode(EBillboardRenderMode InRenderMode) { RenderMode = InRenderMode; }
-	EBillboardRenderMode GetBillboardRenderMode() const { return RenderMode; }
 
 	// --- Material ---
 	void SetMaterial(class UMaterial* InMaterial);
@@ -53,7 +43,5 @@ protected:
 	UPROPERTY(Edit, Save, Category="Rendering", DisplayName="Material", AssetType="Material")
 	FSoftObjectPtr MaterialSlot = "None";
 	UMaterial* Material = nullptr;
-
-	EBillboardRenderMode RenderMode = EBillboardRenderMode::BRM_PostDOFAlpha;
 };
 
