@@ -1,4 +1,4 @@
-#include "SkeletalMeshComponent.h"
+﻿#include "SkeletalMeshComponent.h"
 #include "Render/Proxy/SkeletalMeshSceneProxy.h"
 
 #include "Animation/AnimationManager.h"
@@ -26,6 +26,30 @@
 USkeletalMeshComponent::~USkeletalMeshComponent()
 {
     ClearAnimInstance();
+}
+
+void USkeletalMeshComponent::OnCreatePhysicsState()
+{
+	// 의도적으로 UPrimitive가 아니라 UActor를 둬 Component 기준이 아니라 BodySetup기준으로 pxActor를 만든다.
+    UActorComponent::OnCreatePhysicsState();
+
+	// TODO : InitArticulated()
+	// 
+}
+
+void USkeletalMeshComponent::OnDestroyPhysicsState()
+{
+    UActorComponent::OnDestroyPhysicsState();
+}
+
+bool USkeletalMeshComponent::ShouldCreatePhysicsState() const
+{
+    return GetSkeletalMesh() != nullptr && IsQueryCollisionEnabled();
+}
+
+bool USkeletalMeshComponent::HasValidPhysicsState() const
+{
+    return IsPhysicsStateCreated();
 }
 
 FPrimitiveSceneProxy* USkeletalMeshComponent::CreateSceneProxy()

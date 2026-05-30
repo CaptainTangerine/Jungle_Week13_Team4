@@ -38,33 +38,13 @@ HIDE_FROM_COMPONENT_LIST(UPrimitiveComponent)
 
 UPrimitiveComponent::~UPrimitiveComponent()
 {
-	if (Owner)
-	{
-		if (UWorld* World = Owner->GetWorld())
-		{
-			World->GetPhysicsScene()->UnregisterComponent(this);
-		}
-	}
+	DestroyPhysicsState();
 	DestroyRenderState();
 }
 
 void UPrimitiveComponent::BeginPlay()
 {
 	USceneComponent::BeginPlay();
-
-	// 직렬화나 InitDefaultComponents에서 CollisionEnabled가 이미 설정된 경우 등록.
-	// 이 시점에 SimulatePhysics/ObjectType/Response/Mass/COM 등 모든 셋업이 끝나있어
-	// PhysX/Native가 정확한 값으로 body를 생성한다.
-	if (IsQueryCollisionEnabled())
-	{
-		if (Owner)
-		{
-			if (UWorld* World = Owner->GetWorld())
-			{
-				World->GetPhysicsScene()->RegisterComponent(this);
-			}
-		}
-	}
 
 	// flag는 등록 흐름이 끝난 직후에만 true. 이후 setter들이 PhysicsScene::RebuildBody 호출.
 	bComponentHasBegunPlay = true;
@@ -77,15 +57,12 @@ void UPrimitiveComponent::EndPlay()
 	// 참조해 crash. dtor에도 같은 호출이 있지만 (raw 포인터라 OwnedComponents의 컴포넌트들이
 	// 자동 delete되지 않아) dtor가 안 불릴 수 있어 EndPlay에서 명시적으로 보장한다.
 	// 이중 호출은 mapping/proxy 부재로 noop.
+	DestroyPhysicsState();
+
 	if (Owner)
 	{
 		if (UWorld* World = Owner->GetWorld())
 		{
-			if (IPhysicsScene* PS = World->GetPhysicsScene())
-			{
-				PS->UnregisterComponent(this);
-			}
-
 			// SpatialPartition에서도 즉시 제거. World::DestroyActor가 Partition.RemoveActor를
 			// 호출하지만, 그 시점에 OctreeNode 캐시가 이미 stale일 수 있는 경로(스폰 폭주 시
 			// RebuildRootBounds 등)가 있어 EndPlay에서 한 번 더 보장한다. 중복 제거는 noop.
@@ -100,6 +77,45 @@ void UPrimitiveComponent::EndPlay()
 	bComponentHasBegunPlay = false;
 
 	USceneComponent::EndPlay();
+}
+
+void UPrimitiveComponent::OnCreatePhysicsState()
+{
+	Super::OnCreatePhysicsState();
+
+	if (Owner)
+	{
+		if (UWorld* World = Owner->GetWorld())
+		{
+			World->GetPhysicsScene()->RegisterComponent(this);
+		}
+	}
+}
+
+void UPrimitiveComponent::OnDestroyPhysicsState()
+{
+	if (Owner)
+	{
+		if (UWorld* World = Owner->GetWorld())
+		{
+			if (IPhysicsScene* PS = World->GetPhysicsScene())
+			{
+				PS->UnregisterComponent(this);
+			}
+		}
+	}
+
+	Super::OnDestroyPhysicsState();
+}
+
+bool UPrimitiveComponent::ShouldCreatePhysicsState() const
+{
+	return IsQueryCollisionEnabled();
+}
+
+bool UPrimitiveComponent::HasValidPhysicsState() const
+{
+	return IsPhysicsStateCreated();
 }
 
 void UPrimitiveComponent::NotifyPhysicsBodyDirty()

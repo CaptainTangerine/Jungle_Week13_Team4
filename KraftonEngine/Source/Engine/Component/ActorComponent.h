@@ -19,13 +19,21 @@ public:
 	GENERATED_BODY()
 
 	virtual void BeginPlay();
-	virtual void EndPlay() {};
+	virtual void EndPlay();
 
 	// --- 렌더 상태 관리 (UE RegisterComponent/UnregisterComponent 대응) ---
 	// 컴포넌트 등록 시 호출 — PrimitiveComponent에서 SceneProxy 생성
 	virtual void CreateRenderState() {}
 	// 컴포넌트 해제 시 호출 — PrimitiveComponent에서 SceneProxy 파괴
 	virtual void DestroyRenderState() {}
+
+	void CreatePhysicsState();
+	void DestroyPhysicsState();
+	bool IsPhysicsStateCreated() const { return bPhysicsStateCreated; }
+	virtual void OnCreatePhysicsState();
+	virtual void OnDestroyPhysicsState();
+	virtual bool ShouldCreatePhysicsState() const { return false; }
+	virtual bool HasValidPhysicsState() const { return bPhysicsStateCreated; }
 
 	virtual void Activate();
 	virtual void Deactivate();
@@ -67,6 +75,7 @@ protected:
 	AActor* Owner = nullptr;
 	UPROPERTY(Edit, Save, Category="Component", DisplayName="bTickEnable")
 	bool bTickEnable = true;
+	bool bPhysicsStateCreated = false;
 
 private:
 	UPROPERTY(Edit, Save, Category="Component", DisplayName="bEditorOnly")
