@@ -25,6 +25,9 @@
     <Filter Include="Shaders\PostProcess">
       <UniqueIdentifier>{99e90c3e-d2e3-6436-6596-dd1cf09f1909}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shaders\PostProcess\DOF">
+      <UniqueIdentifier>{3be61b4a-091c-5748-ad29-1ea28ef1ef53}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Shaders\UI">
       <UniqueIdentifier>{d5ecceb8-43e5-4a35-05e8-acc2ba7da782}</UniqueIdentifier>
     </Filter>
@@ -496,9 +499,6 @@
     <Filter Include="ThirdParty\sol2\include\sol\utility">
       <UniqueIdentifier>{9665cc4b-2b87-76ba-7eb3-a148e4c5a694}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Shaders\PostProcess\DOF">
-      <UniqueIdentifier>{2d3b6f28-9983-422d-9c72-0433faf313fe}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\Common\ConstantBuffers.hlsli">
@@ -618,6 +618,18 @@
     <FxCompile Include="Shaders\PostProcess\ShadowMapVis.hlsl">
       <Filter>Shaders\PostProcess</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\PostProcess\DOF\DOFBlur.hlsl">
+      <Filter>Shaders\PostProcess\DOF</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostProcess\DOF\DOFCoC.hlsl">
+      <Filter>Shaders\PostProcess\DOF</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostProcess\DOF\DOFCommon.hlsli">
+      <Filter>Shaders\PostProcess\DOF</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostProcess\DOF\DOFComposite.hlsl">
+      <Filter>Shaders\PostProcess\DOF</Filter>
+    </FxCompile>
     <FxCompile Include="Shaders\UI\Billboard.hlsl">
       <Filter>Shaders\UI</Filter>
     </FxCompile>
@@ -632,15 +644,6 @@
     </FxCompile>
     <FxCompile Include="Shaders\UI\SubUV.hlsl">
       <Filter>Shaders\UI</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostProcess\DOF\DOFCoC.hlsl">
-      <Filter>Shaders\PostProcess\DOF</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostProcess\DOF\DOFBlur.hlsl">
-      <Filter>Shaders\PostProcess\DOF</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostProcess\DOF\DOFComposite.hlsl">
-      <Filter>Shaders\PostProcess\DOF</Filter>
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1349,17 +1352,17 @@
     <ClCompile Include="Source\Engine\Particle\VectorField\VectorFieldManager.cpp">
       <Filter>Source\Engine\Particle\VectorField</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Physics\Asset\PhysicsAsset.cpp">
-      <Filter>Source\Engine\Physics\Asset</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Engine\Physics\Asset\PhysicsAssetManager.cpp">
-      <Filter>Source\Engine\Physics\Asset</Filter>
-    </ClCompile>
     <ClCompile Include="Source\Engine\Physics\NativePhysicsScene.cpp">
       <Filter>Source\Engine\Physics</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Physics\PhysXPhysicsScene.cpp">
       <Filter>Source\Engine\Physics</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Physics\Asset\PhysicsAsset.cpp">
+      <Filter>Source\Engine\Physics\Asset</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Physics\Asset\PhysicsAssetManager.cpp">
+      <Filter>Source\Engine\Physics\Asset</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Platform\CrashDump.cpp">
       <Filter>Source\Engine\Platform</Filter>
@@ -1490,6 +1493,9 @@
     <ClCompile Include="Source\Engine\Render\RenderPass\BloomPass.cpp">
       <Filter>Source\Engine\Render\RenderPass</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Render\RenderPass\DOFPass.cpp">
+      <Filter>Source\Engine\Render\RenderPass</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Render\RenderPass\DecalPass.cpp">
       <Filter>Source\Engine\Render\RenderPass</Filter>
     </ClCompile>
@@ -1518,6 +1524,9 @@
       <Filter>Source\Engine\Render\RenderPass</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\RenderPass\PassRenderStateTable.cpp">
+      <Filter>Source\Engine\Render\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\RenderPass\PostDOFAlphaPass.cpp">
       <Filter>Source\Engine\Render\RenderPass</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\RenderPass\PostProcessPass.cpp">
@@ -1697,9 +1706,6 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Intermediate\Generated\Reflection.generated.cpp">
       <Filter>Intermediate\Generated</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Engine\Render\RenderPass\DOFPass.cpp">
-      <Filter>Source\Engine\Render\RenderPass</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -2588,10 +2594,10 @@
     <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAsset.h">
       <Filter>Source\Engine\Physics\Asset</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAssetTypes.h">
+    <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAssetManager.h">
       <Filter>Source\Engine\Physics\Asset</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAssetManager.h">
+    <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAssetTypes.h">
       <Filter>Source\Engine\Physics\Asset</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Platform\ConsoleHelper.h">
@@ -2744,6 +2750,9 @@
     <ClInclude Include="Source\Engine\Render\RenderPass\BloomPass.h">
       <Filter>Source\Engine\Render\RenderPass</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Render\RenderPass\DOFPass.h">
+      <Filter>Source\Engine\Render\RenderPass</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Render\RenderPass\DecalPass.h">
       <Filter>Source\Engine\Render\RenderPass</Filter>
     </ClInclude>
@@ -2772,6 +2781,9 @@
       <Filter>Source\Engine\Render\RenderPass</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\RenderPass\PassRenderStateTable.h">
+      <Filter>Source\Engine\Render\RenderPass</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\RenderPass\PostDOFAlphaPass.h">
       <Filter>Source\Engine\Render\RenderPass</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\RenderPass\PostProcessPass.h">
@@ -2847,6 +2859,9 @@
       <Filter>Source\Engine\Render\Shadow</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Types\BloomTypes.h">
+      <Filter>Source\Engine\Render\Types</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Types\DOFTypes.h">
       <Filter>Source\Engine\Render\Types</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Types\FogParams.h">
@@ -4664,16 +4679,8 @@
     <ClInclude Include="ThirdParty\sol2\include\sol\utility\to_string.hpp">
       <Filter>ThirdParty\sol2\include\sol\utility</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Render\RenderPass\DOFPass.h">
-      <Filter>Source\Engine\Render\RenderPass</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="KraftonEngine.rc" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Shaders\PostProcess\DOF\DOFCommon.hlsli">
-      <Filter>Shaders\PostProcess\DOF</Filter>
-    </None>
   </ItemGroup>
 </Project>
