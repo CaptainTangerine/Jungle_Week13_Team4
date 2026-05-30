@@ -13,24 +13,25 @@
 // 임포트 다이얼로그, SceneComponent 회전 캐시 적용)은 FContext 로 외부 주입한다.
 // =====================================================================================
 
-struct FFbxSceneImportDialogState;
 class UObject;
 class UStruct;
+struct FProperty;
 
 namespace FPropertyTable
 {
 	struct FContext
 	{
-		// SkeletalMesh ObjectRef/SoftObjectRef 의 "Import FBX" UI 상태. nullptr 이면 임포트
-		// 버튼을 숨기고 콤보 선택만 노출(에셋 에디터 등 임포트가 불필요한 호출자).
-		FFbxSceneImportDialogState* FbxImportDialog = nullptr;
 		// Rotator 값을 in-place 편집한 직후 호출(선택). 액터 패널이 편집 중인 SceneComponent 의
 		// CachedEditRotator 즉시 적용에 사용. 비어 있으면 PostEditChange 디스패치만으로 처리된다.
 		std::function<void()> OnRotatorEdited;
-		// SoftObjectRef 커스텀 위젯(선택). 액터 패널의 에셋 피커(Material/Anim/ParticleSystem/Lua
-		// 콤보 + StaticMesh 임포트 모달 등 위젯-영속 상태에 의존)를 그대로 위임받는다. 반환=변경됨.
-		// 비어 있으면 경로 문자열 InputText 로 폴백한다(에셋 에디터 등 SoftObject 가 없는 호출자).
-		std::function<bool(FPropertyValue&)> RenderSoftObject;
+		// 렌더에서 제외할 프로퍼티 술어(선택). true 반환 시 해당 prop 을 건너뛴다.
+		// 예: 파티클 모듈/이미터의 bEnabled 는 별도 토글로 노출하므로 디테일 패널에서 숨김.
+		std::function<bool(const FProperty*)> ShouldSkipProperty;
+		// ObjectRef 커스텀 위젯(선택). 호출자가 처리했으면 bHandled=true 로 세팅(기본 콤보 스킵).
+		// 예: 파티클 Distribution(UDistributionFloat/Vector)의 동적 클래스 피커 + 재귀 렌더.
+		std::function<bool(FPropertyValue&, bool& /*bHandled*/)> RenderObjectRef;
+		// 배열 원소 레이블 커스터마이즈(선택). 비면 "Element N". 예: Events 배열의 이벤트 타입 표기.
+		std::function<FString(const FPropertyValue& /*ArrayProp*/, int32 /*Index*/, void* /*ElementPtr*/)> ArrayElementLabel;
 	};
 
 	// Props[Index] 한 셀을 타입에 맞는 위젯으로 렌더. 반환=이번 프레임 변경됨.

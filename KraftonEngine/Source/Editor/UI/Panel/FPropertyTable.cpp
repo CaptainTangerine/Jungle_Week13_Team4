@@ -13,13 +13,18 @@
 #include "Object/FName.h"
 #include "Object/Reflection/UClass.h"
 #include "Object/Reflection/UStruct.h"
+#include "Core/Logging/Log.h"
+#include "Asset/AssetRegistry.h"
+#include "Materials/MaterialManager.h"
 #include "Mesh/MeshManager.h"
 #include "Mesh/Static/StaticMesh.h"
 #include "Mesh/Skeletal/SkeletalMesh.h"
 #include "Mesh/Importer/MeshImportOptions.h"
 #include "Resource/ResourceManager.h"
+#include "Lua/LuaScriptManager.h"
 #include "Editor/UI/Asset/Mesh/MeshEditorWidget.h"
 #include "Editor/UI/Dialog/FbxImportOptionsDialog.h"
+#include "Editor/UI/ContentBrowser/ContentBrowserElement.h"
 #include "Platform/Paths.h"
 #include "Runtime/Engine.h"
 
@@ -30,6 +35,7 @@
 #include <cstring>
 #include <filesystem>
 #include <string>
+#include <utility>
 
 // =====================================================================================
 // 내부 헬퍼 — 원래 EditorPropertyWidget.cpp 익명 네임스페이스에 있던 순수 로직을 이관.
@@ -351,6 +357,258 @@ void FPropertyTable::DispatchPostEditChange(
 
 namespace
 {
+	// SoftObjectRef 에셋 피커 — 모든 호출자(액터/파티클/애니/물리)가 공유하는 내장 구현.
+	// assettype 메타데이터로 분기: Material / SkeletalMesh / StaticMesh / UVectorFieldAsset /
+	// UAnimSequence / UAnimGraphAsset / UParticleSystem / LuaAnimScript / Script. 임포트 대화상자
+	// 상태는 함수-로컬 static 으로 보관(위젯 멤버 의존 제거).
+	bool RenderSoftObjectWidget(FPropertyValue& Prop)
+	{
+		void* ValuePtr = Prop.GetValuePtr();
+		if (!ValuePtr)
+		{
+			return false;
+		}
+
+		bool bChanged = false;
+		const FSoftObjectProperty* SoftProperty = Prop.Property ? Prop.Property->AsSoftObjectProperty() : nullptr;
+		FString AssetType = SoftProperty ? SoftProperty->GetAssetType() : GetAssetTypeMetadata(Prop);
+		FString* Val = SoftProperty ? nullptr : static_cast<FString*>(ValuePtr);
+		FString CurrentPath = SoftProperty ? SoftProperty->GetPath(Prop.ContainerPtr) : *Val;
+		auto SetPath = [&](const FString& NewPath)
+		{
+			if (SoftProperty) { SoftProperty->SetPath(Prop.ContainerPtr, NewPath); }
+			else              { *Val = NewPath; }
+			CurrentPath = NewPath;
+		};
+
+		// 에셋 레지스트리 타입명으로 콤보를 그리는 공용 헬퍼.
+		auto RegistryCombo = [&](const char* ComboId, const char* TypeName)
+		{
+			FString Preview = (CurrentPath.empty() || CurrentPath == "None") ? "None" : GetStemFromPath(CurrentPath);
+			if (ImGui::BeginCombo(ComboId, Preview.c_str()))
+			{
+				const bool bSelectedNone = (CurrentPath.empty() || CurrentPath == "None");
+				if (ImGui::Selectable("None", bSelectedNone)) { SetPath("None"); bChanged = true; }
+				if (bSelectedNone) ImGui::SetItemDefaultFocus();
+				const TArray<FAssetListItem>& Items = FAssetRegistry::ListByTypeName(TypeName);
+				for (const FAssetListItem& Item : Items)
+				{
+					const bool bSelected = (CurrentPath == Item.FullPath);
+					if (ImGui::Selectable(Item.DisplayName.c_str(), bSelected)) { SetPath(Item.FullPath); bChanged = true; }
+					if (bSelected) ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+		};
+
+		if (AssetType == "Material")
+		{
+			FString Preview = (CurrentPath.empty() || CurrentPath == "None") ? "None" : CurrentPath;
+			if (ImGui::BeginCombo("##Material", Preview.c_str()))
+			{
+				const bool bSelectedNone = (CurrentPath == "None" || CurrentPath.empty());
+				if (ImGui::Selectable("None", bSelectedNone)) { SetPath("None"); bChanged = true; }
+				if (bSelectedNone) ImGui::SetItemDefaultFocus();
+				const TArray<FMaterialAssetListItem>& MatFiles = FMaterialManager::Get().GetAvailableMaterialFiles();
+				for (const FMaterialAssetListItem& Item : MatFiles)
+				{
+					const bool bSelected = (CurrentPath == Item.FullPath);
+					if (ImGui::Selectable(Item.DisplayName.c_str(), bSelected)) { SetPath(Item.FullPath); bChanged = true; }
+					if (bSelected) ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+			if (ImGui::BeginDragDropTarget())
+			{
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("MaterialContentItem"))
+				{
+					FContentItem ContentItem = *reinterpret_cast<const FContentItem*>(payload->Data);
+					SetPath(FPaths::ToUtf8(ContentItem.Path.lexically_relative(FPaths::RootDir()).generic_wstring()));
+					bChanged = true;
+				}
+				ImGui::EndDragDropTarget();
+			}
+			return bChanged;
+		}
+
+		if (AssetType == "Script")
+		{
+			char Buf[256];
+			strncpy_s(Buf, sizeof(Buf), CurrentPath.c_str(), _TRUNCATE);
+			if (ImGui::InputText("##Value", Buf, sizeof(Buf))) { SetPath(Buf); bChanged = true; }
+			if (ImGui::Button("Edit Script"))
+			{
+				if (!FLuaScriptManager::OpenOrCreateScript(CurrentPath))
+				{
+					UE_LOG("Failed to open script file: %s", CurrentPath.c_str());
+				}
+			}
+			return bChanged;
+		}
+
+		if (AssetType == "SkeletalMesh")
+		{
+			static FFbxSceneImportDialogState s_SkelFbxDialog;
+			FString Preview = (CurrentPath.empty() || CurrentPath == "None") ? "None" : GetStemFromPath(CurrentPath);
+
+			float ButtonWidth = ImGui::CalcTextSize("Import FBX").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+			float Spacing = ImGui::GetStyle().ItemSpacing.x;
+			ImGui::SetNextItemWidth(-(ButtonWidth + Spacing));
+			if (ImGui::BeginCombo("##SkeletalMesh", Preview.c_str()))
+			{
+				const bool bSelectedNone = (CurrentPath == "None" || CurrentPath.empty());
+				if (ImGui::Selectable("None", bSelectedNone)) { SetPath("None"); bChanged = true; }
+				if (bSelectedNone) ImGui::SetItemDefaultFocus();
+				const TArray<FAssetListItem>& MeshFiles = FMeshManager::GetAvailableSkeletalMeshFiles();
+				for (const FAssetListItem& Item : MeshFiles)
+				{
+					const bool bSelected = (CurrentPath == Item.FullPath);
+					if (ImGui::Selectable(Item.DisplayName.c_str(), bSelected)) { SetPath(Item.FullPath); bChanged = true; }
+					if (bSelected) ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+
+			ImGui::SameLine();
+			ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - ButtonWidth);
+			if (ImGui::Button("Import FBX"))
+			{
+				FString FbxPath = OpenFbxFileDialog();
+				if (!FbxPath.empty()) { FFbxImportOptionsDialog::BeginSceneImport(s_SkelFbxDialog, FbxPath); }
+			}
+
+			FFbxSceneImportRequest       Request;
+			const EFbxImportDialogResult DialogResult = FFbxImportOptionsDialog::RenderSceneImportPopup(
+				"Skeletal FBX Import Options", s_SkelFbxDialog, Request);
+			if (DialogResult == EFbxImportDialogResult::Submitted)
+			{
+				FFbxSceneImportResult Result;
+				if (FMeshManager::ImportFbxScene(Request, GEngine->GetRenderer().GetFD3DDevice().GetDevice(), Result))
+				{
+					if (Result.SkeletalMesh) { SetPath(Result.SkeletalMesh->GetAssetPathFileName()); bChanged = true; }
+					FMeshManager::ScanMeshAssets();
+					FFbxImportOptionsDialog::RequestClose(s_SkelFbxDialog);
+				}
+				else
+				{
+					s_SkelFbxDialog.Error = "FBX import failed. See the engine log for details.";
+				}
+			}
+			return bChanged;
+		}
+
+		if (AssetType == "UAnimSequence")    { RegistryCombo("##AnimSequence",  "UAnimSequence");    return bChanged; }
+		if (AssetType == "UAnimGraphAsset")  { RegistryCombo("##AnimGraphAsset", "UAnimGraphAsset");  return bChanged; }
+		if (AssetType == "UParticleSystem")  { RegistryCombo("##ParticleSystem", "UParticleSystem");  return bChanged; }
+		if (AssetType == "UVectorFieldAsset"){ RegistryCombo("##VectorField",    "UVectorFieldAsset"); return bChanged; }
+
+		if (AssetType == "LuaAnimScript")
+		{
+			FString Preview = (CurrentPath.empty() || CurrentPath == "None") ? "None" : GetStemFromPath(CurrentPath);
+			float ButtonWidth = ImGui::CalcTextSize("Edit Script").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+			float Spacing = ImGui::GetStyle().ItemSpacing.x;
+			ImGui::SetNextItemWidth(-(ButtonWidth + Spacing));
+			if (ImGui::BeginCombo("##LuaAnimScript", Preview.c_str()))
+			{
+				const bool bSelectedNone = (CurrentPath == "None" || CurrentPath.empty());
+				if (ImGui::Selectable("None", bSelectedNone)) { SetPath("None"); bChanged = true; }
+				if (bSelectedNone) ImGui::SetItemDefaultFocus();
+				const TArray<FAssetListItem>& LuaFiles = FAssetRegistry::ListByTypeName("LuaAnimScript");
+				for (const FAssetListItem& Item : LuaFiles)
+				{
+					const bool bSelected = (CurrentPath == Item.FullPath);
+					if (ImGui::Selectable(Item.DisplayName.c_str(), bSelected)) { SetPath(Item.FullPath); bChanged = true; }
+					if (bSelected) ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Edit Script"))
+			{
+				if (!FLuaScriptManager::OpenOrCreateScript(CurrentPath))
+				{
+					UE_LOG("Failed to open script file: %s", CurrentPath.c_str());
+				}
+			}
+			return bChanged;
+		}
+
+		// 기본: StaticMesh 콤보 + FBX/OBJ 임포트(스킨드 메시 처리 모달 포함).
+		static FString s_PendingSrcPath;
+		static int32   s_PendingPolicy = 0;
+		{
+			FString Preview = (CurrentPath.empty() || CurrentPath == "None") ? "None" : GetStemFromPath(CurrentPath);
+			float ButtonWidth = ImGui::CalcTextSize("Import").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+			float Spacing = ImGui::GetStyle().ItemSpacing.x;
+			ImGui::SetNextItemWidth(-(ButtonWidth + Spacing));
+			if (ImGui::BeginCombo("##Mesh", Preview.c_str()))
+			{
+				const bool bSelectedNone = (CurrentPath == "None");
+				if (ImGui::Selectable("None", bSelectedNone)) { SetPath("None"); bChanged = true; }
+				if (bSelectedNone) ImGui::SetItemDefaultFocus();
+				const TArray<FAssetListItem>& MeshFiles = FMeshManager::GetAvailableStaticMeshFiles();
+				for (const FAssetListItem& Item : MeshFiles)
+				{
+					const bool bSelected = (CurrentPath == Item.FullPath);
+					if (ImGui::Selectable(Item.DisplayName.c_str(), bSelected)) { SetPath(Item.FullPath); bChanged = true; }
+					if (bSelected) ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+
+			ImGui::SameLine();
+			ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - ButtonWidth);
+			if (ImGui::Button("Import"))
+			{
+				FString MeshPath = OpenStaticMeshFileDialog();
+				if (!MeshPath.empty())
+				{
+					if (IsFbxFilePath(MeshPath))
+					{
+						s_PendingSrcPath = MeshPath;
+						s_PendingPolicy = FImportOptions::Default().StaticFbxSkinnedMeshPolicy == EStaticFbxSkinnedMeshPolicy::ImportBindPoseAsStatic ? 1 : 0;
+						ImGui::OpenPopup("Static FBX Import Options");
+					}
+					else
+					{
+						ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
+						if (FMeshManager::LoadStaticMesh(MeshPath, Device))
+						{
+							SetPath(FMeshManager::GetStaticMeshBinaryFilePath(MeshPath));
+							bChanged = true;
+						}
+					}
+				}
+			}
+
+			if (ImGui::BeginPopupModal("Static FBX Import Options", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+			{
+				ImGui::TextUnformatted("Skinned mesh handling");
+				ImGui::RadioButton("Skip skinned meshes", &s_PendingPolicy, 0);
+				ImGui::RadioButton("Import bind pose as static mesh", &s_PendingPolicy, 1);
+				if (ImGui::Button("Import"))
+				{
+					FImportOptions Options = FImportOptions::Default();
+					Options.StaticFbxSkinnedMeshPolicy = s_PendingPolicy == 1
+						? EStaticFbxSkinnedMeshPolicy::ImportBindPoseAsStatic
+						: EStaticFbxSkinnedMeshPolicy::Skip;
+					ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
+					if (FMeshManager::LoadStaticMesh(s_PendingSrcPath, Options, Device))
+					{
+						SetPath(FMeshManager::GetStaticMeshBinaryFilePath(s_PendingSrcPath));
+						bChanged = true;
+					}
+					s_PendingSrcPath.clear();
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Cancel")) { s_PendingSrcPath.clear(); ImGui::CloseCurrentPopup(); }
+				ImGui::EndPopup();
+			}
+		}
+		return bChanged;
+	}
+
 	bool RenderStructPropertyWidget(FPropertyValue& Prop, const FPropertyTable::FContext& Ctx, bool bDispatchChange, const FString& PropertyPath)
 	{
 		const FStructProperty* StructProperty = Prop.Property ? Prop.Property->AsStructProperty() : nullptr;
@@ -438,7 +696,9 @@ namespace
 
 			ImGui::PushID(ElemIdx);
 
-			FString ElementName = "Element " + std::to_string(ElemIdx);
+			FString ElementName = Ctx.ArrayElementLabel
+				? Ctx.ArrayElementLabel(Prop, ElemIdx, ElementPtr)
+				: ("Element " + std::to_string(ElemIdx));
 			const FString ElementPath = MakeArrayElementPath(PropertyPath, ElemIdx);
 
 			if (!bEditFixedSize && Ops->RemoveAt && ImGui::Button("-"))
@@ -624,6 +884,14 @@ bool FPropertyTable::RenderValue(TArray<FPropertyValue>& Props, int32& Index, co
 	}
 	case EPropertyType::ObjectRef:
 	{
+		// 호출자별 ObjectRef 커스텀(예: 파티클 Distribution 동적 클래스 피커)을 우선 적용.
+		if (Ctx.RenderObjectRef)
+		{
+			bool bHandled = false;
+			const bool bRefChanged = Ctx.RenderObjectRef(Prop, bHandled);
+			if (bHandled) { bChanged = bRefChanged; break; }
+		}
+
 		const FObjectProperty* ObjectValueProperty = Prop.Property ? Prop.Property->AsObjectProperty() : nullptr;
 		if (!ObjectValueProperty)
 		{
@@ -723,13 +991,11 @@ bool FPropertyTable::RenderValue(TArray<FPropertyValue>& Props, int32& Index, co
 				? GetStemFromPath(CurrentMesh->GetAssetPathFileName())
 				: FString("None");
 
-			const bool bAllowImport = Ctx.FbxImportDialog != nullptr;
-			if (bAllowImport)
-			{
-				float ButtonWidth = ImGui::CalcTextSize("Import FBX").x + ImGui::GetStyle().FramePadding.x * 2.0f;
-				float Spacing = ImGui::GetStyle().ItemSpacing.x;
-				ImGui::SetNextItemWidth(-(ButtonWidth + Spacing));
-			}
+			static FFbxSceneImportDialogState s_SkelFbxObjDialog;
+
+			float ButtonWidth = ImGui::CalcTextSize("Import FBX").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+			float Spacing = ImGui::GetStyle().ItemSpacing.x;
+			ImGui::SetNextItemWidth(-(ButtonWidth + Spacing));
 
 			if (ImGui::BeginCombo("##SkeletalMeshObject", Preview.c_str()))
 			{
@@ -764,48 +1030,44 @@ bool FPropertyTable::RenderValue(TArray<FPropertyValue>& Props, int32& Index, co
 				ImGui::EndCombo();
 			}
 
-			if (bAllowImport)
+			ImGui::SameLine();
+			ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - ButtonWidth);
+			if (ImGui::Button("Import FBX"))
 			{
-				float ButtonWidth = ImGui::CalcTextSize("Import FBX").x + ImGui::GetStyle().FramePadding.x * 2.0f;
-				ImGui::SameLine();
-				ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - ButtonWidth);
-				if (ImGui::Button("Import FBX"))
+				FString FbxPath = OpenFbxFileDialog();
+				if (!FbxPath.empty())
 				{
-					FString FbxPath = OpenFbxFileDialog();
-					if (!FbxPath.empty())
-					{
-						FFbxImportOptionsDialog::BeginSceneImport(*Ctx.FbxImportDialog, FbxPath);
-					}
+					FFbxImportOptionsDialog::BeginSceneImport(s_SkelFbxObjDialog, FbxPath);
 				}
+			}
 
-				FFbxSceneImportRequest       Request;
-				const EFbxImportDialogResult DialogResult = FFbxImportOptionsDialog::RenderSceneImportPopup(
-					"Object Skeletal FBX Import Options",
-					*Ctx.FbxImportDialog,
-					Request
-				);
-				if (DialogResult == EFbxImportDialogResult::Submitted)
+			FFbxSceneImportRequest       Request;
+			const EFbxImportDialogResult DialogResult = FFbxImportOptionsDialog::RenderSceneImportPopup(
+				"Object Skeletal FBX Import Options",
+				s_SkelFbxObjDialog,
+				Request
+			);
+			if (DialogResult == EFbxImportDialogResult::Submitted)
+			{
+				FFbxSceneImportResult Result;
+				const auto ImportStart = std::chrono::steady_clock::now();
+				if (FMeshManager::ImportFbxScene(Request, GEngine->GetRenderer().GetFD3DDevice().GetDevice(), Result))
 				{
-					FFbxSceneImportResult Result;
-					const auto ImportStart = std::chrono::steady_clock::now();
-					if (FMeshManager::ImportFbxScene(Request, GEngine->GetRenderer().GetFD3DDevice().GetDevice(), Result))
+					if (Result.SkeletalMesh)
 					{
-						if (Result.SkeletalMesh)
-						{
-							const std::chrono::duration<double> Elapsed = std::chrono::steady_clock::now() - ImportStart;
-							FMeshEditorWidget::RecordImportDurationForAsset(
-								Result.SkeletalMesh->GetAssetPathFileName(),
-								Elapsed.count()
-							);
-							SetObjectValue(Result.SkeletalMesh);
-						}
-						FMeshManager::ScanMeshAssets();
-						FFbxImportOptionsDialog::RequestClose(*Ctx.FbxImportDialog);
+						const std::chrono::duration<double> Elapsed = std::chrono::steady_clock::now() - ImportStart;
+						FMeshEditorWidget::RecordImportDurationForAsset(
+							Result.SkeletalMesh->GetAssetPathFileName(),
+							Elapsed.count()
+						);
+						SetObjectValue(Result.SkeletalMesh);
 					}
-					else
-					{
-						Ctx.FbxImportDialog->Error = "FBX import failed. See the engine log for details.";
-					}
+					FMeshManager::ScanMeshAssets();
+					FFbxImportOptionsDialog::RequestClose(s_SkelFbxObjDialog);
+				}
+				else
+				{
+					s_SkelFbxObjDialog.Error = "FBX import failed. See the engine log for details.";
 				}
 			}
 
@@ -894,32 +1156,7 @@ bool FPropertyTable::RenderValue(TArray<FPropertyValue>& Props, int32& Index, co
 	}
 	case EPropertyType::SoftObjectRef:
 	{
-		// 에셋 피커는 호출자(액터 패널)가 위젯-영속 상태와 함께 제공. 훅이 없으면 경로 문자열 편집으로 폴백.
-		if (Ctx.RenderSoftObject)
-		{
-			bChanged = Ctx.RenderSoftObject(Prop);
-		}
-		else if (const FSoftObjectProperty* SoftProperty = Prop.Property ? Prop.Property->AsSoftObjectProperty() : nullptr)
-		{
-			FString CurrentPath = SoftProperty->GetPath(Prop.ContainerPtr);
-			char Buf[256];
-			strncpy_s(Buf, sizeof(Buf), CurrentPath.c_str(), _TRUNCATE);
-			if (ImGui::InputText("##Value", Buf, sizeof(Buf)))
-			{
-				SoftProperty->SetPath(Prop.ContainerPtr, Buf);
-				bChanged = true;
-			}
-		}
-		else if (FString* Val = static_cast<FString*>(Prop.GetValuePtr()))
-		{
-			char Buf[256];
-			strncpy_s(Buf, sizeof(Buf), Val->c_str(), _TRUNCATE);
-			if (ImGui::InputText("##Value", Buf, sizeof(Buf)))
-			{
-				*Val = Buf;
-				bChanged = true;
-			}
-		}
+		bChanged = RenderSoftObjectWidget(Prop);
 		break;
 	}
 	case EPropertyType::Array:
@@ -1098,6 +1335,18 @@ bool FPropertyTable::RenderObject(UObject* Object, const FContext& Ctx)
 
 	TArray<FPropertyValue> Props;
 	Object->GetEditableProperties(Props);
+
+	// 호출자별 제외 술어(예: 파티클 bEnabled) 적용.
+	if (Ctx.ShouldSkipProperty)
+	{
+		TArray<FPropertyValue> Filtered;
+		for (const FPropertyValue& P : Props)
+		{
+			if (!Ctx.ShouldSkipProperty(P.Property)) { Filtered.push_back(P); }
+		}
+		Props = std::move(Filtered);
+	}
+
 	if (Props.empty())
 	{
 		ImGui::TextDisabled("(no editable properties)");
@@ -1122,6 +1371,10 @@ bool FPropertyTable::RenderStruct(UStruct* StructType, void* Value, UObject* Own
 	for (const FProperty* ChildProperty : ChildProperties)
 	{
 		if (!ChildProperty || (ChildProperty->Flags & PF_Edit) == 0)
+		{
+			continue;
+		}
+		if (Ctx.ShouldSkipProperty && Ctx.ShouldSkipProperty(ChildProperty))
 		{
 			continue;
 		}

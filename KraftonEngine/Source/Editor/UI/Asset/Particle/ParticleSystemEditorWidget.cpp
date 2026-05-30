@@ -1,4 +1,5 @@
-﻿#include "Editor/UI/Asset/Particle/ParticleSystemEditorWidget.h"
+#include "Editor/UI/Asset/Particle/ParticleSystemEditorWidget.h"
+#include "Editor/UI/Panel/FPropertyTable.h"
 
 #include "Asset/AssetRegistry.h"
 #include "Component/Primitive/ParticleSystemComponent.h"
@@ -2548,527 +2549,64 @@ bool FParticleSystemEditorWidget::RenderLODDistanceProperties(UParticleSystem* P
 
 bool FParticleSystemEditorWidget::RenderObjectPropertiesInline(UObject* Object)
 {
-	if (!Object)
+	// 공용 FPropertyTable 로 렌더 — 파티클 고유 동작 3가지는 컨텍스트 훅으로 주입한다:
+	//   (1) bEnabled 숨김(별도 토글로 노출), (2) Distribution(UDistributionFloat/Vector) 동적
+	//   클래스 피커 + 재귀 렌더, (3) Events 배열 원소의 이벤트 타입 레이블.
+	// Material/StaticMesh/UVectorFieldAsset SoftObject 피커는 FPropertyTable 내장으로 처리된다.
+	FPropertyTable::FContext Ctx;
+
+	Ctx.ShouldSkipProperty = [](const FProperty* Property) -> bool
 	{
-		ImGui::TextDisabled("(no object)");
-		return false;
-	}
+		return Property && Property->Name && std::strcmp(Property->Name, "bEnabled") == 0;
+	};
 
-	TArray<FPropertyValue> Props;
-	TArray<const FProperty*> Properties;
-	if (Object->GetClass())
+	Ctx.RenderObjectRef = [this](FPropertyValue& Prop, bool& bHandled) -> bool
 	{
-		Object->GetClass()->GetPropertyRefs(Properties, true);
-	}
-	for (const FProperty* Property : Properties)
-	{
-		if (!Property || (Property->Flags & PF_Edit) == 0)
+		bHandled = true;   // 파티클 ObjectRef 는 항상 자체 처리(Distribution 피커 or 이름 표시)
+		const FObjectProperty* ObjectValueProperty = Prop.Property ? Prop.Property->AsObjectProperty() : nullptr;
+		if (!ObjectValueProperty)
 		{
-			continue;
+			ImGui::TextDisabled("None");
+			return false;
 		}
-		if (!Object->ShouldExposeProperty(*Property))
+
+		UObject* Current = ObjectValueProperty->GetObjectValue(Prop.ContainerPtr);
+		const FObjectPropertyBase* ObjectProperty = Prop.Property ? Prop.Property->AsObjectPropertyBase() : nullptr;
+		UClass* AllowedClass = ObjectProperty ? ObjectProperty->GetAllowedClassType() : nullptr;
+		const bool bDistributionObject = AllowedClass
+			&& (AllowedClass->IsA(UDistributionFloat::StaticClass()) || AllowedClass->IsA(UDistributionVector::StaticClass()));
+
+		bool bChanged = false;
+		if (bDistributionObject)
 		{
-			continue;
-		}
-		if (Object->IsA<UParticleModule>() && Property->Name && std::strcmp(Property->Name, "bEnabled") == 0)
-		{
-			continue;
-		}
-		if (Object->IsA<UParticleEmitter>() && Property->Name && std::strcmp(Property->Name, "bEnabled") == 0)
-		{
-			continue;
-		}
-		if (Property->GetValuePtrFor(Object))
-		{
-			Props.push_back(Property->ToValue(Object, Object));
-		}
-	}
-	if (Props.empty())
-	{
-		ImGui::TextDisabled("(no editable properties)");
-		return false;
-	}
-
-	bool bAnyChanged = false;
-	ImGui::PushID(Object);
-	static std::unordered_map<std::string, bool> CategoryOpenStates;
-	if (ImGui::BeginTable("##ParticleObjectProperties", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerV))
-	{
-		ImGui::TableSetupColumn("##label", ImGuiTableColumnFlags_WidthFixed, 120.0f);
-		ImGui::TableSetupColumn("##value", ImGuiTableColumnFlags_WidthStretch);
-
-		const char* CurrentCategory = nullptr;
-		bool bCurrentCategoryOpen = true;
-		const float CategoryLabelOffset = GetDetailsCategoryLabelOffset();
-		for (FPropertyValue& Prop : Props)
-		{
-			const char* Category = Prop.GetCategory();
-			if (!Category || !Category[0])
+			FString Preview = Current ? Current->GetClass()->GetName() : FString("None");
+			if (ImGui::BeginCombo("##v", Preview.c_str()))
 			{
-				Category = "Properties";
-			}
-			if (!CurrentCategory || std::strcmp(CurrentCategory, Category) != 0)
-			{
-				CurrentCategory = Category;
-				std::string CategoryKey = std::to_string(Object->GetUUID()) + ":" + CurrentCategory;
-				auto It = CategoryOpenStates.find(CategoryKey);
-				if (It == CategoryOpenStates.end())
+				for (UClass* CandidateClass : UClass::GetAllClasses())
 				{
-					It = CategoryOpenStates.emplace(CategoryKey, true).first;
-				}
-				bCurrentCategoryOpen = It->second;
-
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::PushID(CurrentCategory);
-				bCurrentCategoryOpen = DrawDetailsCategoryHeader(CurrentCategory, bCurrentCategoryOpen);
-				It->second = bCurrentCategoryOpen;
-				ImGui::PopID();
-			}
-			if (!bCurrentCategoryOpen)
-			{
-				continue;
-			}
-
-			const bool bReadOnly = Prop.Property && (Prop.Property->Flags & PF_ReadOnly) != 0;
-			const char* DisplayName = Prop.GetDisplayName();
-			if (!DisplayName || !DisplayName[0])
-			{
-				DisplayName = Prop.GetName();
-			}
-
-			ImGui::PushID(Prop.GetName() ? Prop.GetName() : "");
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::AlignTextToFramePadding();
-			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + CategoryLabelOffset);
-			ImGui::TextUnformatted(DisplayName ? DisplayName : "");
-			ImGui::TableSetColumnIndex(1);
-			ImGui::SetNextItemWidth(-FLT_MIN);
-
-			if (bReadOnly)
-			{
-				ImGui::BeginDisabled();
-			}
-
-			bool bChanged = false;
-			switch (Prop.GetType())
-			{
-			case EPropertyType::Bool:
-			{
-				bool* Value = static_cast<bool*>(Prop.GetValuePtr());
-				if (Value)
-				{
-					bChanged = ImGui::Checkbox("##v", Value);
-				}
-				break;
-			}
-			case EPropertyType::ByteBool:
-			{
-				uint8* Value = static_cast<uint8*>(Prop.GetValuePtr());
-				if (Value)
-				{
-					bool bBoolValue = *Value != 0;
-					if (ImGui::Checkbox("##v", &bBoolValue))
+					if (!CandidateClass || !CandidateClass->IsA(AllowedClass) || CandidateClass == AllowedClass)
 					{
-						*Value = bBoolValue ? 1 : 0;
-						bChanged = true;
+						continue;
 					}
-				}
-				break;
-			}
-			case EPropertyType::Int:
-			{
-				int32* Value = static_cast<int32*>(Prop.GetValuePtr());
-				if (Value)
-				{
-					bChanged = ImGui::DragInt("##v", Value, Prop.GetSpeed());
-				}
-				break;
-			}
-			case EPropertyType::Float:
-			{
-				float* Value = static_cast<float*>(Prop.GetValuePtr());
-				if (Value)
-				{
-					bChanged = ImGui::DragFloat("##v", Value, Prop.GetSpeed());
-				}
-				break;
-			}
-			case EPropertyType::Vec3:
-			{
-				float* Value = static_cast<float*>(Prop.GetValuePtr());
-				if (Value)
-				{
-					bChanged = ImGui::DragFloat3("##v", Value, Prop.GetSpeed());
-				}
-				break;
-			}
-			case EPropertyType::Rotator:
-			{
-				FRotator* Value = static_cast<FRotator*>(Prop.GetValuePtr());
-				if (Value)
-				{
-					float RotationXYZ[3] = { Value->Roll, Value->Pitch, Value->Yaw };
-					if (ImGui::DragFloat3("##v", RotationXYZ, Prop.GetSpeed()))
+					if (CandidateClass == UDistribution::StaticClass())
 					{
-						Value->Roll = RotationXYZ[0];
-						Value->Pitch = RotationXYZ[1];
-						Value->Yaw = RotationXYZ[2];
-						bChanged = true;
+						continue;
 					}
-				}
-				break;
-			}
-			case EPropertyType::Vec4:
-			{
-				float* Value = static_cast<float*>(Prop.GetValuePtr());
-				if (Value)
-				{
-					bChanged = ImGui::DragFloat4("##v", Value, Prop.GetSpeed());
-				}
-				break;
-			}
-			case EPropertyType::Color4:
-			{
-				float* Value = static_cast<float*>(Prop.GetValuePtr());
-				if (Value)
-				{
-					bChanged = ImGui::ColorEdit4("##v", Value);
-				}
-				break;
-			}
-			case EPropertyType::String:
-			{
-				FString* Value = static_cast<FString*>(Prop.GetValuePtr());
-				if (Value)
-				{
-					char Buffer[256];
-					strncpy_s(Buffer, sizeof(Buffer), Value->c_str(), _TRUNCATE);
-					if (ImGui::InputText("##v", Buffer, sizeof(Buffer)))
+
+					const bool bSelected = Current && Current->GetClass() == CandidateClass;
+					if (ImGui::Selectable(CandidateClass->GetName(), bSelected))
 					{
-						*Value = Buffer;
-						bChanged = true;
-					}
-				}
-				break;
-			}
-			case EPropertyType::Name:
-			{
-				FName* Value = static_cast<FName*>(Prop.GetValuePtr());
-				if (Value)
-				{
-					FString CurrentValue = Value->ToString();
-					char Buffer[256];
-					strncpy_s(Buffer, sizeof(Buffer), CurrentValue.c_str(), _TRUNCATE);
-					if (ImGui::InputText("##v", Buffer, sizeof(Buffer)))
-					{
-						*Value = FName(FString(Buffer));
-						bChanged = true;
-					}
-				}
-				break;
-			}
-			case EPropertyType::SoftObjectRef:
-			{
-				FSoftObjectPtr* Value = static_cast<FSoftObjectPtr*>(Prop.GetValuePtr());
-				if (Value)
-				{
-					const FString AssetType = GetAssetTypeMetadata(Prop);
-					if (AssetType == "Material" || AssetType == "StaticMesh" || AssetType == "UVectorFieldAsset")
-					{
-						bChanged = DrawParticleAssetPathCombo(*Value, AssetType);
-					}
-					else
-					{
-						char Buffer[512];
-						strncpy_s(Buffer, sizeof(Buffer), Value->ToString().c_str(), _TRUNCATE);
-						if (ImGui::InputText("##v", Buffer, sizeof(Buffer)))
+						UObject* NewObject = FObjectFactory::Get().Create(CandidateClass->GetName(), Prop.Object);
+						if (NewObject)
 						{
-							Value->SetPath(Buffer);
+							if (Current && Current != NewObject)
+							{
+								UObjectManager::Get().DestroyObject(Current);
+							}
+							ObjectValueProperty->SetObjectValue(Prop.ContainerPtr, NewObject);
+							Current = NewObject;
 							bChanged = true;
 						}
-					}
-				}
-				break;
-			}
-			case EPropertyType::ObjectRef:
-			{
-				const FObjectProperty* ObjectValueProperty = Prop.Property ? Prop.Property->AsObjectProperty() : nullptr;
-				if (!ObjectValueProperty)
-				{
-					ImGui::TextDisabled("None");
-					break;
-				}
-
-				UObject* Current = ObjectValueProperty->GetObjectValue(Prop.ContainerPtr);
-				const FObjectPropertyBase* ObjectProperty = Prop.Property ? Prop.Property->AsObjectPropertyBase() : nullptr;
-				UClass* AllowedClass = ObjectProperty ? ObjectProperty->GetAllowedClassType() : nullptr;
-				const bool bDistributionObject = AllowedClass
-					&& (AllowedClass->IsA(UDistributionFloat::StaticClass()) || AllowedClass->IsA(UDistributionVector::StaticClass()));
-
-				if (bDistributionObject)
-				{
-					FString Preview = Current ? Current->GetClass()->GetName() : FString("None");
-					if (ImGui::BeginCombo("##v", Preview.c_str()))
-					{
-						for (UClass* CandidateClass : UClass::GetAllClasses())
-						{
-							if (!CandidateClass || !CandidateClass->IsA(AllowedClass) || CandidateClass == AllowedClass)
-							{
-								continue;
-							}
-							if (CandidateClass == UDistribution::StaticClass())
-							{
-								continue;
-							}
-
-							const bool bSelected = Current && Current->GetClass() == CandidateClass;
-							if (ImGui::Selectable(CandidateClass->GetName(), bSelected))
-							{
-								UObject* NewObject = FObjectFactory::Get().Create(CandidateClass->GetName(), Object);
-								if (NewObject)
-								{
-									if (Current && Current != NewObject)
-									{
-										UObjectManager::Get().DestroyObject(Current);
-									}
-									ObjectValueProperty->SetObjectValue(Prop.ContainerPtr, NewObject);
-									Current = NewObject;
-									bChanged = true;
-								}
-							}
-							if (bSelected)
-							{
-								ImGui::SetItemDefaultFocus();
-							}
-						}
-						ImGui::EndCombo();
-					}
-
-					if (Current)
-					{
-						ImGui::Indent(8.0f);
-						if (RenderObjectPropertiesInline(Current))
-						{
-							bChanged = true;
-						}
-						ImGui::Unindent(8.0f);
-					}
-				}
-				else
-				{
-					if (Current)
-					{
-						ImGui::TextUnformatted(Current->GetName().c_str());
-					}
-					else
-					{
-						ImGui::TextDisabled("None");
-					}
-				}
-				break;
-			}
-			case EPropertyType::Array:
-			{
-				bChanged = RenderArrayPropertyInline(Prop, Object);
-				break;
-			}
-			case EPropertyType::Enum:
-			{
-				const FEnum* EnumType = Prop.GetEnumType();
-				if (EnumType && EnumType->GetNames() && EnumType->GetCount() > 0 && Prop.GetValuePtr())
-				{
-					const char** EnumNames = EnumType->GetNames();
-					const uint32 EnumCount = EnumType->GetCount();
-					const uint32 EnumSize = EnumType->GetSize();
-					int32 CurrentValue = 0;
-					std::memcpy(&CurrentValue, Prop.GetValuePtr(), EnumSize);
-					const char* Preview = CurrentValue >= 0 && static_cast<uint32>(CurrentValue) < EnumCount ? EnumNames[CurrentValue] : "Unknown";
-					if (ImGui::BeginCombo("##v", Preview))
-					{
-						for (uint32 EnumIndex = 0; EnumIndex < EnumCount; ++EnumIndex)
-						{
-							const bool bSelected = CurrentValue == static_cast<int32>(EnumIndex);
-							if (ImGui::Selectable(EnumNames[EnumIndex], bSelected))
-							{
-								int32 NewValue = static_cast<int32>(EnumIndex);
-								std::memcpy(Prop.GetValuePtr(), &NewValue, EnumSize);
-								bChanged = true;
-							}
-							if (bSelected)
-							{
-								ImGui::SetItemDefaultFocus();
-							}
-						}
-						ImGui::EndCombo();
-					}
-				}
-				break;
-			}
-			case EPropertyType::Struct:
-				bChanged = RenderStructPropertyInline(Prop, Object);
-				break;
-			case EPropertyType::ClassRef:
-			default:
-				ImGui::TextDisabled("(unsupported)");
-				break;
-			}
-
-			if (bReadOnly)
-			{
-				ImGui::EndDisabled();
-			}
-
-			if (bChanged)
-			{
-				bAnyChanged = true;
-				if (Prop.Property)
-				{
-					Object->PostEditProperty(Prop.Property->Name);
-				}
-			}
-
-			ImGui::PopID();
-		}
-		ImGui::EndTable();
-	}
-	ImGui::PopID();
-
-	return bAnyChanged;
-}
-
-bool FParticleSystemEditorWidget::RenderInlinePropertyValue(FPropertyValue& Prop, UObject* OwnerObject)
-{
-	bool bChanged = false;
-	const bool bReadOnly = Prop.Property && (Prop.Property->Flags & PF_ReadOnly) != 0;
-	if (bReadOnly)
-	{
-		ImGui::BeginDisabled();
-	}
-
-	switch (Prop.GetType())
-	{
-	case EPropertyType::Bool:
-	{
-		bool* Value = static_cast<bool*>(Prop.GetValuePtr());
-		if (Value)
-		{
-			bChanged = ImGui::Checkbox("##v", Value);
-		}
-		break;
-	}
-	case EPropertyType::ByteBool:
-	{
-		uint8* Value = static_cast<uint8*>(Prop.GetValuePtr());
-		if (Value)
-		{
-			bool bBoolValue = *Value != 0;
-			if (ImGui::Checkbox("##v", &bBoolValue))
-			{
-				*Value = bBoolValue ? 1 : 0;
-				bChanged = true;
-			}
-		}
-		break;
-	}
-	case EPropertyType::Int:
-	{
-		int32* Value = static_cast<int32*>(Prop.GetValuePtr());
-		if (Value)
-		{
-			bChanged = ImGui::DragInt("##v", Value, Prop.GetSpeed());
-		}
-		break;
-	}
-	case EPropertyType::Float:
-	{
-		float* Value = static_cast<float*>(Prop.GetValuePtr());
-		if (Value)
-		{
-			bChanged = ImGui::DragFloat("##v", Value, Prop.GetSpeed());
-		}
-		break;
-	}
-	case EPropertyType::Vec3:
-	{
-		float* Value = static_cast<float*>(Prop.GetValuePtr());
-		if (Value)
-		{
-			bChanged = ImGui::DragFloat3("##v", Value, Prop.GetSpeed());
-		}
-		break;
-	}
-	case EPropertyType::Vec4:
-	{
-		float* Value = static_cast<float*>(Prop.GetValuePtr());
-		if (Value)
-		{
-			bChanged = ImGui::DragFloat4("##v", Value, Prop.GetSpeed());
-		}
-		break;
-	}
-	case EPropertyType::Color4:
-	{
-		float* Value = static_cast<float*>(Prop.GetValuePtr());
-		if (Value)
-		{
-			bChanged = ImGui::ColorEdit4("##v", Value);
-		}
-		break;
-	}
-	case EPropertyType::String:
-	{
-		FString* Value = static_cast<FString*>(Prop.GetValuePtr());
-		if (Value)
-		{
-			char Buffer[256];
-			strncpy_s(Buffer, sizeof(Buffer), Value->c_str(), _TRUNCATE);
-			if (ImGui::InputText("##v", Buffer, sizeof(Buffer)))
-			{
-				*Value = Buffer;
-				bChanged = true;
-			}
-		}
-		break;
-	}
-	case EPropertyType::Name:
-	{
-		FName* Value = static_cast<FName*>(Prop.GetValuePtr());
-		if (Value)
-		{
-			FString CurrentValue = Value->ToString();
-			char Buffer[256];
-			strncpy_s(Buffer, sizeof(Buffer), CurrentValue.c_str(), _TRUNCATE);
-			if (ImGui::InputText("##v", Buffer, sizeof(Buffer)))
-			{
-				*Value = FName(FString(Buffer));
-				bChanged = true;
-			}
-		}
-		break;
-	}
-	case EPropertyType::Enum:
-	{
-		const FEnum* EnumType = Prop.GetEnumType();
-		if (EnumType && EnumType->GetNames() && EnumType->GetCount() > 0 && Prop.GetValuePtr())
-		{
-			const char** EnumNames = EnumType->GetNames();
-			const uint32 EnumCount = EnumType->GetCount();
-			const uint32 EnumSize = EnumType->GetSize();
-			int32 CurrentValue = 0;
-			std::memcpy(&CurrentValue, Prop.GetValuePtr(), EnumSize);
-			const char* Preview = CurrentValue >= 0 && static_cast<uint32>(CurrentValue) < EnumCount ? EnumNames[CurrentValue] : "Unknown";
-			if (ImGui::BeginCombo("##v", Preview))
-			{
-				for (uint32 EnumIndex = 0; EnumIndex < EnumCount; ++EnumIndex)
-				{
-					const bool bSelected = CurrentValue == static_cast<int32>(EnumIndex);
-					if (ImGui::Selectable(EnumNames[EnumIndex], bSelected))
-					{
-						int32 NewValue = static_cast<int32>(EnumIndex);
-						std::memcpy(Prop.GetValuePtr(), &NewValue, EnumSize);
-						bChanged = true;
 					}
 					if (bSelected)
 					{
@@ -3077,163 +2615,50 @@ bool FParticleSystemEditorWidget::RenderInlinePropertyValue(FPropertyValue& Prop
 				}
 				ImGui::EndCombo();
 			}
-		}
-		break;
-	}
-	case EPropertyType::Struct:
-		bChanged = RenderStructPropertyInline(Prop, OwnerObject);
-		break;
-	case EPropertyType::Array:
-		bChanged = RenderArrayPropertyInline(Prop, OwnerObject);
-		break;
-	default:
-		ImGui::TextDisabled("(unsupported)");
-		break;
-	}
 
-	if (bReadOnly)
-	{
-		ImGui::EndDisabled();
-	}
-	return bChanged;
-}
-
-bool FParticleSystemEditorWidget::RenderStructPropertyInline(FPropertyValue& Prop, UObject* OwnerObject)
-{
-	const FStructProperty* StructProperty = Prop.Property ? Prop.Property->AsStructProperty() : nullptr;
-	if (!StructProperty || !StructProperty->GetStructType() || !Prop.GetValuePtr())
-	{
-		ImGui::TextDisabled("(struct)");
-		return false;
-	}
-
-	TArray<FPropertyValue> ChildProps;
-	Prop.GetStructChildren(ChildProps);
-	if (ChildProps.empty())
-	{
-		ImGui::TextDisabled("(empty)");
-		return false;
-	}
-
-	bool bChanged = false;
-	for (int32 ChildIndex = 0; ChildIndex < static_cast<int32>(ChildProps.size()); ++ChildIndex)
-	{
-		FPropertyValue& ChildProp = ChildProps[ChildIndex];
-		ImGui::PushID(ChildIndex);
-		const char* DisplayName = ChildProp.GetDisplayName();
-		if (!DisplayName || !DisplayName[0])
-		{
-			DisplayName = ChildProp.GetName();
-		}
-
-		ImGui::AlignTextToFramePadding();
-		ImGui::TextUnformatted(DisplayName ? DisplayName : "");
-		ImGui::SameLine(132.0f);
-		ImGui::SetNextItemWidth(-FLT_MIN);
-		if (RenderInlinePropertyValue(ChildProp, OwnerObject))
-		{
-			bChanged = true;
-		}
-		ImGui::PopID();
-	}
-	return bChanged;
-}
-
-bool FParticleSystemEditorWidget::RenderArrayPropertyInline(FPropertyValue& Prop, UObject* OwnerObject)
-{
-	const FArrayProperty* ArrayProperty = Prop.Property ? Prop.Property->AsArrayProperty() : nullptr;
-	void* ArrayPtr = Prop.GetValuePtr();
-	if (!ArrayProperty || !ArrayPtr || !ArrayProperty->GetArrayOps() || !ArrayProperty->GetInnerProperty())
-	{
-		ImGui::TextDisabled("(array)");
-		return false;
-	}
-
-	const FArrayProperty::FArrayOps* Ops = ArrayProperty->GetArrayOps();
-	const FProperty* InnerProperty = ArrayProperty->GetInnerProperty();
-	if (!Ops->GetNum || !Ops->GetElementPtr)
-	{
-		ImGui::TextDisabled("(array)");
-		return false;
-	}
-
-	bool bChanged = false;
-	size_t Num = Ops->GetNum(ArrayPtr);
-	const bool bIsEventList = Prop.GetName() && std::strcmp(Prop.GetName(), "Events") == 0;
-	const char* AddLabel = bIsEventList ? "+ Add Event" : "+ Add";
-
-	if (Ops->InsertDefault && ImGui::Button(AddLabel))
-	{
-		Ops->InsertDefault(ArrayPtr, Num);
-		bChanged = true;
-		Num = Ops->GetNum(ArrayPtr);
-	}
-	ImGui::SameLine();
-	ImGui::TextDisabled("%zu element%s", Num, Num == 1 ? "" : "s");
-
-	if (Num == 0)
-	{
-		ImGui::TextDisabled(bIsEventList ? "No events. Click + Add Event." : "No elements.");
-		return bChanged;
-	}
-
-	for (int32 ElementIndex = 0; ElementIndex < static_cast<int32>(Num); ++ElementIndex)
-	{
-		void* ElementPtr = Ops->GetElementPtr(ArrayPtr, static_cast<size_t>(ElementIndex));
-		if (!ElementPtr)
-		{
-			continue;
-		}
-
-		ImGui::PushID(ElementIndex);
-		if (ElementIndex > 0)
-		{
-			ImGui::Separator();
-		}
-
-		char ElementLabel[128];
-		if (bIsEventList && InnerProperty->GetType() == EPropertyType::Struct)
-		{
-			const FParticleEventGenerateInfo* EventInfo = static_cast<const FParticleEventGenerateInfo*>(ElementPtr);
-			std::snprintf(ElementLabel, sizeof(ElementLabel), "Event %d (%s)", ElementIndex, GetParticleEventTypeLabel(EventInfo ? EventInfo->Type : EParticleEventType::Any));
+			if (Current)
+			{
+				ImGui::Indent(8.0f);
+				if (RenderObjectPropertiesInline(Current))
+				{
+					bChanged = true;
+				}
+				ImGui::Unindent(8.0f);
+			}
 		}
 		else
 		{
-			std::snprintf(ElementLabel, sizeof(ElementLabel), "Element %d", ElementIndex);
-		}
-
-		if (Ops->RemoveAt)
-		{
-			if (ImGui::SmallButton("-"))
+			if (Current)
 			{
-				Ops->RemoveAt(ArrayPtr, static_cast<size_t>(ElementIndex));
-				bChanged = true;
-				ImGui::PopID();
-				break;
+				ImGui::TextUnformatted(Current->GetName().c_str());
 			}
-			ImGui::SameLine();
-		}
-
-		const bool bOpen = ImGui::TreeNodeEx("##ArrayElement", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth, "%s", ElementLabel);
-		if (bOpen)
-		{
-			FPropertyValue ElementValue;
-			ElementValue.Object = Prop.Object ? Prop.Object : OwnerObject;
-			ElementValue.Property = InnerProperty;
-			ElementValue.ContainerPtr = ElementPtr;
-
-			ImGui::Indent(8.0f);
-			if (RenderInlinePropertyValue(ElementValue, OwnerObject))
+			else
 			{
-				bChanged = true;
+				ImGui::TextDisabled("None");
 			}
-			ImGui::Unindent(8.0f);
-			ImGui::TreePop();
 		}
-		ImGui::PopID();
-	}
+		return bChanged;
+	};
 
-	return bChanged;
+	Ctx.ArrayElementLabel = [](const FPropertyValue& ArrayProp, int32 Index, void* ElementPtr) -> FString
+	{
+		const bool bIsEventList = ArrayProp.GetName() && std::strcmp(ArrayProp.GetName(), "Events") == 0;
+		const FArrayProperty* ArrayProperty = ArrayProp.Property ? ArrayProp.Property->AsArrayProperty() : nullptr;
+		const FProperty* InnerProperty = ArrayProperty ? ArrayProperty->GetInnerProperty() : nullptr;
+		char Buffer[128];
+		if (bIsEventList && InnerProperty && InnerProperty->GetType() == EPropertyType::Struct)
+		{
+			const FParticleEventGenerateInfo* EventInfo = static_cast<const FParticleEventGenerateInfo*>(ElementPtr);
+			std::snprintf(Buffer, sizeof(Buffer), "Event %d (%s)", Index, GetParticleEventTypeLabel(EventInfo ? EventInfo->Type : EParticleEventType::Any));
+		}
+		else
+		{
+			std::snprintf(Buffer, sizeof(Buffer), "Element %d", Index);
+		}
+		return FString(Buffer);
+	};
+
+	return FPropertyTable::RenderObject(Object, Ctx);
 }
 
 void FParticleSystemEditorWidget::RenderPanel(const char* Title, const ImVec2& Size)
