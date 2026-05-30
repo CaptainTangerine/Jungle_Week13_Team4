@@ -1,22 +1,29 @@
-﻿#include "PawnMovementComponent.h"
+#include "PawnMovementComponent.h"
 #include "GameFramework/Pawn/Pawn.h"
 
-void UPawnMovementComponent::ConsumeInputVector()
+void UPawnMovementComponent::AddInputVector(FVector WorldVector, bool bForce)
 {
-	if (PendingInputVectors.empty()) return;
-	FVector InputVector = PendingInputVectors.front();
-	LastInputVector = InputVector;
+	if (bMoveInputIgnored && !bForce)
+	{
+		return;
+	}
+	PendingInputVector += WorldVector;
 }
 
-FVector UPawnMovementComponent::GetLastInputVector()
+FVector UPawnMovementComponent::ConsumeInputVector()
 {
+	LastInputVector = PendingInputVector;
+	PendingInputVector = FVector::ZeroVector;
 	return LastInputVector;
 }
 
-APawn* UPawnMovementComponent::GetPawnOwner()  
-{  
-   APawn* Owner = Cast<APawn>(UpdatedComponent->GetOwner());  
-   return Owner;  
+APawn* UPawnMovementComponent::GetPawnOwner() const
+{
+	if (!UpdatedComponent)
+	{
+		return nullptr;
+	}
+	return Cast<APawn>(UpdatedComponent->GetOwner());
 }
 
 void UPawnMovementComponent::SetUpdatedComponent(USceneComponent* NewUpdatedComponent)
