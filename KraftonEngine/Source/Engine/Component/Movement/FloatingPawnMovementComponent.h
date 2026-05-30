@@ -1,6 +1,6 @@
 #pragma once
 
-#include "MovementComponent.h"
+#include "PawnMovementComponent.h"
 
 #include "Source/Engine/Component/Movement/FloatingPawnMovementComponent.generated.h"
 #include <algorithm>
@@ -9,7 +9,7 @@ class UPrimitiveComponent;
 class USceneComponent;
 
 UCLASS()
-class UFloatingPawnMovementComponent : public UMovementComponent
+class UFloatingPawnMovementComponent : public UPawnMovementComponent
 {
 public:
 	GENERATED_BODY()
