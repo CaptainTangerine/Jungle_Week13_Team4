@@ -1,9 +1,9 @@
 ﻿#include "PostDOFAlphaPass.h"
 #include "RenderPassRegistry.h"
 
-REGISTER_RENDER_PASS(FEditorIconPass)
+REGISTER_RENDER_PASS(FPostAlphaPass)
 
-FEditorIconPass::FEditorIconPass()
+FPostAlphaPass::FPostAlphaPass()
 {
 	PassType = ERenderPass::PostDOFAlpha;
 	RenderState = { EDepthStencilState::DepthReadOnly, EBlendState::AlphaBlend,

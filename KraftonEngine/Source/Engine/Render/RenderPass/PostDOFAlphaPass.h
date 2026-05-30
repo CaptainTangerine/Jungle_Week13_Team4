@@ -1,8 +1,8 @@
 ﻿#pragma once
 #include "Render/RenderPass/RenderPassBase.h"
 
-class FEditorIconPass final : public FRenderPassBase
+class FPostAlphaPass final : public FRenderPassBase
 {
 public:
-	FEditorIconPass();
+	FPostAlphaPass();
 };

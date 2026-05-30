@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Object/Reflection/ObjectFactory.h"
 #include "Math/Vector.h"
@@ -38,7 +38,7 @@ private:
 	TMap<FString, FMaterialParameterInfo*> ParameterLayout; // 리플렉션 결과 : 쉐이더 constant buffer 레이아웃 정보
 
 public:
-	const TMap<FString, FMaterialParameterInfo*>& GetParameterInfo() const { return ParameterLayout; }
+	const TMap<FString, FMaterialParameterInfo*>& gParameterInfo() const { return ParameterLayout; }
 	void Create(FShader* InShader);
 
 	FShader* GetShader() const { return Shader; }
@@ -69,6 +69,9 @@ struct FMaterialConstantBuffer
 	FConstantBuffer* GetConstantBuffer() { return &GPUBuffer; }
 };
 
+UENUM()
+enum class ETranslucencyPass : uint8 { BeforeDOF, AfterDOF };
+
 //파라미터 값 + 텍스처 (런타임 데이터)
 //JSON으로 직렬화되는 데이터
 UCLASS()
@@ -80,6 +83,7 @@ private:
 	FMaterialTemplate* Template; // 공유
 
 	// 렌더링 상태 정보 (인스턴스별)
+	ETranslucencyPass TranslucencyPass = ETranslucencyPass::AfterDOF;
 	ERenderPass RenderPass = ERenderPass::Opaque;
 	EBlendState BlendState = EBlendState::Opaque;
 	EDepthStencilState DepthStencilState = EDepthStencilState::Default;
@@ -130,7 +134,7 @@ public:
 	void Bind(ID3D11DeviceContext* Context);
 
 	FShader* GetShader() const { return Template ? Template->GetShader() : TransientShader; }
-	ERenderPass GetRenderPass() const { return RenderPass; }
+	ERenderPass GetRenderPass() const;
 	EBlendState GetBlendState() const { return BlendState; }
 	EDepthStencilState GetDepthStencilState() const { return DepthStencilState; }
 	ERasterizerState GetRasterizerState() const { return RasterizerState; }

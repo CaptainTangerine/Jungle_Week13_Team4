@@ -44,9 +44,9 @@ enum class ERenderPass : uint32
 	AdditiveDecal,	// Additive 빌보드 등
 	AlphaBlend,		// 반투명 지오메트리 (Font, SubUV, Billboard, Translucent)
 	DepthOfField,	// 피사계 심도
+	PostDOFAlpha,
 	Bloom,			// HDR SceneColor bloom post process
 	FXAA,			// FXAA 안티앨리어싱 (SceneColor 복사 후 실행)
-	PostDOFAlpha,		// Billboard icons
 	GizmoOuter,		// 기즈모 외곽 (깊이 테스트 O)
 	GizmoInner,		// 기즈모 내부 (깊이 무시)
 	OverlayFont,	// 스크린 공간 텍스트 (깊이 무시)
