@@ -1,4 +1,4 @@
-#include "PhysXVehicleManager.h"
+﻿#include "PhysXVehicleManager.h"
 
 #include "Component/Movement/WheeledVehicleMovementComponent.h"
 
@@ -28,6 +28,11 @@ void FPhysXVehicleManager::PostTick()
 {
 	// TODO(vehicle part 2): fetch 후 각 차량의 chassis/wheel pose 를 읽어
 	//   UWheeledVehicleMovementComponent::ApplyWheelPose 로 push.
+}
+
+void FPhysXVehicleManager::Release()
+{
+
 }
 
 void FPhysXVehicleManager::RegisterVehicleMC(UWheeledVehicleMovementComponent* InComponent)

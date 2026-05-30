@@ -1,5 +1,6 @@
-#include "WheeledVehicleMovementComponent.h"
+﻿#include "WheeledVehicleMovementComponent.h"
 
+#include "Physics/PhysXPhysicsScene.h"
 #include "Physics/PhysXVehicleManager.h"
 #include "Component/SceneComponent.h"
 #include "GameFramework/AActor.h"
@@ -94,13 +95,10 @@ void UWheeledVehicleMovementComponent::UnregisterFromManager()
 
 FPhysXVehicleManager* UWheeledVehicleMovementComponent::ResolveVehicleManager() const
 {
-	// TODO(vehicle part 2): Scene 이 vehicle manager 를 소유/노출하면 여기서 가져온다.
-	//   AActor* Owner = GetOwner();
-	//   UWorld* World = Owner ? Owner->GetWorld() : nullptr;
-	//   IPhysicsScene* Scene = World ? World->GetPhysicsScene() : nullptr;
-	//   return Scene ? static_cast<FPhysXPhysicsScene*>(Scene)->GetVehicleManager() : nullptr;
-	// 현재는 manager 접근 경로(FPhysXPhysicsScene::GetVehicleManager)가 아직 없어 nullptr.
-	return nullptr;
+	AActor* Owner = GetOwner();
+	UWorld* World = Owner ? Owner->GetWorld() : nullptr;
+	IPhysicsScene* Scene = World ? World->GetPhysicsScene() : nullptr;
+	return Scene ? static_cast<FPhysXPhysicsScene*>(Scene)->GetVehicleManager() : nullptr;
 }
 
 // ============================================================

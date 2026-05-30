@@ -1,4 +1,5 @@
 ﻿#include "Physics/PhysXPhysicsScene.h"
+#include "Physics/PhysXVehicleManager.h"
 #include "Component/PrimitiveComponent.h"
 #include "Component/Shape/BoxComponent.h"
 #include "Component/Shape/SphereComponent.h"
@@ -477,6 +478,9 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 		return;
 	}
 
+	// Vehicle Manager
+	VehicleManager = new FPhysXVehicleManager();
+
 	// Default material (static friction, dynamic friction, restitution)
 	DefaultMaterial = Physics->createMaterial(0.5f, 0.5f, 0.3f);
 	if (!DefaultMaterial)
@@ -507,6 +511,7 @@ void FPhysXPhysicsScene::Shutdown()
 	if (Scene) { Scene->release(); Scene = nullptr; }
 	if (EventCallback) { delete EventCallback; EventCallback = nullptr; }
 	if (Dispatcher) { Dispatcher->release(); Dispatcher = nullptr; }
+	if (VehicleManager) { VehicleManager->Release(); delete VehicleManager; VehicleManager = nullptr; }
 
 	// Foundation/Physics는 공유 싱글턴 — release 카운트 감소만
 	Foundation = nullptr;

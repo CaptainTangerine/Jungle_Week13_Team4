@@ -19,6 +19,7 @@ namespace physx
 }
 
 class FPhysXSimulationCallback;
+class FPhysXVehicleManager;
 
 // ============================================================
 // FPhysXPhysicsScene — PhysX 4.1 기반 물리 시스템
@@ -82,6 +83,11 @@ public:
 	bool RaycastByObjectTypes(const FVector& Start, const FVector& Dir, float MaxDist, FHitResult& OutHit,
 		uint32 ObjectTypeMask, const AActor* IgnoreActor = nullptr) const override;
 
+	//=============================================================
+	// Vehicles
+	//=============================================================
+	FPhysXVehicleManager* GetVehicleManager() { return VehicleManager; }
+
 private:
 	UWorld* World = nullptr;
 
@@ -92,6 +98,7 @@ private:
 	physx::PxDefaultCpuDispatcher* Dispatcher = nullptr;
 	physx::PxMaterial* DefaultMaterial = nullptr;
 	FPhysXSimulationCallback* EventCallback = nullptr;
+	FPhysXVehicleManager* VehicleManager = nullptr;
 
 	// Actor 단위 매핑 — 한 액터의 여러 컴포넌트가 같은 PxRigidActor에 shape로 합쳐진다.
 	struct FBodyMapping
