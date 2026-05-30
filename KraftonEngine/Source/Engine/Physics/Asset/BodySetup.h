@@ -2,10 +2,14 @@
 
 #include "Object/Object.h"
 #include "Core/Types/CoreTypes.h"
+#include "Math/Transform.h"
 #include "Physics/Asset/PhysicsAssetTypes.h"
+#include "Physics/PhysicsHandles.h"
 #include "Object/Reflection/ObjectMacros.h"
 
 #include "Source/Engine/Physics/Asset/BodySetup.generated.h"
+
+class IPhysicsScene;
 
 // =====================================================================================
 // UBodySetupCore / UBodySetup — 발제 클래스 계층 그대로.
@@ -44,6 +48,12 @@ public:
 		Ar << Mass;
 		Ar << bSimulatePhysics;
 	}
+
+	bool AddShapesToRigidActor(IPhysicsScene* Scene, FPhysicsActorHandle ActorHandle,
+		const FVector& Scale3D = FVector(1.0f, 1.0f, 1.0f),
+		const FTransform& RelativeTM = FTransform(),
+		const FTransform& WorldTransform = FTransform(),
+		void* UserData = nullptr) const;
 
 	UPROPERTY(Edit, Save, Category="BodySetup", DisplayName="Primitives", Type=Struct)
 	FKAggregateGeom AggGeom;

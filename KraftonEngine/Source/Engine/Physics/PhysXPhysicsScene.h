@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Physics/IPhysicsScene.h"
 #include "Core/Types/CoreTypes.h"
@@ -40,6 +40,24 @@ public:
 	void RegisterComponent(UPrimitiveComponent* Comp) override;
 	void UnregisterComponent(UPrimitiveComponent* Comp) override;
 	void RebuildBody(UPrimitiveComponent* Comp) override;
+
+	// --- Raw physics actor path (PhysicsAsset / ragdoll) ---
+	// 기존 RegisterComponent 경로는 AActor/Component 단위 compound body를 만든다.
+	// 이 API는 그 경로를 거치지 않고, PhysicsAsset의 BodySetup 하나당 별도 PxRigidActor를
+	// 생성/제어하기 위한 저수준 경로다. 랙돌에서는 본 하나가 FBodyInstance 하나를 갖고,
+	// 그 FBodyInstance가 여기서 반환된 FPhysicsActorHandle을 보관한다.
+	FPhysicsActorHandle CreateActor(const FActorCreationParams& Params) override;
+	void ReleaseActor(FPhysicsActorHandle Actor) override;
+	bool IsActorValid(FPhysicsActorHandle Actor) const override;
+	// 생성된 actor에 UBodySetup::AggGeom 기반 shape를 붙인다.
+	// UE의 FPhysicsInterface::CreateActor + AddGeometry 흐름을 따른다.
+	bool AddGeometry(FPhysicsActorHandle Actor, const FGeometryAddParams& Params) override;
+	// FBodyInstance / SkeletalMeshComponent가 본 포즈와 물리 포즈를 동기화할 때 사용한다.
+	void SetActorGlobalPose(FPhysicsActorHandle Actor, const FTransform& WorldPose) override;
+	FTransform GetActorGlobalPose(FPhysicsActorHandle Actor) const override;
+	void SetActorKinematic(FPhysicsActorHandle Actor, bool bKinematic) override;
+	void SetActorKinematicTarget(FPhysicsActorHandle Actor, const FTransform& WorldPose) override;
+	void SetActorMass(FPhysicsActorHandle Actor, float Mass) override;
 
 	void Tick(float DeltaTime) override;
 
