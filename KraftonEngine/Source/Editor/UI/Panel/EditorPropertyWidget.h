@@ -22,11 +22,10 @@ private:
 	void RenderDetails(AActor* PrimaryActor, const TArray<AActor*>& SelectedActors);
 	void RenderComponentProperties(AActor* Actor, const TArray<AActor*>& SelectedActors);
 	void RenderActorProperties(AActor* PrimaryActor, const TArray<AActor*>& SelectedActors);
+	// 위젯 렌더링은 공용 FPropertyTable 로 위임(forwarder). SoftObjectRef 에셋 피커만 위젯-영속
+	// 상태(임포트 모달/Pending 버퍼)에 의존해 여기 남아 컨텍스트 훅으로 주입된다.
 	bool RenderPropertyWidget(TArray<struct FPropertyValue>& Props, int32& Index, bool bDispatchChange = true, const FString& PropertyPath = {});
 	bool RenderSoftObjectPropertyWidget(struct FPropertyValue& Prop);
-	bool RenderEnumPropertyWidget(struct FPropertyValue& Prop);
-	bool RenderStructPropertyWidget(struct FPropertyValue& Prop, bool bDispatchChange, const FString& PropertyPath);
-	bool RenderArrayPropertyWidget(struct FPropertyValue& Prop, bool bDispatchChange, const FString& PropertyPath);
 
 	void PropagatePropertyChange(const FString& PropName, const TArray<AActor*>& SelectedActors);
 
