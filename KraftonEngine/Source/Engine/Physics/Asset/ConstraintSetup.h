@@ -50,17 +50,7 @@ struct FConstraintSetup
 	UPROPERTY(Edit, Save, Category="Drive", DisplayName="Drive Damping", Min=0.f, Speed=1.f)
 	float DriveDamping   = 0.f;
 
-	friend FArchive& operator<<(FArchive& Ar, FConstraintSetup& C)
-	{
-		Ar << C.ParentBone;
-		Ar << C.ChildBone;
-		Ar << C.ParentFrame;   // FTransform: trivially-copyable 템플릿 경로
-		Ar << C.ChildFrame;
-		Ar << C.TwistLimit;
-		Ar << C.Swing1Limit;
-		Ar << C.Swing2Limit;
-		Ar << C.DriveStiffness;
-		Ar << C.DriveDamping;
-		return Ar;
-	}
+	// 직렬화는 리플렉션(FStructProperty)이 전담한다. FName/FTransform 포함 모든 멤버를
+	// 코드젠된 RegisterProperties + FProperty::SerializeValue 가 재귀 처리하므로
+	// 커스텀 operator<< 는 불필요(EPropertyType::Transform 추가로 FTransform 도 지원됨).
 };

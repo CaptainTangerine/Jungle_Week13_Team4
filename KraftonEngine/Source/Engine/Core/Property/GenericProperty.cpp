@@ -2,6 +2,7 @@
 
 #include "Math/Rotator.h"
 #include "Math/Vector.h"
+#include "Math/Transform.h"
 #include "Serialization/Archive.h"
 
 void FGenericProperty::SerializeValue(void* ValuePtr, FArchive& Ar) const
@@ -28,6 +29,10 @@ void FGenericProperty::SerializeValue(void* ValuePtr, FArchive& Ar) const
 		break;
 	case EPropertyType::Rotator:
 		Ar << *static_cast<FRotator*>(ValuePtr);
+		break;
+	case EPropertyType::Transform:
+		// FTransform 은 trivially-copyable — FArchive 템플릿 operator<< 로 직렬화.
+		Ar << *static_cast<FTransform*>(ValuePtr);
 		break;
 	case EPropertyType::Vec4:
 	case EPropertyType::Color4:

@@ -2,30 +2,20 @@
 
 // =====================================================================================
 // UPhysicsAsset 직렬화.
-//   - SkeletonBinding : FSkeletonBinding::operator<<
-//   - ConstraintSetups: FConstraintSetup::operator<< (FTransform 프레임 포함)
-//   - BodySetups       : 인스턴스드 UBodySetup. 로드 시 UObjectManager 로 생성 후 각자 Serialize.
-// 리플렉션(FPropertySerializer)은 인스턴스드 UObject·FRotator/FTransform 를 직렬화하지
-// 않으므로(ParticleSystem 의 Emitters 와 동일 사정) 사용하지 않는다.
+//   - SkeletonBinding : 비-USTRUCT(plain struct) → operator<< 수동
+//   - ConstraintSetups: UPROPERTY(Save) → SerializeProperties 로 리플렉션 자동 직렬화
+//                       (FStructProperty 배열 — FName/FTransform 모두 재귀 처리)
+//   - BodySetups       : 인스턴스드 UBodySetup. 배열 inner 의 Instanced 직렬화를 코드젠이
+//                       전파하지 못하므로 수동(로드 시 UObjectManager 로 생성 후 각자 Serialize).
 // =====================================================================================
 void UPhysicsAsset::Serialize(FArchive& Ar)
 {
 	Ar << SkeletonBinding;
 
-	// ─ ConstraintSetups (구조체 배열) ─
-	int32 ConstraintCount = static_cast<int32>(ConstraintSetups.size());
-	Ar << ConstraintCount;
-	if (Ar.IsLoading())
-	{
-		ConstraintSetups.clear();
-		ConstraintSetups.resize(static_cast<size_t>(ConstraintCount));
-	}
-	for (int32 i = 0; i < ConstraintCount; ++i)
-	{
-		Ar << ConstraintSetups[i];
-	}
+	// ConstraintSetups — 리플렉션 자동.
+	SerializeProperties(Ar, PF_Save);
 
-	// ─ BodySetups (인스턴스드 UObject 배열) ─
+	// ─ BodySetups (인스턴스드 UObject 배열) — 수동 ─
 	int32 BodyCount = static_cast<int32>(BodySetups.size());
 	Ar << BodyCount;
 	if (Ar.IsLoading())

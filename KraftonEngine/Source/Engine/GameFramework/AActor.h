@@ -31,7 +31,6 @@ public:
 
 	bool HasActorBegunPlay() const { return bActorHasBegunPlay; }
 
-	void Serialize(FArchive& Ar) override;
 	UObject* Duplicate(UObject* NewOuter = nullptr) const override;
 
 	void PreGetEditableProperties() override;
@@ -121,6 +120,11 @@ public:
 	
 	FActorTickFunction PrimaryActorTick;
 protected:
+	// 직렬화 훅 — 템플릿(UObject::Serialize)이 반사 전/후로 호출. (§4-C)
+	// 서브클래스가 오버라이드하면 반드시 AActor::OnPostLoad(Ar) 를 명시 호출할 것 (가상 훅은 자동 체이닝 안 됨).
+	void OnPreSave(FArchive& Ar) override;
+	void OnPostLoad(FArchive& Ar) override;
+
 	virtual void TickActor( float DeltaSeconds, ELevelTick TickType, FActorTickFunction& ThisTickFunction );
 	
 	void MarkPickingDirty();
