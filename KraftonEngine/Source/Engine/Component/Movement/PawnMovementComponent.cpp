@@ -21,6 +21,6 @@ APawn* UPawnMovementComponent::GetPawnOwner()
 
 void UPawnMovementComponent::SetUpdatedComponent(USceneComponent* NewUpdatedComponent)
 {
-	if (!NewUpdatedComponent || !NewUpdatedComponent->IsA(APawn)) return;
+	if (!NewUpdatedComponent || !NewUpdatedComponent->GetOwner() || !NewUpdatedComponent->GetOwner()->IsA<APawn>()) return;
 	UpdatedComponent = NewUpdatedComponent;
 }
