@@ -47,6 +47,10 @@ public:
 	virtual void SetActorKinematicTarget(FPhysicsActorHandle Actor, const FTransform& WorldPose) = 0;
 	virtual void SetActorMass(FPhysicsActorHandle Actor, float Mass) = 0;
 
+	// --- Raw physics constraint path (PhysicsAsset / ragdoll) ---
+	virtual FPhysicsConstraintHandle CreateConstraint(const FConstraintCreationParams& Params) = 0;
+	virtual void ReleaseConstraint(FPhysicsConstraintHandle Constraint) = 0;
+
 	// --- 시뮬레이션 ---
 	virtual void Tick(float DeltaTime) = 0;
 

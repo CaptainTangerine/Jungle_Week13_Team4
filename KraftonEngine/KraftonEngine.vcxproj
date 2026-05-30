@@ -684,6 +684,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Engine\Particle\VectorField\VectorFieldManager.cpp" />
     <ClCompile Include="Source\Engine\Physics\BodyInstance.cpp" />
     <ClCompile Include="Source\Engine\Physics\BodyInstanceCore.cpp" />
+    <ClCompile Include="Source\Engine\Physics\ConstraintInstance.cpp" />
     <ClCompile Include="Source\Engine\Physics\PhysXPhysicsScene.cpp" />
     <ClCompile Include="Source\Engine\Physics\Asset\BodyConstraintGenerator.cpp" />
     <ClCompile Include="Source\Engine\Physics\Asset\BodySetup.cpp" />
@@ -1098,6 +1099,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Engine\Particle\VectorField\VectorFieldManager.h" />
     <ClInclude Include="Source\Engine\Physics\BodyInstance.h" />
     <ClInclude Include="Source\Engine\Physics\BodyInstanceCore.h" />
+    <ClInclude Include="Source\Engine\Physics\ConstraintInstance.h" />
     <ClInclude Include="Source\Engine\Physics\IPhysicsScene.h" />
     <ClInclude Include="Source\Engine\Physics\PhysXPhysicsScene.h" />
     <ClInclude Include="Source\Engine\Physics\PhysicsHandles.h" />

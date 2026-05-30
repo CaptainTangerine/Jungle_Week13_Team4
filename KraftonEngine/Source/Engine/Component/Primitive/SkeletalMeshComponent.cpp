@@ -21,6 +21,7 @@
 #include "Physics/Asset/BodySetup.h"
 #include "Physics/Asset/PhysicsAsset.h"
 #include "Physics/BodyInstance.h"
+#include "Physics/ConstraintInstance.h"
 #include "Physics/IPhysicsScene.h"
 #include "Render/Proxy/SkeletalMeshSceneProxy.h"
 #include "Serialization/Archive.h"
@@ -136,6 +137,19 @@ FBodyInstance* USkeletalMeshComponent::GetBodyInstance(int32 BoneIndex) const
         if (Body && Body->InstanceBoneIndex == BoneIndex)
         {
             return Body;
+        }
+    }
+
+    return nullptr;
+}
+
+FConstraintInstance* USkeletalMeshComponent::GetConstraintInstance(FName ChildBoneName) const
+{
+    for (FConstraintInstance* Constraint : Constraints)
+    {
+        if (Constraint && Constraint->ConstraintBone1 == ChildBoneName)
+        {
+            return Constraint;
         }
     }
 
@@ -462,6 +476,34 @@ bool USkeletalMeshComponent::InstantiatePhysicsAsset_Internal(
         }
     }
 
+    for (const FConstraintSetup& ConstraintSetup : InPhysicsAsset->ConstraintSetups)
+    {
+        FBodyInstance* ChildBody = GetBodyInstance(ConstraintSetup.ChildBone);
+        FBodyInstance* ParentBody = GetBodyInstance(ConstraintSetup.ParentBone);
+        if (!ChildBody || !ParentBody)
+        {
+            UE_LOG("PhysicsAsset constraint skipped: body not found. Mesh=%s Parent=%s Child=%s",
+                Mesh->GetName().c_str(),
+                ConstraintSetup.ParentBone.ToString().c_str(),
+                ConstraintSetup.ChildBone.ToString().c_str());
+            continue;
+        }
+
+        FConstraintInstance* ConstraintInstance = new FConstraintInstance();
+        if (ConstraintInstance->InitConstraint(PhysicsScene, ChildBody, ParentBody, &ConstraintSetup))
+        {
+            Constraints.push_back(ConstraintInstance);
+        }
+        else
+        {
+            delete ConstraintInstance;
+            UE_LOG("PhysicsAsset constraint creation failed. Mesh=%s Parent=%s Child=%s",
+                Mesh->GetName().c_str(),
+                ConstraintSetup.ParentBone.ToString().c_str(),
+                ConstraintSetup.ChildBone.ToString().c_str());
+        }
+    }
+
     return !Bodies.empty();
 }
 
@@ -469,6 +511,16 @@ void USkeletalMeshComponent::TermArticulated()
 {
     UWorld* World = GetWorld();
     IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+
+    for (FConstraintInstance* Constraint : Constraints)
+    {
+        if (Constraint)
+        {
+            Constraint->TermConstraint(PhysicsScene);
+            delete Constraint;
+        }
+    }
+    Constraints.clear();
 
     for (FBodyInstance* Body : Bodies)
     {

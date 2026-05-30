@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Component/Primitive/SkinnedMeshComponent.h"
 #include "Animation/AnimationMode.h"
@@ -12,6 +12,7 @@ class UAnimSequenceBase;
 class UClass;
 class UPhysicsAsset;
 struct FBodyInstance;
+struct FConstraintInstance;
 
 // SkeletalMesh 전용 render proxy만 제공하는 얇은 wrapper.
 // Skinning/bone/material/bounds 상태는 모두 USkinnedMeshComponent가 소유한다.
@@ -62,8 +63,10 @@ public:
     UPhysicsAsset* GetPhysicsAssetOverride() const { return PhysicsAssetOverride; }
     UPhysicsAsset* GetPhysicsAsset() const;
     const TArray<FBodyInstance*>& GetBodies() const { return Bodies; }
+    const TArray<FConstraintInstance*>& GetConstraints() const { return Constraints; }
     FBodyInstance* GetBodyInstance(FName BoneName) const;
     FBodyInstance* GetBodyInstance(int32 BoneIndex) const;
+    FConstraintInstance* GetConstraintInstance(FName ChildBoneName) const;
 
     // SingleNode 모드에서 현재 자동 생성된 노드를 반환한다. NodeName 은 현재 단일 노드 구조에서는 무시한다.
     UAnimSingleNodeInstance* GetAnimNodeInstance(FName NodeName) const;
@@ -108,4 +111,5 @@ protected:
 
     UPhysicsAsset*             PhysicsAssetOverride = nullptr;
     TArray<FBodyInstance*>     Bodies;
+    TArray<FConstraintInstance*> Constraints;
 };

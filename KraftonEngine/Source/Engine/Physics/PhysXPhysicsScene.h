@@ -16,6 +16,7 @@ namespace physx
 	class PxMaterial;
 	class PxRigidActor;
 	class PxShape;
+	class PxD6Joint;
 }
 
 class FPhysXSimulationCallback;
@@ -58,6 +59,9 @@ public:
 	void SetActorKinematic(FPhysicsActorHandle Actor, bool bKinematic) override;
 	void SetActorKinematicTarget(FPhysicsActorHandle Actor, const FTransform& WorldPose) override;
 	void SetActorMass(FPhysicsActorHandle Actor, float Mass) override;
+
+	FPhysicsConstraintHandle CreateConstraint(const FConstraintCreationParams& Params) override;
+	void ReleaseConstraint(FPhysicsConstraintHandle Constraint) override;
 
 	void Tick(float DeltaTime) override;
 
@@ -102,6 +106,7 @@ private:
 		TArray<UPrimitiveComponent*> Components; // 등록된 컴포넌트들 (shape 1:1 매칭)
 	};
 	std::vector<FBodyMapping> BodyMappings;
+	std::vector<physx::PxD6Joint*> RawConstraints;
 
 	// 내부 헬퍼
 	FBodyMapping* FindMappingByActor(AActor* OwnerActor);
