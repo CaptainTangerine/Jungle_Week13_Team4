@@ -67,6 +67,9 @@
     <Filter Include="Source\Editor\UI\Asset\Mesh">
       <UniqueIdentifier>{5084842c-4071-bc7f-36a2-4a3bf67026e8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Editor\UI\Asset\Physics">
+      <UniqueIdentifier>{7c1f9a02-3b6d-4e21-9f88-2a5c6d4e1b30}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source\Editor\UI\Asset\Particle">
       <UniqueIdentifier>{ebf11781-61db-1727-e031-70fd890518c6}</UniqueIdentifier>
     </Filter>
@@ -267,6 +270,9 @@
     </Filter>
     <Filter Include="Source\Engine\Physics">
       <UniqueIdentifier>{c1985821-1144-9a46-639a-f7de31f4a1fa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Engine\Physics\Asset">
+      <UniqueIdentifier>{2b8b7095-ed81-73fd-94d5-c4642b32a800}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source\Engine\Platform">
       <UniqueIdentifier>{813e0a37-91de-2afc-805f-1a0f801727b9}</UniqueIdentifier>
@@ -691,6 +697,9 @@
     </ClCompile>
     <ClCompile Include="Source\Editor\UI\Asset\Mesh\MeshEditorWidget.cpp">
       <Filter>Source\Editor\UI\Asset\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Editor\UI\Asset\Physics\PhysicsAssetEditorWidget.cpp">
+      <Filter>Source\Editor\UI\Asset\Physics</Filter>
     </ClCompile>
     <ClCompile Include="Source\Editor\UI\Asset\Mesh\StaticMeshEditorWidget.cpp">
       <Filter>Source\Editor\UI\Asset\Mesh</Filter>
@@ -1760,6 +1769,9 @@
     <ClInclude Include="Source\Editor\UI\Asset\Mesh\MeshEditorWidget.h">
       <Filter>Source\Editor\UI\Asset\Mesh</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Editor\UI\Asset\Physics\PhysicsAssetEditorWidget.h">
+      <Filter>Source\Editor\UI\Asset\Physics</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Editor\UI\Asset\Mesh\StaticMeshEditorWidget.h">
       <Filter>Source\Editor\UI\Asset\Mesh</Filter>
     </ClInclude>
@@ -2551,6 +2563,21 @@
     </ClInclude>
     <ClInclude Include="Source\Engine\Physics\PhysXPhysicsScene.h">
       <Filter>Source\Engine\Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\PhysicsHandles.h">
+      <Filter>Source\Engine\Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\Asset\BodySetup.h">
+      <Filter>Source\Engine\Physics\Asset</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\Asset\ConstraintSetup.h">
+      <Filter>Source\Engine\Physics\Asset</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAsset.h">
+      <Filter>Source\Engine\Physics\Asset</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAssetTypes.h">
+      <Filter>Source\Engine\Physics\Asset</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Platform\ConsoleHelper.h">
       <Filter>Source\Engine\Platform</Filter>
