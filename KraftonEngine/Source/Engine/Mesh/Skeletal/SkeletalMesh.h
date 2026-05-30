@@ -5,6 +5,7 @@
 #include "Animation/Skeleton/SkeletonTypes.h"
 
 class USkeleton;
+class UPhysicsAsset;
 
 
 #include "Source/Engine/Mesh/Skeletal/SkeletalMesh.generated.h"
@@ -42,6 +43,9 @@ public:
     void SetSkeletonBinding(const FSkeletonBinding& InBinding);
     const FSkeletonBinding& GetSkeletonBinding() const { return SkeletonBinding; }
 
+    void SetPhysicsAsset(UPhysicsAsset* InPhysicsAsset);
+    UPhysicsAsset* GetPhysicsAsset() const;
+
 private:
     void CacheSectionMaterialIndices();
     void SyncSkeletonBindingToAsset();
@@ -55,4 +59,5 @@ private:
 
     FSkeletonBinding SkeletonBinding;
     USkeleton*       Skeleton = nullptr;
+    UPhysicsAsset*   PhysicsAsset = nullptr;
 };

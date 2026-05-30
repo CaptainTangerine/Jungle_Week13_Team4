@@ -123,6 +123,16 @@ void USkeletalMesh::SetSkeletonBinding(const FSkeletonBinding& InBinding)
     SyncSkeletonBindingToAsset();
 }
 
+void USkeletalMesh::SetPhysicsAsset(UPhysicsAsset* InPhysicsAsset)
+{
+    PhysicsAsset = InPhysicsAsset;
+}
+
+UPhysicsAsset* USkeletalMesh::GetPhysicsAsset() const
+{
+    return PhysicsAsset;
+}
+
 void USkeletalMesh::SyncSkeletonBindingToAsset()
 {
     if (!SkeletalMeshAsset)

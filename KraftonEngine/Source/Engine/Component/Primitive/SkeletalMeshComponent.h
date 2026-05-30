@@ -10,6 +10,8 @@ class UAnimInstance;
 class UAnimSingleNodeInstance;
 class UAnimSequenceBase;
 class UClass;
+class UPhysicsAsset;
+struct FBodyInstance;
 
 // SkeletalMesh 전용 render proxy만 제공하는 얇은 wrapper.
 // Skinning/bone/material/bounds 상태는 모두 USkinnedMeshComponent가 소유한다.
@@ -56,6 +58,13 @@ public:
     void SetAnimInstance(UAnimInstance* InInstance);
     UAnimInstance* GetAnimInstance() const { return AnimInstance; }
 
+    void SetPhysicsAssetOverride(UPhysicsAsset* InPhysicsAsset);
+    UPhysicsAsset* GetPhysicsAssetOverride() const { return PhysicsAssetOverride; }
+    UPhysicsAsset* GetPhysicsAsset() const;
+    const TArray<FBodyInstance*>& GetBodies() const { return Bodies; }
+    FBodyInstance* GetBodyInstance(FName BoneName) const;
+    FBodyInstance* GetBodyInstance(int32 BoneIndex) const;
+
     // SingleNode 모드에서 현재 자동 생성된 노드를 반환한다. NodeName 은 현재 단일 노드 구조에서는 무시한다.
     UAnimSingleNodeInstance* GetAnimNodeInstance(FName NodeName) const;
 
@@ -82,6 +91,9 @@ protected:
 
 private:
     void LoadAnimationFromPath();
+    bool InstantiatePhysicsAssetRefPose();
+    bool InstantiatePhysicsAsset_Internal(UPhysicsAsset* InPhysicsAsset, const TArray<FTransform>& BoneWorldTransforms);
+    void TermArticulated();
 
 protected:
     // Animation 런타임 상태.
@@ -93,4 +105,7 @@ protected:
     TSubclassOf<UAnimInstance> AnimInstanceClass;
     UPROPERTY(Save, Instanced, Category="Animation", DisplayName="Anim Instance", Type=ObjectRef, AllowedClass=UAnimInstance)
     UAnimInstance*             AnimInstance  = nullptr;
+
+    UPhysicsAsset*             PhysicsAssetOverride = nullptr;
+    TArray<FBodyInstance*>     Bodies;
 };

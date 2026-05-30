@@ -10,6 +10,7 @@
 #include "Asset/AssetRegistry.h"
 #include "Core/Logging/Log.h"
 #include "GameFramework/AActor.h"
+#include "GameFramework/World.h"
 #include "Math/Quat.h"
 #include "Math/Vector.h"
 #include "Mesh/Skeletal/SkeletalMesh.h"
@@ -17,6 +18,10 @@
 #include "Object/Object.h"
 #include "Object/Reflection/ObjectFactory.h"
 #include "Object/Reflection/UClass.h"
+#include "Physics/Asset/BodySetup.h"
+#include "Physics/Asset/PhysicsAsset.h"
+#include "Physics/BodyInstance.h"
+#include "Physics/IPhysicsScene.h"
 #include "Render/Proxy/SkeletalMeshSceneProxy.h"
 #include "Serialization/Archive.h"
 
@@ -25,31 +30,33 @@
 
 USkeletalMeshComponent::~USkeletalMeshComponent()
 {
+    DestroyPhysicsState();
     ClearAnimInstance();
 }
 
 void USkeletalMeshComponent::OnCreatePhysicsState()
 {
-	// 의도적으로 UPrimitive가 아니라 UActor를 둬 Component 기준이 아니라 BodySetup기준으로 pxActor를 만든다.
-    UActorComponent::OnCreatePhysicsState();
-
-	// TODO : InitArticulated()
-	// 
+    if (InstantiatePhysicsAssetRefPose())
+    {
+        UActorComponent::OnCreatePhysicsState();
+    }
 }
 
 void USkeletalMeshComponent::OnDestroyPhysicsState()
 {
+    TermArticulated();
     UActorComponent::OnDestroyPhysicsState();
 }
 
 bool USkeletalMeshComponent::ShouldCreatePhysicsState() const
 {
-    return GetSkeletalMesh() != nullptr && IsQueryCollisionEnabled();
+    UPhysicsAsset* PhysAsset = GetPhysicsAsset();
+    return GetSkeletalMesh() != nullptr && IsCollisionEnabled() && PhysAsset && !PhysAsset->BodySetups.empty();
 }
 
 bool USkeletalMeshComponent::HasValidPhysicsState() const
 {
-    return IsPhysicsStateCreated();
+    return IsPhysicsStateCreated() && !Bodies.empty();
 }
 
 FPrimitiveSceneProxy* USkeletalMeshComponent::CreateSceneProxy()
@@ -59,10 +66,80 @@ FPrimitiveSceneProxy* USkeletalMeshComponent::CreateSceneProxy()
 
 void USkeletalMeshComponent::SetSkeletalMesh(USkeletalMesh* InMesh)
 {
+    const bool bRecreatePhysicsState = IsPhysicsStateCreated();
+    if (bRecreatePhysicsState)
+    {
+        DestroyPhysicsState();
+    }
+
     Super::SetSkeletalMesh(InMesh);
     // Mesh 가 바뀌면 이전 AnimInstance 가 가리키던 본 인덱스/카운트가 무의미해진다.
     // 새 SkeletalMesh 기준으로 AnimInstance 를 재인스턴스화한다.
     InitializeAnimation();
+
+    if (bRecreatePhysicsState)
+    {
+        CreatePhysicsState();
+    }
+}
+
+void USkeletalMeshComponent::SetPhysicsAssetOverride(UPhysicsAsset* InPhysicsAsset)
+{
+    if (PhysicsAssetOverride == InPhysicsAsset)
+    {
+        return;
+    }
+
+    const bool bRecreatePhysicsState = IsPhysicsStateCreated();
+    if (bRecreatePhysicsState)
+    {
+        DestroyPhysicsState();
+    }
+
+    PhysicsAssetOverride = InPhysicsAsset;
+
+    if (bRecreatePhysicsState)
+    {
+        CreatePhysicsState();
+    }
+}
+
+UPhysicsAsset* USkeletalMeshComponent::GetPhysicsAsset() const
+{
+    if (PhysicsAssetOverride)
+    {
+        return PhysicsAssetOverride;
+    }
+
+    USkeletalMesh* Mesh = GetSkeletalMesh();
+    return Mesh ? Mesh->GetPhysicsAsset() : nullptr;
+}
+
+FBodyInstance* USkeletalMeshComponent::GetBodyInstance(FName BoneName) const
+{
+    for (FBodyInstance* Body : Bodies)
+    {
+        UBodySetup* Setup = Body ? Body->GetBodySetup() : nullptr;
+        if (Setup && Setup->BoneName == BoneName)
+        {
+            return Body;
+        }
+    }
+
+    return nullptr;
+}
+
+FBodyInstance* USkeletalMeshComponent::GetBodyInstance(int32 BoneIndex) const
+{
+    for (FBodyInstance* Body : Bodies)
+    {
+        if (Body && Body->InstanceBoneIndex == BoneIndex)
+        {
+            return Body;
+        }
+    }
+
+    return nullptr;
 }
 
 void USkeletalMeshComponent::PlayAnimation(UAnimSequenceBase* NewAnimToPlay, bool bLooping)
@@ -312,6 +389,96 @@ void USkeletalMeshComponent::ClearAnimInstance()
         UObjectManager::Get().DestroyObject(AnimInstance);
         AnimInstance = nullptr;
     }
+}
+
+bool USkeletalMeshComponent::InstantiatePhysicsAssetRefPose()
+{
+    USkeletalMesh* Mesh = GetSkeletalMesh();
+    UPhysicsAsset* PhysAsset = GetPhysicsAsset();
+    FSkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+    if (!PhysAsset || !Asset || Asset->Bones.empty())
+    {
+        return false;
+    }
+
+    TArray<FTransform> BoneWorldTransforms;
+    BoneWorldTransforms.resize(Asset->Bones.size());
+
+    const FMatrix& ComponentToWorld = GetWorldMatrix();
+    for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(Asset->Bones.size()); ++BoneIndex)
+    {
+        const FMatrix BoneWorldMatrix = Asset->Bones[BoneIndex].GetReferenceGlobalPose() * ComponentToWorld;
+        BoneWorldTransforms[BoneIndex] = FTransform(BoneWorldMatrix);
+    }
+
+    return InstantiatePhysicsAsset_Internal(PhysAsset, BoneWorldTransforms);
+}
+
+bool USkeletalMeshComponent::InstantiatePhysicsAsset_Internal(
+    UPhysicsAsset* InPhysicsAsset,
+    const TArray<FTransform>& BoneWorldTransforms)
+{
+    TermArticulated();
+
+    UWorld* World = GetWorld();
+    IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+    USkeletalMesh* Mesh = GetSkeletalMesh();
+    FSkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+    if (!InPhysicsAsset || !PhysicsScene || !Asset || BoneWorldTransforms.empty())
+    {
+        return false;
+    }
+
+    const FVector WorldScale = GetWorldScale();
+    for (UBodySetup* BodySetup : InPhysicsAsset->BodySetups)
+    {
+        if (!BodySetup)
+        {
+            continue;
+        }
+
+        const int32 BoneIndex = FindBoneIndex(BodySetup->BoneName.ToString());
+        if (BoneIndex < 0 || BoneIndex >= static_cast<int32>(BoneWorldTransforms.size()))
+        {
+            UE_LOG("PhysicsAsset body skipped: bone not found. Mesh=%s Bone=%s",
+                Mesh->GetName().c_str(),
+                BodySetup->BoneName.ToString().c_str());
+            continue;
+        }
+
+        FBodyInstance* BodyInstance = new FBodyInstance();
+        BodyInstance->Scale3D = WorldScale;
+
+        if (BodyInstance->InitBody(BodySetup, BoneWorldTransforms[BoneIndex], PhysicsScene, BoneIndex))
+        {
+            Bodies.push_back(BodyInstance);
+        }
+        else
+        {
+            delete BodyInstance;
+            UE_LOG("PhysicsAsset body creation failed. Mesh=%s Bone=%s",
+                Mesh->GetName().c_str(),
+                BodySetup->BoneName.ToString().c_str());
+        }
+    }
+
+    return !Bodies.empty();
+}
+
+void USkeletalMeshComponent::TermArticulated()
+{
+    UWorld* World = GetWorld();
+    IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+
+    for (FBodyInstance* Body : Bodies)
+    {
+        if (Body)
+        {
+            Body->TermBody(PhysicsScene);
+            delete Body;
+        }
+    }
+    Bodies.clear();
 }
 
 void USkeletalMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
