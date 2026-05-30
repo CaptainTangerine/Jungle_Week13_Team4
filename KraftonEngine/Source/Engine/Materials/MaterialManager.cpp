@@ -1,4 +1,4 @@
-#include "MaterialManager.h"
+﻿#include "MaterialManager.h"
 #include <filesystem>
 #include <fstream>
 #include "Materials/Material.h"
@@ -76,6 +76,11 @@ UMaterial* FMaterialManager::GetOrCreateMaterial(const FString& MatFilePath)
 	FString RenderPassStr = JsonData[MatKeys::RenderPass].ToString().c_str();
 	ERenderPass RenderPass = StringToRenderPass(RenderPassStr);
 
+	// TranslucencyPass (AlphaBlend 머티리얼의 DOF 전/후 렌더 시점). 키가 없으면 AfterDOF.
+	const bool bHasTransPassKey = JsonData.hasKey(MatKeys::TranslucencyPass);
+	FString TransPassStr = bHasTransPassKey ? JsonData[MatKeys::TranslucencyPass].ToString().c_str() : "";
+	ETranslucencyPass TranslucencyPass = StringToTranslucencyPass(TransPassStr);
+
 	// 새로운 렌더 상태 추출 (JSON에 없으면 패스 기반 기본값)
 	FString BlendStr = JsonData.hasKey(MatKeys::BlendState) ? JsonData[MatKeys::BlendState].ToString().c_str() : "";
 	FString DepthStr = JsonData.hasKey(MatKeys::DepthStencilState) ? JsonData[MatKeys::DepthStencilState].ToString().c_str() : "";
@@ -95,6 +100,7 @@ UMaterial* FMaterialManager::GetOrCreateMaterial(const FString& MatFilePath)
 	// 6. UMaterial 인스턴스 생성 및 초기화 (RenderPass는 인스턴스별)
 	UMaterial* Material = UObjectManager::Get().CreateObject<UMaterial>();
 	Material->Create(PathFileName, Template, RenderPass, BlendState, DepthState, RasterState, std::move(InjectedBuffers));
+	Material->SetTranslucencyPass(TranslucencyPass);
 	MaterialCache.emplace(GenericPath, Material);
 
 	//템플릿을 통해 material에 넣기
@@ -112,9 +118,13 @@ UMaterial* FMaterialManager::GetOrCreateMaterial(const FString& MatFilePath)
 	JsonData[MatKeys::BlendState] = BlendStr.empty() ? "" : BlendStr.c_str();
 	JsonData[MatKeys::DepthStencilState] = DepthStr.empty() ? "" : DepthStr.c_str();
 	JsonData[MatKeys::RasterizerState] = RasterStr.empty() ? "" : RasterStr.c_str();
+	JsonData[MatKeys::TranslucencyPass] = RenderStateStrings::ToString(RenderStateStrings::TranslucencyPassMap, TranslucencyPass);
+
+	// AlphaBlend 머티리얼에 키가 없던 경우엔 기본값을 파일에 기록해 둔다.
+	const bool bTransPassMissing = (RenderPass == ERenderPass::AlphaBlend) && !bHasTransPassKey;
 
 	//최종적으로 material 저장
-	if (bInjected || bPurged)
+	if (bInjected || bPurged || bTransPassMissing)
 	{
 		SaveToJSON(JsonData, GenericPath);
 	}
@@ -218,6 +228,13 @@ ERenderPass FMaterialManager::StringToRenderPass(const FString& Str) const
 {
 	using namespace RenderStateStrings;
 	return FromString(RenderPassMap, Str, ERenderPass::Opaque);
+}
+
+ETranslucencyPass FMaterialManager::StringToTranslucencyPass(const FString& Str) const
+{
+	using namespace RenderStateStrings;
+	// 키가 없거나 비어있으면 AfterDOF (기존 AlphaBlend 동작과 동일 = 하위 호환)
+	return FromString(TranslucencyPassMap, Str, ETranslucencyPass::AfterDOF);
 }
 
 EBlendState FMaterialManager::StringToBlendState(const FString& Str, ERenderPass Pass) const

@@ -175,6 +175,24 @@ bool UMaterial::SetMatrixParameter(const FString& ParamName, const FMatrix& Valu
 	return SetParameter(ParamName, Value.Data, sizeof(float) * 16);
 }
 
+ERenderPass UMaterial::GetRenderPass() const
+{
+	if (RenderPass != ERenderPass::AlphaBlend) return RenderPass;
+	switch (TranslucencyPass)
+	{
+	case (ETranslucencyPass::BeforeDOF):
+	{
+		return ERenderPass::AlphaBlend;
+	}
+	case (ETranslucencyPass::AfterDOF):
+	{
+		return ERenderPass::PostDOFAlpha;
+	}
+	}
+
+	return RenderPass;
+}
+
 bool UMaterial::GetScalarParameter(const FString& ParamName, float& OutValue) const
 {
 	FMaterialParameterInfo Info;

@@ -11,6 +11,8 @@
 
 // PhysX headers
 #include <PxPhysicsAPI.h>
+#include <algorithm>
+#include <cmath>
 
 using namespace physx;
 
@@ -287,6 +289,16 @@ static FQuat ToFQuat(const PxQuat& Q)
 	return FQuat(Q.x, Q.y, Q.z, Q.w);
 }
 
+static PxTransform ToPxTransform(const FTransform& T)
+{
+	return PxTransform(ToPxVec3(T.Location), ToPxQuat(T.Rotation));
+}
+
+static FTransform ToFTransform(const PxTransform& T)
+{
+	return FTransform(ToFVector(T.p), ToFQuat(T.q), FVector(1.0f, 1.0f, 1.0f));
+}
+
 static PxTransform GetPxTransform(UPrimitiveComponent* Comp)
 {
 	FVector Pos = Comp->GetWorldLocation();
@@ -329,6 +341,25 @@ static void SetupFilterData(PxShape* Shape, UPrimitiveComponent* Comp)
 		ECollisionResponse R = Comp->GetCollisionResponseToChannel(static_cast<ECollisionChannel>(Ch));
 		if (R == ECollisionResponse::Block)   Filter.word1 |= (1u << Ch);
 		if (R == ECollisionResponse::Overlap) Filter.word2 |= (1u << Ch);
+	}
+
+	Shape->setSimulationFilterData(Filter);
+	Shape->setQueryFilterData(Filter);
+}
+
+static void SetupDefaultRawBodyFilterData(PxShape* Shape)
+{
+	if (!Shape) return;
+
+	PxFilterData Filter;
+	Filter.word0 = static_cast<PxU32>(ECollisionChannel::WorldDynamic);
+	Filter.word1 = 0;
+	Filter.word2 = 0;
+	Filter.word3 = 0;
+
+	for (int32 Ch = 0; Ch < static_cast<int32>(ECollisionChannel::ActiveCount); ++Ch)
+	{
+		Filter.word1 |= (1u << Ch);
 	}
 
 	Shape->setSimulationFilterData(Filter);
@@ -583,6 +614,222 @@ void FPhysXPhysicsScene::RebuildBody(UPrimitiveComponent* Comp)
 	{
 		RegisterComponent(C);
 	}
+}
+
+FPhysicsActorHandle FPhysXPhysicsScene::CreateActor(const FActorCreationParams& Params)
+{
+	if (!Scene || !Physics)
+	{
+		return {};
+	}
+
+	PxRigidActor* NewActor = nullptr;
+	const PxTransform InitialPose = ToPxTransform(Params.InitialTM);
+
+	if (Params.bStatic)
+	{
+		NewActor = Physics->createRigidStatic(InitialPose);
+	}
+	else
+	{
+		PxRigidDynamic* NewDynamic = Physics->createRigidDynamic(InitialPose);
+		if (NewDynamic)
+		{
+			NewDynamic->setRigidBodyFlag(PxRigidBodyFlag::eUSE_KINEMATIC_TARGET_FOR_SCENE_QUERIES, true);
+			NewDynamic->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, !Params.bSimulatePhysics);
+		}
+		NewActor = NewDynamic;
+	}
+
+	if (!NewActor)
+	{
+		return {};
+	}
+
+	if (Params.DebugName)
+	{
+		NewActor->setName(Params.DebugName);
+	}
+
+	NewActor->userData = Params.UserData;
+	NewActor->setActorFlag(PxActorFlag::eDISABLE_GRAVITY, !Params.bEnableGravity);
+	if (Params.bQueryOnly)
+	{
+		NewActor->setActorFlag(PxActorFlag::eDISABLE_SIMULATION, true);
+	}
+
+	Scene->addActor(*NewActor);
+
+	if (PxRigidDynamic* Dynamic = NewActor->is<PxRigidDynamic>())
+	{
+		if (Params.bStartAwake)
+		{
+			Dynamic->wakeUp();
+		}
+		else if (Params.bSimulatePhysics)
+		{
+			Dynamic->putToSleep();
+		}
+	}
+
+	return FPhysicsActorHandle{ NewActor };
+}
+
+void FPhysXPhysicsScene::ReleaseActor(FPhysicsActorHandle Actor)
+{
+	PxRigidActor* RigidActor = static_cast<PxRigidActor*>(Actor.Internal);
+	if (!RigidActor)
+	{
+		return;
+	}
+
+	if (PxScene* OwningScene = RigidActor->getScene())
+	{
+		OwningScene->removeActor(*RigidActor);
+	}
+	RigidActor->release();
+}
+
+bool FPhysXPhysicsScene::IsActorValid(FPhysicsActorHandle Actor) const
+{
+	return Actor.Internal != nullptr;
+}
+
+bool FPhysXPhysicsScene::AddGeometry(FPhysicsActorHandle Actor, const FGeometryAddParams& Params)
+{
+	PxRigidActor* RigidActor = static_cast<PxRigidActor*>(Actor.Internal);
+	if (!RigidActor || !DefaultMaterial || !Params.Geometry)
+	{
+		return false;
+	}
+
+	const float AbsScaleX = std::max(std::abs(Params.Scale.X), 0.001f);
+	const float AbsScaleY = std::max(std::abs(Params.Scale.Y), 0.001f);
+	const float AbsScaleZ = std::max(std::abs(Params.Scale.Z), 0.001f);
+	const PxTransform BaseLocalPose = ToPxTransform(Params.LocalTransform);
+	int32 NumCreatedShapes = 0;
+
+	auto ScalePosition = [&](const FVector& P)
+	{
+		return FVector(P.X * Params.Scale.X, P.Y * Params.Scale.Y, P.Z * Params.Scale.Z);
+	};
+
+	auto AttachShape = [&](const PxGeometry& Geometry, const PxTransform& LocalPose)
+	{
+		PxShape* Shape = PxRigidActorExt::createExclusiveShape(*RigidActor, Geometry, *DefaultMaterial);
+		if (!Shape)
+		{
+			return;
+		}
+
+		Shape->setLocalPose(BaseLocalPose * LocalPose);
+		Shape->userData = Params.UserData;
+		SetupDefaultRawBodyFilterData(Shape);
+		++NumCreatedShapes;
+	};
+
+	for (const FKSphereElem& Sphere : Params.Geometry->SphereElems)
+	{
+		const float RadiusScale = std::max({ AbsScaleX, AbsScaleY, AbsScaleZ });
+		const float Radius = std::max(Sphere.Radius * RadiusScale, 0.001f);
+		const PxTransform LocalPose(ToPxVec3(ScalePosition(Sphere.Center)), PxQuat(PxIdentity));
+		AttachShape(PxSphereGeometry(Radius), LocalPose);
+	}
+
+	for (const FKBoxElem& Box : Params.Geometry->BoxElems)
+	{
+		const float HalfX = std::max(Box.HalfExtent.X * AbsScaleX, 0.001f);
+		const float HalfY = std::max(Box.HalfExtent.Y * AbsScaleY, 0.001f);
+		const float HalfZ = std::max(Box.HalfExtent.Z * AbsScaleZ, 0.001f);
+		const PxTransform LocalPose(
+			ToPxVec3(ScalePosition(Box.Center)),
+			ToPxQuat(Box.Rotation.ToQuaternion()));
+		AttachShape(PxBoxGeometry(HalfX, HalfY, HalfZ), LocalPose);
+	}
+
+	for (const FKSphylElem& Sphyl : Params.Geometry->SphylElems)
+	{
+		const float RadiusScale = std::max(AbsScaleY, AbsScaleZ);
+		const float Radius = std::max(Sphyl.Radius * RadiusScale, 0.001f);
+		const float HalfHeight = std::max((Sphyl.Length * 0.5f) * AbsScaleX, 0.001f);
+		PxTransform LocalPose(
+			ToPxVec3(ScalePosition(Sphyl.Center)),
+			ToPxQuat(Sphyl.Rotation.ToQuaternion()));
+		LocalPose.q = LocalPose.q * PxQuat(PxHalfPi, PxVec3(0.0f, 0.0f, 1.0f));
+		AttachShape(PxCapsuleGeometry(Radius, HalfHeight), LocalPose);
+	}
+
+	if (NumCreatedShapes > 0)
+	{
+		if (PxRigidDynamic* Dynamic = RigidActor->is<PxRigidDynamic>())
+		{
+			PxRigidBodyExt::setMassAndUpdateInertia(*Dynamic, std::max(Dynamic->getMass(), 1.0f));
+		}
+	}
+
+	return NumCreatedShapes > 0;
+}
+
+void FPhysXPhysicsScene::SetActorGlobalPose(FPhysicsActorHandle Actor, const FTransform& WorldPose)
+{
+	PxRigidActor* RigidActor = static_cast<PxRigidActor*>(Actor.Internal);
+	if (!RigidActor)
+	{
+		return;
+	}
+
+	RigidActor->setGlobalPose(ToPxTransform(WorldPose));
+	if (PxRigidDynamic* Dynamic = RigidActor->is<PxRigidDynamic>())
+	{
+		Dynamic->wakeUp();
+	}
+}
+
+FTransform FPhysXPhysicsScene::GetActorGlobalPose(FPhysicsActorHandle Actor) const
+{
+	const PxRigidActor* RigidActor = static_cast<const PxRigidActor*>(Actor.Internal);
+	return RigidActor ? ToFTransform(RigidActor->getGlobalPose()) : FTransform();
+}
+
+void FPhysXPhysicsScene::SetActorKinematic(FPhysicsActorHandle Actor, bool bKinematic)
+{
+	PxRigidActor* RigidActor = static_cast<PxRigidActor*>(Actor.Internal);
+	PxRigidDynamic* Dynamic = RigidActor ? RigidActor->is<PxRigidDynamic>() : nullptr;
+	if (!Dynamic)
+	{
+		return;
+	}
+
+	Dynamic->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, bKinematic);
+	Dynamic->wakeUp();
+}
+
+void FPhysXPhysicsScene::SetActorKinematicTarget(FPhysicsActorHandle Actor, const FTransform& WorldPose)
+{
+	PxRigidActor* RigidActor = static_cast<PxRigidActor*>(Actor.Internal);
+	PxRigidDynamic* Dynamic = RigidActor ? RigidActor->is<PxRigidDynamic>() : nullptr;
+	if (!Dynamic)
+	{
+		return;
+	}
+
+	if (!(Dynamic->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC))
+	{
+		Dynamic->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
+	}
+	Dynamic->setKinematicTarget(ToPxTransform(WorldPose));
+}
+
+void FPhysXPhysicsScene::SetActorMass(FPhysicsActorHandle Actor, float Mass)
+{
+	PxRigidActor* RigidActor = static_cast<PxRigidActor*>(Actor.Internal);
+	PxRigidDynamic* Dynamic = RigidActor ? RigidActor->is<PxRigidDynamic>() : nullptr;
+	if (!Dynamic)
+	{
+		return;
+	}
+
+	PxRigidBodyExt::setMassAndUpdateInertia(*Dynamic, std::max(Mass, 0.001f));
 }
 
 // ============================================================

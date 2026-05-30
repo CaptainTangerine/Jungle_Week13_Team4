@@ -2,8 +2,11 @@
 
 #include "Core/Types/CoreTypes.h"
 #include "Math/Vector.h"
+#include "Math/Transform.h"
 #include "Core/Types/RayTypes.h"
 #include "Core/Types/CollisionTypes.h"
+#include "Physics/PhysicsHandles.h"
+#include "Physics/PhysicsInterfaceTypes.h"
 
 class UWorld;
 class AActor;
@@ -32,6 +35,17 @@ public:
 	// 컴포넌트의 SimulatePhysics/ObjectType/Response 등이 변경된 경우 호출.
 	// PhysX는 actor 단위로 unregister + register (compound shape의 다른 컴포넌트도 함께 재등록).
 	virtual void RebuildBody(UPrimitiveComponent* Comp) = 0;
+
+	// --- Raw physics actor path (PhysicsAsset / ragdoll) ---
+	virtual FPhysicsActorHandle CreateActor(const FActorCreationParams& Params) = 0;
+	virtual void ReleaseActor(FPhysicsActorHandle Actor) = 0;
+	virtual bool IsActorValid(FPhysicsActorHandle Actor) const = 0;
+	virtual bool AddGeometry(FPhysicsActorHandle Actor, const FGeometryAddParams& Params) = 0;
+	virtual void SetActorGlobalPose(FPhysicsActorHandle Actor, const FTransform& WorldPose) = 0;
+	virtual FTransform GetActorGlobalPose(FPhysicsActorHandle Actor) const = 0;
+	virtual void SetActorKinematic(FPhysicsActorHandle Actor, bool bKinematic) = 0;
+	virtual void SetActorKinematicTarget(FPhysicsActorHandle Actor, const FTransform& WorldPose) = 0;
+	virtual void SetActorMass(FPhysicsActorHandle Actor, float Mass) = 0;
 
 	// --- 시뮬레이션 ---
 	virtual void Tick(float DeltaTime) = 0;

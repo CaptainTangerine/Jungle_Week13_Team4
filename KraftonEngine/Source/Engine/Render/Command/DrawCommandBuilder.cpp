@@ -642,6 +642,7 @@ void FDrawCommandBuilder::BuildDynamicDrawCommands(const FFrameContext& Frame, c
 {
 	EViewMode ViewMode = Frame.RenderOptions.ViewMode;
 	BuildEditorLineCommands(ViewMode);
+	BuildFogCommands(Frame, Scene);
 	BuildPostProcessCommands(Frame, Scene);
 	BuildFontCommands(ViewMode);
 }
@@ -681,37 +682,45 @@ void FDrawCommandBuilder::BuildEditorLineCommands(EViewMode ViewMode)
 }
 
 // ============================================================
-// BuildPostProcessCommands — HeightFog, Outline, SceneDepth, WorldNormal, FXAA
+// BuildFogCommands — HeightFog 풀스크린 (DOF 이전, 전용 Fog 패스)
+// ============================================================
+void FDrawCommandBuilder::BuildFogCommands(const FFrameContext& Frame, const FScene* CollectScene)
+{
+	if (!Frame.RenderOptions.ShowFlags.bFog || !CollectScene || !CollectScene->GetEnvironment().HasFog())
+		return;
+
+	FShader* FogShader = FShaderManager::Get().GetOrCreate(EShaderPath::HeightFog);
+	if (!FogShader) return;
+
+	ID3D11DeviceContext* Ctx = CachedContext;
+	EViewMode ViewMode = Frame.RenderOptions.ViewMode;
+	const FDrawCommandRenderState FogRS = PassRenderStateTable->ToDrawCommandState(ERenderPass::Fog, ViewMode);
+
+	const FFogParams& FogParams = CollectScene->GetEnvironment().GetFogParams();
+	FFogConstants fogData = {};
+	fogData.InscatteringColor = FogParams.InscatteringColor;
+	fogData.Density = FogParams.Density;
+	fogData.HeightFalloff = FogParams.HeightFalloff;
+	fogData.FogBaseHeight = FogParams.FogBaseHeight;
+	fogData.StartDistance = FogParams.StartDistance;
+	fogData.CutoffDistance = FogParams.CutoffDistance;
+	fogData.MaxOpacity = FogParams.MaxOpacity;
+	FogCB.Update(Ctx, &fogData, sizeof(FFogConstants));
+
+	FDrawCommand& Cmd = DrawCommandList.AddCommand();
+	Cmd.InitFullscreenTriangle(FogShader, ERenderPass::Fog, FogRS);
+	Cmd.Bindings.PerShaderCB[0] = &FogCB;
+	Cmd.BuildSortKey(0);
+}
+
+// ============================================================
+// BuildPostProcessCommands — Outline, SceneDepth, WorldNormal, Camera overlays
 // ============================================================
 void FDrawCommandBuilder::BuildPostProcessCommands(const FFrameContext& Frame, const FScene* CollectScene)
 {
 	ID3D11DeviceContext* Ctx = CachedContext;
 	EViewMode ViewMode = Frame.RenderOptions.ViewMode;
 	const FDrawCommandRenderState PPRS = PassRenderStateTable->ToDrawCommandState(ERenderPass::PostProcess, ViewMode);
-
-	// HeightFog (UserBits=0 → Outline보다 먼저)
-	if (Frame.RenderOptions.ShowFlags.bFog && CollectScene && CollectScene->GetEnvironment().HasFog())
-	{
-		FShader* FogShader = FShaderManager::Get().GetOrCreate(EShaderPath::HeightFog);
-		if (FogShader)
-		{
-			const FFogParams& FogParams = CollectScene->GetEnvironment().GetFogParams();
-			FFogConstants fogData = {};
-			fogData.InscatteringColor = FogParams.InscatteringColor;
-			fogData.Density = FogParams.Density;
-			fogData.HeightFalloff = FogParams.HeightFalloff;
-			fogData.FogBaseHeight = FogParams.FogBaseHeight;
-			fogData.StartDistance = FogParams.StartDistance;
-			fogData.CutoffDistance = FogParams.CutoffDistance;
-			fogData.MaxOpacity = FogParams.MaxOpacity;
-			FogCB.Update(Ctx, &fogData, sizeof(FFogConstants));
-
-			FDrawCommand& Cmd = DrawCommandList.AddCommand();
-			Cmd.InitFullscreenTriangle(FogShader, ERenderPass::PostProcess, PPRS);
-			Cmd.Bindings.PerShaderCB[0] = &FogCB;
-			Cmd.BuildSortKey(0);
-		}
-	}
 
 	// Outline (UserBits=1 → HeightFog 뒤)
 	if (bHasSelectionMaskCommands)

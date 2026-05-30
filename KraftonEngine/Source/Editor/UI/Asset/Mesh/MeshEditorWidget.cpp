@@ -1587,7 +1587,7 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 	}
 	else if (UBodySetup* Body = CurrentPhysicsAsset->BodySetups[BodyIdx])
 	{
-		// UPROPERTY(Edit) 전체(BoneName / Primitives / Mass / Simulate Physics)를 리플렉션으로
+		// UPROPERTY(Edit) 전체(BoneName / Physics Type / Primitives / Default Mass)를 리플렉션으로
 		// 자동 노출. Primitives 배열은 추가/삭제 + Center/Radius/Rotation/HalfExtent 등 개별
 		// 필드 편집까지 공용 FPropertyTable 이 재귀 렌더한다.
 		FPropertyTable::FContext Ctx;
