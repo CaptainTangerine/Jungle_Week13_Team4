@@ -39,6 +39,7 @@
 #include "Editor/UI/Util/EditorTextureManager.h"
 #include "Platform/Paths.h"
 #include "Object/Object.h"
+#include "Core/Logging/Log.h"
 
 #include <imgui.h>
 #include <algorithm>
@@ -192,6 +193,27 @@ namespace
 		return FPhysicsAssetManager::Get().Load(CandidatePath);
 	}
 
+	void LinkPhysicsAssetToMesh(USkeletalMesh* Mesh, UPhysicsAsset* PhysAsset, bool bSaveMesh)
+	{
+		if (!Mesh || !PhysAsset || PhysAsset->GetSourcePath().empty())
+		{
+			return;
+		}
+
+		if (Mesh->GetPhysicsAsset() == PhysAsset && Mesh->GetPhysicsAssetPath() == PhysAsset->GetSourcePath())
+		{
+			return;
+		}
+
+		Mesh->SetPhysicsAsset(PhysAsset);
+		if (bSaveMesh && !FMeshManager::SaveSkeletalMesh(Mesh))
+		{
+			UE_LOG("PhysicsAsset link save failed. Mesh=%s PhysicsAsset=%s",
+				Mesh->GetName().c_str(),
+				PhysAsset->GetSourcePath().c_str());
+		}
+	}
+
 	EUberLitDefines::ELightingModel GetLightingModelForViewMode(EViewMode ViewMode)
 	{
 		switch (ViewMode)
@@ -294,6 +316,7 @@ void FMeshEditorWidget::Open(UObject* Object)
 		if (USkeletalMesh* Mesh = Cast<USkeletalMesh>(EditedObject))
 		{
 			CurrentPhysicsAsset = ResolvePhysicsAssetForMesh(Mesh);
+			LinkPhysicsAssetToMesh(Mesh, CurrentPhysicsAsset, true);
 		}
 	}
 
@@ -1783,6 +1806,7 @@ UPhysicsAsset* FMeshEditorWidget::EnsurePhysicsAssetForCurrentSkeleton()
 
 		Asset->SetSourcePath(FPaths::ToUtf8(Candidate.generic_wstring()));
 		FPhysicsAssetManager::Get().Save(Asset);
+		LinkPhysicsAssetToMesh(Mesh, Asset, true);
 	}
 
 	CurrentPhysicsAsset = Asset;

@@ -15,9 +15,9 @@
 //   - 저작 : PhysicsAsset 에디터(B)
 //   - 소비 : 랙돌(B) — USkeletalMeshComponent 가 인스턴스화 / 디버그 바디 렌더(C)
 //
-//   직렬화: ConstraintSetups 는 UPROPERTY(Save) 리플렉션 자동(FStructProperty 배열,
-//   EPropertyType::Transform 지원). BodySetups 는 인스턴스드 UObject 배열이라
-//   배열 inner 의 Instanced 직렬화를 코드젠이 전파 못 해 Serialize 에서 수동 처리.
+//   직렬화: BodySetups 는 UPROPERTY(Edit, Save, Instanced) 리플렉션 자동
+//   (FArrayProperty + inner FObjectProperty(PF_InstancedReference)).
+//   ConstraintSetups 도 FStructProperty 배열로 자동 직렬화된다.
 // =====================================================================================
 UCLASS()
 class UPhysicsAsset : public UObject
@@ -29,11 +29,9 @@ public:
 
 	// 직렬화:
 	//   - SkeletonBinding   : 비-USTRUCT(plain) → operator<< 수동
-	//   - ConstraintSetups  : UPROPERTY(Save) → 리플렉션(FStructProperty 배열) 자동
-	//                         (EPropertyType::Transform 지원으로 FName/FTransform 모두 처리)
-	//   - BodySetups        : UPROPERTY(Edit, Save, Instanced) → 코드젠이 배열 inner
-	//                         FObjectProperty 에 PF_InstancedReference 를 전파해, 각 바디를
-	//                         ClassName + Properties 로 재귀 직렬화(리플렉션 자동).
+	//   - BodySetups        : UPROPERTY(Edit, Save, Instanced) → inner FObjectProperty 가
+	//                         PF_InstancedReference 를 받아 각 바디를 재귀 직렬화.
+	//   - ConstraintSetups  : UPROPERTY(Save) → 리플렉션(FStructProperty 배열) 자동.
 	void Serialize(FArchive& Ar) override;
 
 	// BoneName 으로 바디/조인트 조회 — 랙돌 인스턴스화·에디터 선택용.

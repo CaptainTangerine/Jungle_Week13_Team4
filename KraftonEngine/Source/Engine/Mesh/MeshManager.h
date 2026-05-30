@@ -59,6 +59,7 @@ public:
 	static UStaticMesh* LoadStaticMesh(const FString& PathFileName, const FImportOptions& Options, ID3D11Device* InDevice);
 
 	static USkeletalMesh* LoadSkeletalMesh(const FString& PathFileName , ID3D11Device* InDevice);
+	static bool           SaveSkeletalMesh(USkeletalMesh* SkeletalMesh);
 	static bool           ImportSkeletalMeshAsNew(const FString& SourceFbxPath, ID3D11Device* Device, USkeletalMesh*& OutSkeletalMesh);
 	static bool ImportSkeletonAsNew(const FString& SourceFbxPath, USkeleton*& OutSkeleton);
 	static bool           ImportSkeletalMesh(const FSkeletalMeshImportRequest& Request, ID3D11Device* Device, USkeletalMesh*& OutSkeletalMesh);

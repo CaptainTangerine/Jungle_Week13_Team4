@@ -441,6 +441,46 @@ static bool SaveSkeletalMeshBinary(USkeletalMesh* SkeletalMesh, const FString& B
 	return Writer.IsValid();
 }
 
+bool FMeshManager::SaveSkeletalMesh(USkeletalMesh* SkeletalMesh)
+{
+	if (!SkeletalMesh)
+	{
+		return false;
+	}
+
+	const FString PackagePath = NormalizeProjectPath(SkeletalMesh->GetAssetPathFileName());
+	if (PackagePath.empty() || PackagePath == "None")
+	{
+		UE_LOG("SkeletalMesh save failed: mesh has no package path. Mesh=%s", SkeletalMesh->GetName().c_str());
+		return false;
+	}
+
+	FString SourcePath;
+	FAssetImportMetadata Metadata;
+	if (FAssetPackage::ReadMetadata(PackagePath, EAssetPackageType::SkeletalMesh, Metadata))
+	{
+		SourcePath = Metadata.SourcePath;
+	}
+
+	if (SourcePath.empty() || SourcePath == "None")
+	{
+		if (const FSkeletalMesh* MeshAsset = SkeletalMesh->GetSkeletalMeshAsset())
+		{
+			SourcePath = MeshAsset->PathFileName;
+		}
+	}
+
+	if (!SaveSkeletalMeshBinary(SkeletalMesh, PackagePath, SourcePath))
+	{
+		return false;
+	}
+
+	SkeletalMesh->SetAssetPathFileName(PackagePath);
+	SkeletalMeshCache[PackagePath] = SkeletalMesh;
+	ScanMeshAssets();
+	return true;
+}
+
 static void LoadPhysicsAssetForSkeletalMesh(USkeletalMesh* SkeletalMesh)
 {
 	if (!SkeletalMesh) return;

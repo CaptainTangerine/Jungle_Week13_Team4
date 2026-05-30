@@ -7,7 +7,7 @@
 //                       PF_InstancedReference 를 받아 각 바디를 ClassName + Properties 로 재귀
 //                       직렬화. 로드 시 FObjectFactory 가 Outer=this 로 생성.
 //   - ConstraintSetups: UPROPERTY(Save) → FStructProperty 배열 리플렉션 자동.
-//   BodySetups/ConstraintSetups 는 SerializeProperties 한 번으로 모두 처리된다(수동 루프 제거).
+//   BodySetups/ConstraintSetups 는 SerializeProperties 한 번으로 모두 처리된다.
 // =====================================================================================
 void UPhysicsAsset::Serialize(FArchive& Ar)
 {
