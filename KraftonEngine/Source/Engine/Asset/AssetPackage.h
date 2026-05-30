@@ -23,7 +23,7 @@ enum class EAssetPackageType : uint32
 struct FAssetPackageHeader
 {
 	static constexpr uint32 MagicValue = 0x54455341; // ASET
-	static constexpr uint32 CurrentVersion = 2;
+	static constexpr uint32 CurrentVersion = 3;
 
 	uint32 Magic = MagicValue;
 	uint32 Version = CurrentVersion;

@@ -2,6 +2,12 @@
 #include "Object/Reflection/ObjectFactory.h"
 #include "Serialization/Archive.h"
 #include "Animation/Skeleton/Skeleton.h"
+#include "Physics/Asset/PhysicsAsset.h"
+
+namespace
+{
+	constexpr uint32 SkeletalMeshPhysicsAssetPathVersion = 3;
+}
 
 void USkeletalMesh::Serialize(FArchive& Ar)
 {
@@ -26,6 +32,21 @@ void USkeletalMesh::Serialize(FArchive& Ar)
 	Ar << SkeletalMeshAsset->Bones;
 	Ar << SkeletalMaterials;
 	Ar << SkeletalMeshAsset->MorphTargets;
+
+	if (Ar.IsSaving() || Ar.GetPackageVersion() >= SkeletalMeshPhysicsAssetPathVersion)
+	{
+		FString SerializedPhysicsAssetPath = Ar.IsSaving() ? PhysicsAssetPath.ToString() : FString();
+		Ar << SerializedPhysicsAssetPath;
+
+		if (Ar.IsLoading())
+		{
+			SetPhysicsAssetPath(SerializedPhysicsAssetPath);
+		}
+	}
+	else if (Ar.IsLoading())
+	{
+		SetPhysicsAssetPath("None");
+	}
 
 	if (Ar.IsLoading())
 	{
@@ -126,6 +147,13 @@ void USkeletalMesh::SetSkeletonBinding(const FSkeletonBinding& InBinding)
 void USkeletalMesh::SetPhysicsAsset(UPhysicsAsset* InPhysicsAsset)
 {
     PhysicsAsset = InPhysicsAsset;
+    PhysicsAssetPath = InPhysicsAsset ? InPhysicsAsset->GetSourcePath() : FString("None");
+}
+
+void USkeletalMesh::SetPhysicsAssetPath(const FString& InPath)
+{
+    PhysicsAssetPath = InPath.empty() ? FString("None") : InPath;
+    PhysicsAsset = nullptr;
 }
 
 UPhysicsAsset* USkeletalMesh::GetPhysicsAsset() const

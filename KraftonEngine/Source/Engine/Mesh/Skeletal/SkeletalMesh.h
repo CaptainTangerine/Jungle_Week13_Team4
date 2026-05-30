@@ -3,6 +3,7 @@
 #include "Object/Object.h"
 #include "Mesh/Skeletal/SkeletalMeshAsset.h"
 #include "Animation/Skeleton/SkeletonTypes.h"
+#include "Object/Ptr/SoftObjectPtr.h"
 
 class USkeleton;
 class UPhysicsAsset;
@@ -44,7 +45,9 @@ public:
     const FSkeletonBinding& GetSkeletonBinding() const { return SkeletonBinding; }
 
     void SetPhysicsAsset(UPhysicsAsset* InPhysicsAsset);
+    void SetPhysicsAssetPath(const FString& InPath);
     UPhysicsAsset* GetPhysicsAsset() const;
+    const FString& GetPhysicsAssetPath() const { return PhysicsAssetPath.ToString(); }
 
 private:
     void CacheSectionMaterialIndices();
@@ -60,4 +63,6 @@ private:
     FSkeletonBinding SkeletonBinding;
     USkeleton*       Skeleton = nullptr;
     UPhysicsAsset*   PhysicsAsset = nullptr;
+    UPROPERTY(Edit, Save, Category="Physics", DisplayName="Physics Asset", AssetType="PhysicsAsset")
+    FSoftObjectPtr   PhysicsAssetPath = "None";
 };
