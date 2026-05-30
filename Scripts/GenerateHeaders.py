@@ -565,11 +565,15 @@ def build_array_inner_property(
         )
 
     if element_property_type == "ObjectRef":
+        # 배열 원소가 인스턴스드 UObject(UPROPERTY(..., Instanced) TArray<UObject*>)면 inner
+        # FObjectProperty 에 PF_InstancedReference 를 전파해야 한다. 그래야 직렬화 시 각 원소가
+        # ClassName + Properties 로 재귀 직렬화된다(FObjectProperty::SerializeValue 의 instanced 경로).
+        inner_flags = "PF_InstancedReference" if "PF_InstancedReference" in prop.flags else "PF_None"
         return (
             f"\tnew FObjectProperty(\n"
             f"\t\t{cpp_string_literal(inner_name)},\n"
             f"\t\t{cpp_string_literal(prop.category)},\n"
-            f"\t\tPF_None,\n"
+            f"\t\t{inner_flags},\n"
             f"\t\t0,\n"
             f"\t\tsizeof({element_cpp_type}),\n"
             f"\t\t{get_object_property_ops_for_type(element_cpp_type)},\n"
