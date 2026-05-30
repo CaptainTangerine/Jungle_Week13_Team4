@@ -72,6 +72,16 @@ struct FMaterialConstantBuffer
 UENUM()
 enum class ETranslucencyPass : uint8 { BeforeDOF, AfterDOF };
 
+// ETranslucencyPass <-> 문자열 매핑 (.mat 직렬화용)
+namespace RenderStateStrings
+{
+	inline constexpr FEnumEntry TranslucencyPassMap[] =
+	{
+		{ "BeforeDOF", (int)ETranslucencyPass::BeforeDOF },
+		{ "AfterDOF",  (int)ETranslucencyPass::AfterDOF },
+	};
+}
+
 //파라미터 값 + 텍스처 (런타임 데이터)
 //JSON으로 직렬화되는 데이터
 UCLASS()
@@ -84,7 +94,7 @@ private:
 
 	// 렌더링 상태 정보 (인스턴스별)
 	UPROPERTY(Edit, Save, Category = "Material", DisplayName = "Translucency Pass", Enum = ETranslucencyPass)
-	ETranslucencyPass TranslucencyPass = ETranslucencyPass::AfterDOF;
+	ETranslucencyPass TranslucencyPass = ETranslucencyPass::BeforeDOF;
 	ERenderPass RenderPass = ERenderPass::Opaque;
 	EBlendState BlendState = EBlendState::Opaque;
 	EDepthStencilState DepthStencilState = EDepthStencilState::Default;
@@ -136,6 +146,8 @@ public:
 
 	FShader* GetShader() const { return Template ? Template->GetShader() : TransientShader; }
 	ERenderPass GetRenderPass() const;
+	ETranslucencyPass GetTranslucencyPass() const { return TranslucencyPass; }
+	void SetTranslucencyPass(ETranslucencyPass In) { TranslucencyPass = In; }
 	EBlendState GetBlendState() const { return BlendState; }
 	EDepthStencilState GetDepthStencilState() const { return DepthStencilState; }
 	ERasterizerState GetRasterizerState() const { return RasterizerState; }
