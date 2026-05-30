@@ -18,6 +18,7 @@ public:
     ~UAnimDataModel() override = default;
 
     void Serialize(FArchive& Ar) override;
+    bool ShouldReflectProperties() const override { return false; }  // 수동 바이너리 포맷 — 반사 비활성
 
     float PlayLength = 0.0f;  // sec
     float FrameRate  = 30.0f; // fps

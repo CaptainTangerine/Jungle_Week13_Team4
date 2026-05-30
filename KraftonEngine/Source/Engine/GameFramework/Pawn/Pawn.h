@@ -61,8 +61,6 @@ public:
 	// 즉시 set. ACharacter::Tick 의 mouse handling 직후 호출 — 1 frame 지연 없이 반영.
 	void             ApplyControllerRotationToRoot();
 
-	void Serialize(FArchive& Ar) override;
-
 	// UE 패턴 — RootComponent rotation 을 매 frame ControlRotation 의 해당 axis 로 즉시 동기화.
 	// true 면 마우스 따라 mesh 가 즉시 회전 (ThirdPerson 슈터 패턴).
 	// CharacterMovement 의 bOrientRotationToMovement 와 동시 true 면 Movement 가 마지막 우선 —
