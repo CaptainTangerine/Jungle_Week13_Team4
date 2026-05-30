@@ -8,6 +8,8 @@
 #include "Core/Types/RayTypes.h"
 #include "Gizmo/BoneTransformGizmoTarget.h"
 #include "Component/Debug/BoneDebugComponent.h"
+#include "Component/Debug/PhysicsAssetDebugComponent.h"
+class UPhysicsAsset;
 
 #include <d3d11.h>
 
@@ -25,6 +27,9 @@ public:
 
 	void CreatePreviewGizmo();
 	void CreateBoneDebugComponent();
+	void CreatePhysicsAssetDebugComponent();
+	// PhysicsAsset 콜리전 프리미티브 미리보기 표시 대상 설정(매 프레임/변경 시 호출).
+	void SetDebugPhysicsAsset(UPhysicsAsset* InAsset);
 	void ResetCameraToPreviousBounds();
 
 	void SetPreviewWorld(UWorld* InWorld) { PreviewWorld = InWorld; }
@@ -83,6 +88,7 @@ private:
 	UGizmoComponent* Gizmo = nullptr;
 	USkeletalMeshComponent* PreviewMeshComponent = nullptr;
 	UBoneDebugComponent* BoneDebugComponent = nullptr;
+	UPhysicsAssetDebugComponent* PhysicsDebugComponent = nullptr;
 
 	UWorld* PreviewWorld = nullptr;
 	AActor* PreviewActor = nullptr;

@@ -331,6 +331,8 @@ void FMeshEditorWidget::Open(UObject* Object)
 
 	ViewportClient.CreatePreviewGizmo();
 	ViewportClient.CreateBoneDebugComponent();
+	ViewportClient.CreatePhysicsAssetDebugComponent();
+	ViewportClient.SetDebugPhysicsAsset(CurrentPhysicsAsset);
 	ViewportClient.ResetCameraToPreviousBounds();
 
 	WorldContext.World->SetEditorPOVProvider(&ViewportClient);
@@ -1595,6 +1597,10 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 		}
 		return;
 	}
+
+	// 콜리전 프리미티브 디버그 드로우에 현재 에셋을 동기화(편집/포즈 즉시 반영 — 드래프트 단계의
+	// 단순 매-프레임 푸시. 추후 변경 시에만 푸시하도록 최적화 가능).
+	ViewportClient.SetDebugPhysicsAsset(CurrentPhysicsAsset);
 
 	// 저장 — 편집 내용을 .uasset 으로 영속화. SourcePath 가 있어야(= 디스크 에셋) 저장 가능.
 	const bool bHasSourcePath = !CurrentPhysicsAsset->GetSourcePath().empty();

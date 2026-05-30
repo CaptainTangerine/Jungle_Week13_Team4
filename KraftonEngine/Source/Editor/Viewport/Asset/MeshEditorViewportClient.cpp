@@ -63,6 +63,22 @@ void FMeshEditorViewportClient::CreateBoneDebugComponent()
 	BoneDebugComponent->CreateRenderState();
 }
 
+void FMeshEditorViewportClient::CreatePhysicsAssetDebugComponent()
+{
+	PhysicsDebugComponent = PreviewActor->AddComponent<UPhysicsAssetDebugComponent>();
+	PhysicsDebugComponent->SetTargetMeshComponent(PreviewMeshComponent);
+	PhysicsDebugComponent->SetSelectedBoneIndex(SelectedBoneIndex);
+	PhysicsDebugComponent->CreateRenderState();
+}
+
+void FMeshEditorViewportClient::SetDebugPhysicsAsset(UPhysicsAsset* InAsset)
+{
+	if (PhysicsDebugComponent)
+	{
+		PhysicsDebugComponent->SetPhysicsAsset(InAsset);
+	}
+}
+
 void FMeshEditorViewportClient::ResetCameraToPreviousBounds()
 {
 	if (!PreviewActor)
@@ -186,6 +202,12 @@ void FMeshEditorViewportClient::SetSelectedBone(USkeletalMesh* Mesh, int32 BoneI
 	{
 		BoneDebugComponent->SetTargetMeshComponent(PreviewMeshComponent);
 		BoneDebugComponent->SetSelectedBoneIndex(BoneIndex);
+	}
+
+	if (PhysicsDebugComponent)
+	{
+		PhysicsDebugComponent->SetTargetMeshComponent(PreviewMeshComponent);
+		PhysicsDebugComponent->SetSelectedBoneIndex(BoneIndex);
 	}
 }
 
