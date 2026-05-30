@@ -25,6 +25,9 @@
     <Filter Include="Shaders\PostProcess">
       <UniqueIdentifier>{99e90c3e-d2e3-6436-6596-dd1cf09f1909}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shaders\PostProcess\DOF">
+      <UniqueIdentifier>{3be61b4a-091c-5748-ad29-1ea28ef1ef53}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Shaders\UI">
       <UniqueIdentifier>{d5ecceb8-43e5-4a35-05e8-acc2ba7da782}</UniqueIdentifier>
     </Filter>
@@ -267,6 +270,9 @@
     </Filter>
     <Filter Include="Source\Engine\Physics">
       <UniqueIdentifier>{c1985821-1144-9a46-639a-f7de31f4a1fa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Engine\Physics\Asset">
+      <UniqueIdentifier>{2b8b7095-ed81-73fd-94d5-c4642b32a800}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source\Engine\Platform">
       <UniqueIdentifier>{813e0a37-91de-2afc-805f-1a0f801727b9}</UniqueIdentifier>
@@ -611,6 +617,18 @@
     </FxCompile>
     <FxCompile Include="Shaders\PostProcess\ShadowMapVis.hlsl">
       <Filter>Shaders\PostProcess</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostProcess\DOF\DOFBlur.hlsl">
+      <Filter>Shaders\PostProcess\DOF</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostProcess\DOF\DOFCoC.hlsl">
+      <Filter>Shaders\PostProcess\DOF</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostProcess\DOF\DOFCommon.hlsli">
+      <Filter>Shaders\PostProcess\DOF</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostProcess\DOF\DOFComposite.hlsl">
+      <Filter>Shaders\PostProcess\DOF</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\UI\Billboard.hlsl">
       <Filter>Shaders\UI</Filter>
@@ -1337,6 +1355,12 @@
     <ClCompile Include="Source\Engine\Physics\PhysXPhysicsScene.cpp">
       <Filter>Source\Engine\Physics</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Physics\Asset\PhysicsAsset.cpp">
+      <Filter>Source\Engine\Physics\Asset</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Physics\Asset\PhysicsAssetManager.cpp">
+      <Filter>Source\Engine\Physics\Asset</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Platform\CrashDump.cpp">
       <Filter>Source\Engine\Platform</Filter>
     </ClCompile>
@@ -1464,6 +1488,9 @@
       <Filter>Source\Engine\Render\RenderPass</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\RenderPass\BloomPass.cpp">
+      <Filter>Source\Engine\Render\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\RenderPass\DOFPass.cpp">
       <Filter>Source\Engine\Render\RenderPass</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\RenderPass\DecalPass.cpp">
@@ -2546,6 +2573,24 @@
     <ClInclude Include="Source\Engine\Physics\PhysXPhysicsScene.h">
       <Filter>Source\Engine\Physics</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\PhysicsHandles.h">
+      <Filter>Source\Engine\Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\Asset\BodySetup.h">
+      <Filter>Source\Engine\Physics\Asset</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\Asset\ConstraintSetup.h">
+      <Filter>Source\Engine\Physics\Asset</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAsset.h">
+      <Filter>Source\Engine\Physics\Asset</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAssetManager.h">
+      <Filter>Source\Engine\Physics\Asset</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAssetTypes.h">
+      <Filter>Source\Engine\Physics\Asset</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Platform\ConsoleHelper.h">
       <Filter>Source\Engine\Platform</Filter>
     </ClInclude>
@@ -2696,6 +2741,9 @@
     <ClInclude Include="Source\Engine\Render\RenderPass\BloomPass.h">
       <Filter>Source\Engine\Render\RenderPass</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Render\RenderPass\DOFPass.h">
+      <Filter>Source\Engine\Render\RenderPass</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Render\RenderPass\DecalPass.h">
       <Filter>Source\Engine\Render\RenderPass</Filter>
     </ClInclude>
@@ -2799,6 +2847,9 @@
       <Filter>Source\Engine\Render\Shadow</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Types\BloomTypes.h">
+      <Filter>Source\Engine\Render\Types</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Types\DOFTypes.h">
       <Filter>Source\Engine\Render\Types</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Types\FogParams.h">

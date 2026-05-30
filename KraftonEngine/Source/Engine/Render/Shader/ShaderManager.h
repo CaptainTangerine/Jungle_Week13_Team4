@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Core/Singleton.h"
 #include "Render/Shader/Shader.h"
@@ -101,6 +101,9 @@ namespace EShaderPath
 	inline constexpr const char* HeightFog = "Shaders/PostProcess/HeightFog.hlsl";
 	inline constexpr const char* LightCulling = "Shaders/PostProcess/LightCulling.hlsl";
 	inline constexpr const char* GammaCorrection = "Shaders/PostProcess/GammaCorrection.hlsl";
+	inline constexpr const char* DOFCoC = "Shaders/PostProcess/DOF/DOFCoC.hlsl";
+	inline constexpr const char* DOFBlur = "Shaders/PostProcess/DOF/DOFBlur.hlsl";
+	inline constexpr const char* DOFComposite = "Shaders/PostProcess/DOF/DOFComposite.hlsl";
 	inline constexpr const char* BloomPrefilter = "Shaders/PostProcess/BloomPrefilter.hlsl";
 	inline constexpr const char* BloomDownsample = "Shaders/PostProcess/BloomDownsample.hlsl";
 	inline constexpr const char* BloomBlur = "Shaders/PostProcess/BloomBlur.hlsl";

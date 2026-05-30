@@ -166,10 +166,21 @@ class SkeletonElement final : public ContentBrowserElement
 {
 public:
 	void OnDoubleLeftClicked(ContentBrowserContext& Context) override;
+	void RenderContextMenu(ContentBrowserContext& Context) override;
 
 protected:
 	const char* GetTypeLabel() const override { return "Skeleton"; }
 	uint32 GetAccentColor() const override { return IM_COL32(180, 130, 255, 255); }
+};
+
+class PhysicsAssetElement final : public ContentBrowserElement
+{
+public:
+	void OnDoubleLeftClicked(ContentBrowserContext& Context) override;
+
+protected:
+	const char* GetTypeLabel() const override { return "Physics Asset"; }
+	uint32 GetAccentColor() const override { return IM_COL32(255, 140, 140, 255); }
 };
 
 class PNGElement final : public ContentBrowserElement

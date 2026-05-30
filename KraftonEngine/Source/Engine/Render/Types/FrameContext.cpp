@@ -1,4 +1,4 @@
-#include "FrameContext.h"
+﻿#include "FrameContext.h"
 #include "Component/Camera/CameraComponent.h"
 #include "Render/Types/MinimalViewInfo.h"
 #include "Viewport/Viewport.h"
@@ -52,4 +52,5 @@ void FFrameContext::SetViewportInfo(const FViewport* VP)
 	CullingHeatmapRTV       = VP->GetCullingHeatmapRTV();
 	CullingHeatmapSRV       = VP->GetCullingHeatmapSRV();
 	BloomResources          = VP->GetBloomResources();
+	DOFResources			= VP->GetDOFResources();
 }

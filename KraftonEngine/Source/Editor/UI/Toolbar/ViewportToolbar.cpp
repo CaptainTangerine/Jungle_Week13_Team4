@@ -614,6 +614,22 @@ void FViewportToolbar::RenderShowFlags(const FToolbarRenderState& State)
 			ImGui::SetNextItemWidth(140.0f);
 			ImGui::SliderFloat("Bloom Soft Knee", &RenderOptions.BloomSoftKnee, 0.0f, 1.0f, "%.2f");
 		}
+		ImGui::Checkbox("DOF", &RenderOptions.ShowFlags.bDOF);
+		if (RenderOptions.ShowFlags.bDOF)
+		{
+			ImGui::SetNextItemWidth(140.0f);
+			ImGui::SliderFloat("Aperture", &RenderOptions.Aperture, 0.f, 1.f, "%.3f");
+			ImGui::SetNextItemWidth(140.0f);
+			ImGui::DragFloat("Focus Dist.", &RenderOptions.FocusDistance, 0.1f, 1.f, 2048.f, "%.2f");
+			ImGui::SetNextItemWidth(140.0f);
+			ImGui::DragFloat("Focal Length", &RenderOptions.FocalLength, 0.01f, 0.1f, RenderOptions.FocusDistance, "%.2f");
+			if (RenderOptions.FocalLength > RenderOptions.FocusDistance)
+			{
+				RenderOptions.FocalLength = RenderOptions.FocusDistance;
+			}
+			ImGui::SetNextItemWidth(140.f);
+			ImGui::DragInt("DOF Sample", &RenderOptions.DOFSample, 4, 0, 64);
+		}
 		ImGui::Checkbox("FXAA", &RenderOptions.ShowFlags.bFXAA);
 		ImGui::Checkbox("Gamma Correction", &RenderOptions.ShowFlags.bGammaCorrection);
 		if (RenderOptions.ShowFlags.bGammaCorrection)

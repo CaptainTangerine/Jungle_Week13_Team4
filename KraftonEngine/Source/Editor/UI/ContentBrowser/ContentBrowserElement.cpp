@@ -20,6 +20,11 @@
 #include "Animation/AnimationManager.h"
 #include "Animation/Skeleton/Skeleton.h"
 #include "Animation/Skeleton/SkeletonManager.h"
+#include "Physics/Asset/PhysicsAsset.h"
+#include "Physics/Asset/PhysicsAssetManager.h"
+
+// MeshElement::RenderContextMenu 가 정의보다 앞서 호출하므로 전방 선언.
+static void CreatePhysicsAssetForBinding(ContentBrowserContext& Context, const FSkeletonBinding& Binding, const std::filesystem::path& SourcePath);
 #include "Particle/ParticleSystem.h"
 #include "Particle/Asset/ParticleSystemManager.h"
 #include "Particle/VectorField/VectorFieldAsset.h"
@@ -848,6 +853,17 @@ void MeshElement::RenderContextMenu(ContentBrowserContext& Context)
 
 	if (Extension == ".uasset" && FMeshManager::IsSkeletalMeshPackage(PackagePath))
 	{
+		if (ImGui::MenuItem("Create Physics Asset"))
+		{
+			ID3D11Device* Device = Context.EditorEngine ? Context.EditorEngine->GetRenderer().GetFD3DDevice().GetDevice() : nullptr;
+			if (Device)
+			{
+				if (USkeletalMesh* Mesh = FMeshManager::LoadSkeletalMesh(FilePath, Device))
+				{
+					CreatePhysicsAssetForBinding(Context, Mesh->GetSkeletonBinding(), ContentItem.Path);
+				}
+			}
+		}
 		if (ImGui::MenuItem("Reimport"))
 		{
 			USkeletalMesh* Reimported = nullptr;
@@ -989,6 +1005,71 @@ void SkeletonElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
 	{
 		FMeshEditorWidget::ClearImportDurationForAsset(Mesh->GetAssetPathFileName());
 		Context.EditorEngine->OpenAssetEditorForObject(Mesh);
+	}
+}
+
+// 스켈레톤 바인딩에 묶인 새 PhysicsAsset 을 소스(스켈레톤/메시) 옆에 만들고 연다.
+// 파일명: <소스 stem>_Physics.uasset (중복 시 _1, _2 …).
+static void CreatePhysicsAssetForBinding(ContentBrowserContext& Context, const FSkeletonBinding& Binding, const std::filesystem::path& SourcePath)
+{
+	if (!Context.EditorEngine)
+	{
+		return;
+	}
+
+	UPhysicsAsset* Asset = UObjectManager::Get().CreateObject<UPhysicsAsset>();
+	if (!Asset)
+	{
+		return;
+	}
+	Asset->SkeletonBinding = Binding;
+
+	const std::filesystem::path Dir  = SourcePath.parent_path();
+	const FString               Stem = FPaths::ToUtf8(SourcePath.stem().wstring());
+	std::filesystem::path Candidate  = Dir / FPaths::ToWide(Stem + "_Physics.uasset");
+	int32 Suffix = 1;
+	while (std::filesystem::exists(Candidate))
+	{
+		Candidate = Dir / FPaths::ToWide(Stem + "_Physics_" + std::to_string(Suffix) + ".uasset");
+		++Suffix;
+	}
+
+	const FString PackagePath = FPaths::ToUtf8(Candidate.lexically_relative(FPaths::RootDir()).generic_wstring());
+	Asset->SetSourcePath(PackagePath);
+
+	if (FPhysicsAssetManager::Get().Save(Asset))
+	{
+		Context.bPendingContentRefresh = true;
+		Context.EditorEngine->OpenAssetEditorForObject(Asset);
+	}
+}
+
+void PhysicsAssetElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
+{
+	if (!Context.EditorEngine)
+	{
+		return;
+	}
+	const FString PackagePath = FPaths::ToUtf8(ContentItem.Path.lexically_relative(FPaths::RootDir()).generic_wstring());
+	if (UPhysicsAsset* Asset = FPhysicsAssetManager::Get().Load(PackagePath))
+	{
+		Context.EditorEngine->OpenAssetEditorForObject(Asset);
+	}
+}
+
+void SkeletonElement::RenderContextMenu(ContentBrowserContext& Context)
+{
+	if (!Context.EditorEngine)
+	{
+		return;
+	}
+	if (ImGui::MenuItem("Create Physics Asset"))
+	{
+		const FString PackagePath = FPaths::ToUtf8(ContentItem.Path.lexically_relative(FPaths::RootDir()).generic_wstring());
+		if (USkeleton* Skeleton = FSkeletonManager::Get().LoadSkeleton(PackagePath))
+		{
+			CreatePhysicsAssetForBinding(Context, Skeleton->GetSkeletonBinding(), ContentItem.Path);
+		}
 	}
 }
 
