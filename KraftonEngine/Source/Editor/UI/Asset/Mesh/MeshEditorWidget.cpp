@@ -1646,19 +1646,57 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 	}
 	else if (UBodySetup* Body = CurrentPhysicsAsset->BodySetups[BodyIdx])
 	{
-		// UPROPERTY(Edit) 전체(BoneName / Physics Type / Primitives / Default Mass)를 리플렉션으로
-		// 자동 노출. Primitives 배열은 추가/삭제 + Center/Radius/Rotation/HalfExtent 등 개별
-		// 필드 편집까지 공용 FPropertyTable 이 재귀 렌더한다.
+		// 스칼라/플래그(BoneName / Physics Type / Default Mass / Default Instance)는 리플렉션으로.
+		// AggGeom 은 struct→배열→원소struct(깊이 3) 중첩이라 좁은 셀 안에선 겹쳐서 못 쓴다 →
+		// 여기선 스킵하고 아래에서 원소별로 RenderStruct(전체 폭) 로 따로 편집한다.
 		FPropertyTable::FContext Ctx;
+		Ctx.ShouldSkipProperty = [](const FProperty* P)
+		{
+			return P && P->Name && std::strcmp(P->Name, "AggGeom") == 0;
+		};
 		if (FPropertyTable::RenderObject(Body, Ctx)) { MarkDirty(); }
 
-		// 타입별 빠른 추가 — 배열 '+' 버튼 대신 올바른 프리미티브 종류를 한 번에 넣는 편의 버튼.
+		// ── Primitives (충돌 프리미티브) ──
+		ImGui::Dummy(ImVec2(0, 4));
+		ImGui::SeparatorText("Primitives");
+
+		// 타입별 빠른 추가 — 올바른 프리미티브 종류를 한 번에 넣는 편의 버튼.
 		if (ImGui::SmallButton("+ Capsule")) { Body->AggGeom.SphylElems.push_back(FKSphylElem{}); MarkDirty(); }
 		ImGui::SameLine();
 		if (ImGui::SmallButton("+ Sphere"))  { Body->AggGeom.SphereElems.push_back(FKSphereElem{}); MarkDirty(); }
 		ImGui::SameLine();
 		if (ImGui::SmallButton("+ Box"))     { Body->AggGeom.BoxElems.push_back(FKBoxElem{}); MarkDirty(); }
 
+		// 각 원소를 전체 폭 2열 테이블(RenderStruct)로 — Center/Radius/Rotation/HalfExtent/Length 직접 편집.
+		auto RenderShapeArray = [&](const char* TypeLabel, auto& Elems, UStruct* StructType)
+		{
+			for (int32 i = 0; i < static_cast<int32>(Elems.size()); ++i)
+			{
+				ImGui::PushID(StructType);
+				ImGui::PushID(i);
+				char Header[64];
+				std::snprintf(Header, sizeof(Header), "%s %d###shape", TypeLabel, i);
+				if (ImGui::CollapsingHeader(Header, ImGuiTreeNodeFlags_DefaultOpen))
+				{
+					if (FPropertyTable::RenderStruct(StructType, &Elems[i], CurrentPhysicsAsset, Ctx)) { MarkDirty(); }
+					if (ImGui::SmallButton("Remove"))
+					{
+						Elems.erase(Elems.begin() + i);
+						MarkDirty();
+						ImGui::PopID();
+						ImGui::PopID();
+						break;
+					}
+				}
+				ImGui::PopID();
+				ImGui::PopID();
+			}
+		};
+		RenderShapeArray("Capsule", Body->AggGeom.SphylElems,  FKSphylElem::StaticStruct());
+		RenderShapeArray("Sphere",  Body->AggGeom.SphereElems, FKSphereElem::StaticStruct());
+		RenderShapeArray("Box",     Body->AggGeom.BoxElems,    FKBoxElem::StaticStruct());
+
+		ImGui::Dummy(ImVec2(0, 4));
 		if (ImGui::Button("Remove Body", ImVec2(-1.0f, 0.0f)))
 		{
 			RemoveBodyAtSelectedBone();
