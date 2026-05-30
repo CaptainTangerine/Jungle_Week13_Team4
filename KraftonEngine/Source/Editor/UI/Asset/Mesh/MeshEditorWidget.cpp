@@ -163,6 +163,34 @@ namespace
 		return nullptr;
 	}
 
+	// 메시 → PhysicsAsset 역방향 해석. 생성(EnsurePhysicsAssetForCurrentSkeleton) 시
+	// <MeshStem>_Physics.uasset 규칙으로 메시 옆에 저장하므로, 같은 경로를 계산해 디스크에
+	// 있으면 로드한다 — 메시를 다시 열 때 기존 PhysicsAsset 이 자동 연결되도록.
+	UPhysicsAsset* ResolvePhysicsAssetForMesh(const USkeletalMesh* Mesh)
+	{
+		if (!Mesh)
+		{
+			return nullptr;
+		}
+		const FString& MeshPath = Mesh->GetAssetPathFileName();
+		if (MeshPath.empty() || MeshPath == "None")
+		{
+			return nullptr;
+		}
+
+		const std::filesystem::path MeshFsPath(FPaths::ToWide(MeshPath));
+		const std::filesystem::path Dir  = MeshFsPath.parent_path();
+		const FString               Stem = FPaths::ToUtf8(MeshFsPath.stem().wstring());
+		const std::filesystem::path Candidate = Dir / FPaths::ToWide(Stem + "_Physics.uasset");
+		const FString CandidatePath = FPaths::ToUtf8(Candidate.generic_wstring());
+
+		if (!std::filesystem::exists(FPaths::MakeProjectRelative(CandidatePath)))
+		{
+			return nullptr;
+		}
+		return FPhysicsAssetManager::Get().Load(CandidatePath);
+	}
+
 	EUberLitDefines::ELightingModel GetLightingModelForViewMode(EViewMode ViewMode)
 	{
 		switch (ViewMode)
@@ -258,6 +286,16 @@ void FMeshEditorWidget::Open(UObject* Object)
 	FAssetEditorWidget::Open(MeshObject);
 	CurrentPhysicsAsset = PhysAsset;
 
+	// 메시로 열렸는데(=PhysAsset 직접 지정이 아님) 이 스켈레톤용 PhysicsAsset 이 디스크에 이미
+	// 있으면 자동 연결한다. 없으면 nullptr → Physics 탭의 Create 버튼이 노출된다.
+	if (!CurrentPhysicsAsset)
+	{
+		if (USkeletalMesh* Mesh = Cast<USkeletalMesh>(EditedObject))
+		{
+			CurrentPhysicsAsset = ResolvePhysicsAssetForMesh(Mesh);
+		}
+	}
+
 	FWorldContext& WorldContext = GEngine->CreateWorldContext(EWorldType::EditorPreview, PreviewWorldHandle);
 	WorldContext.World->SetWorldType(EWorldType::EditorPreview);
 	WorldContext.World->InitWorld();
@@ -303,8 +341,8 @@ void FMeshEditorWidget::Open(UObject* Object)
 	// 디스크의 기존 AnimSequence .uasset 들을 목록에 채워 둔다(런타임 Load/Save 만으론 안 잡힘).
 	FAnimationManager::Get().RefreshAvailableAnimations();
 
-	// PhysicsAsset 로 열렸으면 Physics 탭부터(= "열면서 ActiveTab만 바꾸고").
-	ActiveTab               = CurrentPhysicsAsset ? EMeshEditorTab::Physics : EMeshEditorTab::Skeleton;
+	// PhysicsAsset 로 직접 열렸으면 Physics 탭부터. 메시로 열렸으면(자동 연결돼도) Skeleton 탭 유지.
+	ActiveTab               = PhysAsset ? EMeshEditorTab::Physics : EMeshEditorTab::Skeleton;
 	AnimTabState            = FAnimationTabState {};
 	SelectedBoneIndex       = -1;
 	SelectedConstraintIndex = -1;
@@ -1500,11 +1538,32 @@ void FMeshEditorWidget::RenderPhysicsLayout()
 	// Center: viewport
 	ImGui::BeginGroup();
 	{
-		float  ViewportWidth = ImGui::GetContentRegionAvail().x - DetailsWidth - ImGui::GetStyle().ItemSpacing.x;
+		const float SplitterWidth = 4.0f;
+		float  ViewportWidth = ImGui::GetContentRegionAvail().x - DetailsWidth - SplitterWidth - ImGui::GetStyle().ItemSpacing.x * 2.0f;
+		ViewportWidth        = std::max(ViewportWidth, 50.0f);
 		ImVec2 Size          = ImVec2(ViewportWidth, ImGui::GetContentRegionAvail().y);
 		RenderViewportPanel(Size);
 	}
 	ImGui::EndGroup();
+
+	ImGui::SameLine();
+
+	// Splitter (viewport <-> details) — 디테일 패널 폭을 드래그로 늘리고 줄인다.
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+	ImGui::Button("##physDetailsSplitter", ImVec2(4.0f, -1.0f));
+	if (ImGui::IsItemActive())
+	{
+		// 스플리터를 왼쪽으로 끌면 디테일 폭이 커지고, 오른쪽으로 끌면 작아진다.
+		DetailsWidth -= ImGui::GetIO().MouseDelta.x;
+		DetailsWidth = std::max(180.0f, std::min(DetailsWidth, ImGui::GetWindowWidth() - HierarchyWidth - 200.0f));
+	}
+	if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+	{
+		ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+	}
+	ImGui::PopStyleColor(3);
 
 	ImGui::SameLine();
 
