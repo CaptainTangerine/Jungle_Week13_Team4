@@ -5,6 +5,7 @@
 #include "Math/Transform.h"
 #include "Physics/Asset/PhysicsAssetTypes.h"
 #include "Physics/PhysicsHandles.h"
+#include "Physics/BodyInstanceCore.h"
 #include "Object/Reflection/ObjectMacros.h"
 
 #include "Source/Engine/Physics/Asset/BodySetup.generated.h"
@@ -65,4 +66,8 @@ public:
 	FKAggregateGeom AggGeom;
 	UPROPERTY(Edit, Save, Category="BodySetup", DisplayName="Default Mass", Min=0.f, Speed=0.1f)
 	float DefaultMass = 1.f;
+	// 본별 기본 바디 인스턴스 설정(Simulate / Enable Gravity / Start Awake / Override Mass 등).
+	// FBodyInstance::InitBody 가 런타임 인스턴스 생성 시 여기서 플래그를 복사한다.
+	UPROPERTY(Edit, Save, Category="Physics", DisplayName="Default Instance", Type=Struct)
+	FBodyInstanceCore DefaultInstance;
 };
