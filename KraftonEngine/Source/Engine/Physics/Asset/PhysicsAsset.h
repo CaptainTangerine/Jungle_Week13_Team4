@@ -28,11 +28,18 @@ public:
 	UPhysicsAsset() = default;
 	~UPhysicsAsset() override = default;
 
-	// [A] void Serialize(FArchive& Ar) override;  // BodySetups / ConstraintSetups / Binding
+	// 커스텀 직렬화: BodySetups(인스턴스드 UObject) + ConstraintSetups + SkeletonBinding.
+	// 리플렉션(FPropertySerializer)이 인스턴스드 UObject·FRotator/FTransform 를 다루지
+	// 못하므로(ParticleSystem 의 Emitters 와 동일 사정) .cpp 에서 operator<< 로 직접 구현.
+	void Serialize(FArchive& Ar) override;
 
-	// BoneName 으로 바디/조인트 조회 — 랙돌 인스턴스화·에디터 선택용. [B/A 구현]
+	// BoneName 으로 바디/조인트 조회 — 랙돌 인스턴스화·에디터 선택용.
 	int32 FindBodyIndex(FName BoneName) const;
 	int32 FindConstraintIndex(FName ChildBone) const;
+
+	// 저장 경로(.uasset). 다른 에셋 매니저 패턴과 동일하게 자체 보유.
+	void           SetSourcePath(const FString& InPath) { SourcePath = InPath; }
+	const FString& GetSourcePath() const { return SourcePath; }
 
 public:
 	// 바디(본별 1개). Instanced UObject 라 path 가 아닌 포인터로 소유.
@@ -42,4 +49,7 @@ public:
 
 	// 어느 스켈레톤 기준인지 — 기존 스켈레톤-참조 에셋과 동일한 바인딩 패턴 재사용.
 	FSkeletonBinding SkeletonBinding;
+
+private:
+	FString SourcePath;
 };

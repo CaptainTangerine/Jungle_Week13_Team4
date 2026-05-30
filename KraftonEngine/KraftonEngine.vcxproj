@@ -681,6 +681,8 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Engine\Particle\VectorField\VectorFieldAsset.cpp" />
     <ClCompile Include="Source\Engine\Particle\VectorField\VectorFieldFgaImporter.cpp" />
     <ClCompile Include="Source\Engine\Particle\VectorField\VectorFieldManager.cpp" />
+    <ClCompile Include="Source\Engine\Physics\Asset\PhysicsAsset.cpp" />
+    <ClCompile Include="Source\Engine\Physics\Asset\PhysicsAssetManager.cpp" />
     <ClCompile Include="Source\Engine\Physics\NativePhysicsScene.cpp" />
     <ClCompile Include="Source\Engine\Physics\PhysXPhysicsScene.cpp" />
     <ClCompile Include="Source\Engine\Platform\CrashDump.cpp" />
@@ -1094,6 +1096,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Engine\Physics\Asset\ConstraintSetup.h" />
     <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAsset.h" />
     <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAssetTypes.h" />
+    <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAssetManager.h" />
     <ClInclude Include="Source\Engine\Platform\ConsoleHelper.h" />
     <ClInclude Include="Source\Engine\Platform\CrashDump.h" />
     <ClInclude Include="Source\Engine\Platform\DirectoryWatcher.h" />

@@ -460,6 +460,9 @@ void FEditorContentBrowserWidget::RefreshContent()
 				case EAssetPackageType::VectorField:
 					Element = std::make_shared<VectorFieldElement>();
 					break;
+				case EAssetPackageType::PhysicsAsset:
+					Element = std::make_shared<PhysicsAssetElement>();
+					break;
 				default:
 					Element = std::make_shared<ContentBrowserElement>();
 					break;
