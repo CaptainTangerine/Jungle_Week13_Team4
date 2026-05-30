@@ -84,6 +84,8 @@ static void ReleaseSharedPhysX()
 {
 	if (--GSharedRefCount <= 0)
 	{
+		if (GVehicleSDKInitialized) { PxCloseVehicleSDK(); GVehicleSDKInitialized = false; }
+		if (GSharedCooking) { GSharedCooking->release(); GSharedCooking = nullptr; }
 		if (GSharedPhysics) { GSharedPhysics->release(); GSharedPhysics = nullptr; }
 		if (GSharedFoundation) { GSharedFoundation->release(); GSharedFoundation = nullptr; }
 		GSharedRefCount = 0;
