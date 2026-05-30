@@ -12,6 +12,7 @@ namespace physx
 	class PxFoundation;
 	class PxPhysics;
 	class PxScene;
+	class PxCooking;
 	class PxDefaultCpuDispatcher;
 	class PxMaterial;
 	class PxRigidActor;
@@ -95,6 +96,7 @@ private:
 	physx::PxFoundation* Foundation = nullptr;
 	physx::PxPhysics* Physics = nullptr;
 	physx::PxScene* Scene = nullptr;
+	physx::PxCooking* Cooking = nullptr;   // 공유 PxCooking (convex hull cooking — vehicles)
 	physx::PxDefaultCpuDispatcher* Dispatcher = nullptr;
 	physx::PxMaterial* DefaultMaterial = nullptr;
 	FPhysXSimulationCallback* EventCallback = nullptr;

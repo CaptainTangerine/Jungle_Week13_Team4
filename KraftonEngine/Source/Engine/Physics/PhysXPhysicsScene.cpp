@@ -478,9 +478,6 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 		return;
 	}
 
-	// Vehicle Manager
-	VehicleManager = new FPhysXVehicleManager();
-
 	// Default material (static friction, dynamic friction, restitution)
 	DefaultMaterial = Physics->createMaterial(0.5f, 0.5f, 0.3f);
 	if (!DefaultMaterial)
@@ -490,6 +487,10 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 		Scene = nullptr;
 		return;
 	}
+
+	Cooking = GSharedCooking;
+	VehicleManager = new FPhysXVehicleManager();
+	VehicleManager->Init(Physics, Scene, Cooking, DefaultMaterial);
 
 	UE_LOG("[PhysX] Initialized successfully (Scene=%p)", Scene);
 }
