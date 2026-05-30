@@ -29,13 +29,6 @@ struct FKSphereElem
 	FVector Center = FVector(0.f, 0.f, 0.f);
 	UPROPERTY(Edit, Save, Category="Shape", DisplayName="Radius", Min=0.f, Speed=0.1f)
 	float   Radius = 1.f;
-
-	friend FArchive& operator<<(FArchive& Ar, FKSphereElem& E)
-	{
-		Ar << E.Center;
-		Ar << E.Radius;
-		return Ar;
-	}
 };
 
 // 박스(Box)
@@ -50,14 +43,6 @@ struct FKBoxElem
 	FRotator Rotation   = FRotator(0.f, 0.f, 0.f);
 	UPROPERTY(Edit, Save, Category="Shape", DisplayName="Half Extent", Min=0.f, Speed=0.1f)
 	FVector  HalfExtent = FVector(0.5f, 0.5f, 0.5f);
-
-	friend FArchive& operator<<(FArchive& Ar, FKBoxElem& E)
-	{
-		Ar << E.Center;
-		Ar << E.Rotation;
-		Ar << E.HalfExtent;
-		return Ar;
-	}
 };
 
 // 캡슐(Sphyl) — 랙돌 본 주력 프리미티브. PxCapsuleGeometry(radius, halfHeight) 로 환산.
@@ -74,15 +59,6 @@ struct FKSphylElem
 	float    Radius   = 0.5f;
 	UPROPERTY(Edit, Save, Category="Shape", DisplayName="Length", Min=0.f, Speed=0.1f)
 	float    Length   = 1.f;   // 원통부 길이(반구 제외)
-
-	friend FArchive& operator<<(FArchive& Ar, FKSphylElem& E)
-	{
-		Ar << E.Center;
-		Ar << E.Rotation;
-		Ar << E.Radius;
-		Ar << E.Length;
-		return Ar;
-	}
 };
 
 USTRUCT()
@@ -100,13 +76,5 @@ struct FKAggregateGeom
 	int32 GetElementCount() const
 	{
 		return static_cast<int32>(SphereElems.size() + BoxElems.size() + SphylElems.size());
-	}
-
-	friend FArchive& operator<<(FArchive& Ar, FKAggregateGeom& Geom)
-	{
-		Ar << Geom.SphereElems;
-		Ar << Geom.BoxElems;
-		Ar << Geom.SphylElems;
-		return Ar;
 	}
 };

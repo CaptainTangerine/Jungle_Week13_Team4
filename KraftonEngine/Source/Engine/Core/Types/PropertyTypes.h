@@ -39,6 +39,7 @@ enum class EPropertyType : uint8_t
 	Vec3,
 	Vec4,
 	Rotator,	// FRotator (Pitch, Yaw, Roll)
+	Transform,	// FTransform (Location/Rotation/Scale) — trivially-copyable, Ar<< 직렬화
 	String,
 	Name,		  // FName — 문자열 풀 기반 이름 (리소스 키 등)
 	ObjectRef,

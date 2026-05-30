@@ -96,6 +96,7 @@ TYPE_MAP = {
     "float": "Float",
     "FVector": "Vec3",
     "FRotator": "Rotator",
+    "FTransform": "Transform",
     "FVector4": "Vec4",
     "FColor": "Color4",
     "FString": "String",
