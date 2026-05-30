@@ -1,4 +1,4 @@
-#include "DecalComponent.h"
+﻿#include "DecalComponent.h"
 #include "Component/Primitive/BillboardComponent.h"
 #include "Materials/MaterialManager.h"
 #include "Collision/Math/OBB.h"
@@ -224,6 +224,7 @@ UBillboardComponent* UDecalComponent::EnsureEditorBillboard()
 		Billboard->SetHiddenInComponentTree(true);
 		auto Material = FMaterialManager::Get().GetOrCreateMaterial("Content/Material/Editor/Decal.mat");
 		Billboard->SetMaterial(Material);
+		Billboard->SetBillboardRenderMode(EBillboardRenderMode::BRM_EditorIcon);
 	}
 
 	return Billboard;

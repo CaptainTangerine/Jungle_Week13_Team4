@@ -1,4 +1,4 @@
-#include "HeightFogComponent.h"
+﻿#include "HeightFogComponent.h"
 #include "Object/Reflection/ObjectFactory.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
@@ -85,6 +85,7 @@ UBillboardComponent* UHeightFogComponent::EnsureEditorBillboard()
 		Billboard->SetHiddenInComponentTree(true);
 		auto Material = FMaterialManager::Get().GetOrCreateMaterial("Content/Material/Editor/HeightFog.mat");
 		Billboard->SetMaterial(Material);
+		Billboard->SetBillboardRenderMode(EBillboardRenderMode::BRM_EditorIcon);
 	}
 
 	return Billboard;

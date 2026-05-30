@@ -1,4 +1,4 @@
-#include "Render/Proxy/BillboardSceneProxy.h"
+﻿#include "Render/Proxy/BillboardSceneProxy.h"
 #include "Component/Primitive/BillboardComponent.h"
 #include "Render/Resource/MeshBufferManager.h"
 #include "Render/Types/FrameContext.h"
@@ -52,6 +52,25 @@ void FBillboardSceneProxy::UpdateMesh()
 		const uint32 IndexCount = MeshBuffer->GetIndexBuffer().GetIndexCount();
 		SectionDraws.clear();
 		SectionDraws.push_back({ Mat, 0, IndexCount });
+		
+		// Override Render Mode
+		FMeshSectionDraw& SectionDraw = SectionDraws.back();
+		switch (Comp->GetBillboardRenderMode())
+		{
+		case (EBillboardRenderMode::BRM_EditorIcon):
+		{
+			SectionDraw.OverrideRenderPass = ERenderPass::EditorIcon;
+			break;
+		}
+		case (EBillboardRenderMode::BRM_AlphaBlend):
+		{
+			SectionDraw.OverrideRenderPass = ERenderPass::AlphaBlend;
+		}
+		default:
+		{
+			SectionDraw.OverrideRenderPass = ERenderPass::AlphaBlend;
+		}
+		}
 	}
 	else
 	{

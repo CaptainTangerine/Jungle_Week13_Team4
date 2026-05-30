@@ -1,4 +1,4 @@
-#include "LightComponentBase.h"
+﻿#include "LightComponentBase.h"
 #include "Serialization/Archive.h"
 #include "Object/Reflection/ObjectFactory.h"
 #include "GameFramework/AActor.h"
@@ -58,6 +58,7 @@ UBillboardComponent* ULightComponentBase::EnsureEditorBillboard()
 		Billboard->SetHiddenInComponentTree(true);
 		auto Material = FMaterialManager::Get().GetOrCreateMaterial(IconMaterialPath);
 		Billboard->SetMaterial(Material);
+		Billboard->SetBillboardRenderMode(EBillboardRenderMode::BRM_EditorIcon);
 	}
 
 	return Billboard;

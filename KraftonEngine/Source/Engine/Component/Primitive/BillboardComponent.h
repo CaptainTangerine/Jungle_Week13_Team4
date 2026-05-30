@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "Component/PrimitiveComponent.h"
 #include "Render/Resource/MeshBufferManager.h"
 #include "Core/Types/ResourceTypes.h"
@@ -8,6 +8,13 @@
 #include "Source/Engine/Component/Primitive/BillboardComponent.generated.h"
 
 class FPrimitiveSceneProxy;
+
+// Not UPROPERTY, nor UENUM
+enum class EBillboardRenderMode
+{
+	BRM_AlphaBlend,
+	BRM_EditorIcon,
+};
 
 UCLASS()
 class UBillboardComponent : public UPrimitiveComponent
@@ -26,6 +33,9 @@ public:
 
 	void SetBillboardEnabled(bool bEnable) { bIsBillboard = bEnable; }
 
+	void SetBillboardRenderMode(EBillboardRenderMode InRenderMode) { RenderMode = InRenderMode; }
+	EBillboardRenderMode GetBillboardRenderMode() const { return RenderMode; }
+
 	// --- Material ---
 	void SetMaterial(class UMaterial* InMaterial);
 	class UMaterial* GetMaterial() const { return Material; }
@@ -43,5 +53,7 @@ protected:
 	UPROPERTY(Edit, Save, Category="Rendering", DisplayName="Material", AssetType="Material")
 	FSoftObjectPtr MaterialSlot = "None";
 	UMaterial* Material = nullptr;
+
+	EBillboardRenderMode RenderMode = EBillboardRenderMode::BRM_AlphaBlend;
 };
 
