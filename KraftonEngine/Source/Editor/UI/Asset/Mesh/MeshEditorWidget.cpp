@@ -27,6 +27,7 @@
 #include "Physics/Asset/PhysicsAsset.h"
 #include "Physics/Asset/PhysicsAssetManager.h"
 #include "Physics/Asset/BodySetup.h"
+#include "Editor/UI/Panel/FPropertyTable.h"
 #include "Physics/Asset/ConstraintSetup.h"
 #include "Math/MathUtils.h"
 #include "UI/Asset/Animation/AnimationTransportBar.h"
@@ -1586,13 +1587,13 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 	}
 	else if (UBodySetup* Body = CurrentPhysicsAsset->BodySetups[BodyIdx])
 	{
-		if (ImGui::DragFloat("Mass", &Body->Mass, 0.1f, 0.0f, 0.0f, "%.2f"))      { MarkDirty(); }
-		if (ImGui::Checkbox("Simulate Physics", &Body->bSimulatePhysics))         { MarkDirty(); }
+		// UPROPERTY(Edit) 전체(BoneName / Primitives / Mass / Simulate Physics)를 리플렉션으로
+		// 자동 노출. Primitives 배열은 추가/삭제 + Center/Radius/Rotation/HalfExtent 등 개별
+		// 필드 편집까지 공용 FPropertyTable 이 재귀 렌더한다.
+		FPropertyTable::FContext Ctx;
+		if (FPropertyTable::RenderObject(Body, Ctx)) { MarkDirty(); }
 
-		ImGui::Text("Primitives  S:%d  B:%d  C:%d",
-			static_cast<int32>(Body->AggGeom.SphereElems.size()),
-			static_cast<int32>(Body->AggGeom.BoxElems.size()),
-			static_cast<int32>(Body->AggGeom.SphylElems.size()));
+		// 타입별 빠른 추가 — 배열 '+' 버튼 대신 올바른 프리미티브 종류를 한 번에 넣는 편의 버튼.
 		if (ImGui::SmallButton("+ Capsule")) { Body->AggGeom.SphylElems.push_back(FKSphylElem{}); MarkDirty(); }
 		ImGui::SameLine();
 		if (ImGui::SmallButton("+ Sphere"))  { Body->AggGeom.SphereElems.push_back(FKSphereElem{}); MarkDirty(); }
@@ -1623,12 +1624,10 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 		FConstraintSetup& C = CurrentPhysicsAsset->ConstraintSetups[ConIdx];
 		ImGui::Text("Parent: %s", C.ParentBone.ToString().c_str());
 
-		// 각도 제한(라디안). PxD6Joint 의 eTWIST / eSWING1 / eSWING2 매핑.
-		if (ImGui::SliderFloat("Twist",  &C.TwistLimit,  0.0f, FMath::Pi, "%.3f rad")) { MarkDirty(); }
-		if (ImGui::SliderFloat("Swing1", &C.Swing1Limit, 0.0f, FMath::Pi, "%.3f rad")) { MarkDirty(); }
-		if (ImGui::SliderFloat("Swing2", &C.Swing2Limit, 0.0f, FMath::Pi, "%.3f rad")) { MarkDirty(); }
-		if (ImGui::DragFloat("Drive Stiffness", &C.DriveStiffness, 1.0f, 0.0f, 0.0f, "%.1f")) { MarkDirty(); }
-		if (ImGui::DragFloat("Drive Damping",   &C.DriveDamping,   1.0f, 0.0f, 0.0f, "%.1f")) { MarkDirty(); }
+		// FConstraintSetup 의 UPROPERTY(Edit) 전체(Bones / Frames / Twist·Swing Limits / Drive)를
+		// 리플렉션으로 자동 노출. Owner=CurrentPhysicsAsset 으로 PostEditChange 디스패치.
+		FPropertyTable::FContext Ctx;
+		if (FPropertyTable::RenderStruct(FConstraintSetup::StaticStruct(), &C, CurrentPhysicsAsset, Ctx)) { MarkDirty(); }
 
 		if (ImGui::Button("Remove Constraint", ImVec2(-1.0f, 0.0f)))
 		{

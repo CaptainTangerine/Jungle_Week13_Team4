@@ -54,10 +54,9 @@ private:
 	void FitCurveEditorView();
 	void RemoveInvalidCurveTracks();
 	bool RenderLODDistanceProperties(class UParticleSystem* ParticleSystem);
+	// 디테일 패널의 리플렉션 렌더링은 공용 FPropertyTable 로 위임. 파티클 고유 동작(bEnabled
+	// 숨김, Distribution 동적 클래스 피커, Events 배열 레이블)만 FContext 훅으로 주입한다.
 	bool RenderObjectPropertiesInline(class UObject* Object);
-	bool RenderInlinePropertyValue(struct FPropertyValue& Prop, class UObject* OwnerObject);
-	bool RenderStructPropertyInline(struct FPropertyValue& Prop, class UObject* OwnerObject);
-	bool RenderArrayPropertyInline(struct FPropertyValue& Prop, class UObject* OwnerObject);
 
 private:
 	struct FPreviewPlaybackState
