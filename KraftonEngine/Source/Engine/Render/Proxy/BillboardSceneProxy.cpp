@@ -52,24 +52,13 @@ void FBillboardSceneProxy::UpdateMesh()
 		const uint32 IndexCount = MeshBuffer->GetIndexBuffer().GetIndexCount();
 		SectionDraws.clear();
 		SectionDraws.push_back({ Mat, 0, IndexCount });
-		
-		// Override Render Mode
 		FMeshSectionDraw& SectionDraw = SectionDraws.back();
-		switch (Comp->GetBillboardRenderMode())
+		if (Comp->GetBillboardRenderMode() == EBillboardRenderMode::BRM_EditorIcon)
 		{
-		case (EBillboardRenderMode::BRM_EditorIcon):
-		{
+			SectionDraw.bHasRenderStateOverride = true;
 			SectionDraw.OverrideRenderPass = ERenderPass::EditorIcon;
-			break;
-		}
-		case (EBillboardRenderMode::BRM_AlphaBlend):
-		{
-			SectionDraw.OverrideRenderPass = ERenderPass::AlphaBlend;
-		}
-		default:
-		{
-			SectionDraw.OverrideRenderPass = ERenderPass::AlphaBlend;
-		}
+			SectionDraw.OverrideBlendState = EBlendState::AlphaBlend;
+			SectionDraw.OverrideDepthStencilState = EDepthStencilState::DepthReadOnly;
 		}
 	}
 	else
