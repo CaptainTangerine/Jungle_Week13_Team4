@@ -1337,6 +1337,12 @@
     <ClCompile Include="Source\Engine\Particle\VectorField\VectorFieldManager.cpp">
       <Filter>Source\Engine\Particle\VectorField</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Physics\Asset\PhysicsAsset.cpp">
+      <Filter>Source\Engine\Physics\Asset</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Physics\Asset\PhysicsAssetManager.cpp">
+      <Filter>Source\Engine\Physics\Asset</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Physics\NativePhysicsScene.cpp">
       <Filter>Source\Engine\Physics</Filter>
     </ClCompile>
@@ -2568,6 +2574,9 @@
       <Filter>Source\Engine\Physics\Asset</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAssetTypes.h">
+      <Filter>Source\Engine\Physics\Asset</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAssetManager.h">
       <Filter>Source\Engine\Physics\Asset</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Platform\ConsoleHelper.h">
