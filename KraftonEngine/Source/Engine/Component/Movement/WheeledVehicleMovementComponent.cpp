@@ -5,13 +5,58 @@
 #include "Component/SceneComponent.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
+#include "Core/Types/CollisionTypes.h"   // ECollisionChannel, ObjectTypeBit
 #include "Core/Logging/Log.h"
+#include "Math/Quat.h"
 
 // PhysX 헤더는 .cpp 에서만 — 엔진 표면을 PhysX-free 로 유지 (PhysXPhysicsScene.cpp 와 동일).
 #include <PxPhysicsAPI.h>
 #include <algorithm>
 
 using namespace physx;
+
+namespace
+{
+	// 점 집합을 convex hull 로 쿠킹 → PxConvexMesh. insertion callback 경로라 stream 불필요.
+	PxConvexMesh* CookConvexMesh(PxCooking* Cooking, PxPhysics* Physics, const PxVec3* Verts, PxU32 Count)
+	{
+		PxConvexMeshDesc Desc;
+		Desc.points.count  = Count;
+		Desc.points.stride = sizeof(PxVec3);
+		Desc.points.data   = Verts;
+		Desc.flags         = PxConvexFlag::eCOMPUTE_CONVEX;
+		return Cooking->createConvexMesh(Desc, Physics->getPhysicsInsertionCallback());
+	}
+
+	// 차체 박스 (half extents) → 8-vertex convex.
+	PxConvexMesh* CreateChassisConvex(PxCooking* Cooking, PxPhysics* Physics, float HalfX, float HalfY, float HalfZ)
+	{
+		const PxVec3 Verts[8] = {
+			PxVec3(-HalfX, -HalfY, -HalfZ), PxVec3(-HalfX, -HalfY,  HalfZ),
+			PxVec3(-HalfX,  HalfY, -HalfZ), PxVec3(-HalfX,  HalfY,  HalfZ),
+			PxVec3( HalfX, -HalfY, -HalfZ), PxVec3( HalfX, -HalfY,  HalfZ),
+			PxVec3( HalfX,  HalfY, -HalfZ), PxVec3( HalfX,  HalfY,  HalfZ),
+		};
+		return CookConvexMesh(Cooking, Physics, Verts, 8);
+	}
+
+	// 휠 원통 — 회전축은 측면(Y), 단면 원은 X-Z 평면. (basis: up=Z, forward=X)
+	PxConvexMesh* CreateWheelConvex(PxCooking* Cooking, PxPhysics* Physics, float Radius, float Width)
+	{
+		const PxU32 Segments = 16;
+		PxVec3 Verts[Segments * 2];
+		const float HalfW = Width * 0.5f;
+		for (PxU32 i = 0; i < Segments; ++i)
+		{
+			const float Angle = (PxTwoPi * i) / Segments;
+			const float Cx = Radius * PxCos(Angle);
+			const float Cz = Radius * PxSin(Angle);
+			Verts[i * 2 + 0] = PxVec3(Cx, -HalfW, Cz);
+			Verts[i * 2 + 1] = PxVec3(Cx,  HalfW, Cz);
+		}
+		return CookConvexMesh(Cooking, Physics, Verts, Segments * 2);
+	}
+}
 
 // ============================================================
 // 입력 — PlayerController/Lua 가 매 프레임 세팅. manager PreTick 이 읽어 PxVehicle 에 적용한다.
@@ -106,19 +151,201 @@ FPhysXVehicleManager* UWheeledVehicleMovementComponent::ResolveVehicleManager() 
 // ============================================================
 bool UWheeledVehicleMovementComponent::CreateVehicle()
 {
-	// TODO(vehicle part 2): tunable 파라미터로 PxVehicleDrive4W 를 구성한다. 단계:
-	//   1) 공유 PxPhysics/PxCooking/PxMaterial 획득 (Scene 이 노출해야 함 — 현재 미노출).
-	//   2) PxVehicleWheelsSimData::allocate(NumWheels) — WheelRadius/Width/Mass/관성, 서스펜션,
-	//      타이어, 휠 로컬 오프셋(차체 4코너), suspension travel/spring/damper 세팅.
-	//   3) PxVehicleDriveSimData4W — 엔진(EnginePeakTorque/EngineMaxOmega), 클러치, 기어박스,
-	//      오토박스, 디퍼렌셜(eDIFF_TYPE_LS_4WD), Ackermann.
-	//   4) chassis: PxRigidDynamic + 차체 convex/box shape, mass=ChassisMass, CoM 을 차체 아래로.
-	//   5) PxVehicleDrive4W::allocate(NumWheels) → setup(Physics, Actor, WheelsSimData, DriveSimData, NumNonDriven).
-	//   6) MaxSteerAngle → 휠별 max steer (rad) 반영.
-	//   생성된 PxVehicleDrive4W 는 manager 의 batched PxVehicleUpdates 대상이 된다.
+	// PhysX 컨텍스트는 scene-owned manager 가 단일 허브로 제공 (seed-the-manager).
+	VehicleManager = ResolveVehicleManager();
+	if (!VehicleManager)
+	{
+		UE_LOG("[WheeledVehicleMC] CreateVehicle: vehicle manager unavailable (physics scene not ready).");
+		return false;
+	}
 
+	PxPhysics*  Physics  = VehicleManager->GetPhysics();
+	PxCooking*  Cooking  = VehicleManager->GetCooking();
+	PxScene*    PScene   = VehicleManager->GetScene();
+	PxMaterial* Material = VehicleManager->GetDriveMaterial();
+	if (!Physics || !Cooking || !PScene || !Material)
+	{
+		UE_LOG("[WheeledVehicleMC] CreateVehicle: incomplete PhysX context.");
+		return false;
+	}
 
-	return false;
+	using WO = PxVehicleDrive4WWheelOrder;
+	const PxU32 NW = static_cast<PxU32>(NumWheels);
+
+	// --- 치수 / 휠 배치 (parametric — tunable 기반). +X=forward, Y=side, +Z=up ---
+	const float HalfX  = ChassisLength * 0.5f;
+	const float HalfY  = ChassisWidth  * 0.5f;
+	const float HalfZ  = ChassisHeight * 0.5f;
+	const float FrontX = HalfX - WheelRadius;   // 앞/뒤 축을 차체 끝에서 살짝 안쪽으로
+	const float TrackY = HalfY;
+	const float WheelZ = -HalfZ;                // 휠 센터를 차체 바닥 높이에
+
+	PxVec3 WheelCenters[4];
+	WheelCenters[WO::eFRONT_LEFT]  = PxVec3( FrontX,  TrackY, WheelZ);
+	WheelCenters[WO::eFRONT_RIGHT] = PxVec3( FrontX, -TrackY, WheelZ);
+	WheelCenters[WO::eREAR_LEFT]   = PxVec3(-FrontX,  TrackY, WheelZ);
+	WheelCenters[WO::eREAR_RIGHT]  = PxVec3(-FrontX, -TrackY, WheelZ);
+
+	const PxVec3 ChassisCM(0.0f, 0.0f, CenterOfMassOffsetZ);
+
+	// 박스 관성 (CoM 기준).
+	const PxVec3 D(ChassisLength, ChassisWidth, ChassisHeight);
+	const PxVec3 ChassisMOI(
+		(D.y * D.y + D.z * D.z) * ChassisMass / 12.0f,
+		(D.x * D.x + D.z * D.z) * ChassisMass / 12.0f,
+		(D.x * D.x + D.y * D.y) * ChassisMass / 12.0f);
+
+	// --- convex 쿠킹 ---
+	PxConvexMesh* ChassisMesh = CreateChassisConvex(Cooking, Physics, HalfX, HalfY, HalfZ);
+	PxConvexMesh* WheelMesh   = CreateWheelConvex(Cooking, Physics, WheelRadius, WheelWidth);
+	if (!ChassisMesh || !WheelMesh)
+	{
+		UE_LOG("[WheeledVehicleMC] CreateVehicle: convex cooking failed.");
+		if (ChassisMesh) ChassisMesh->release();
+		if (WheelMesh)   WheelMesh->release();
+		return false;
+	}
+
+	const PxU32 OwnerUUID = GetOwner() ? GetOwner()->GetUUID() : 0;
+	const float WheelMOI    = 0.5f * WheelMass * WheelRadius * WheelRadius;
+	const float MaxSteerRad = MaxSteerAngle * (PxPi / 180.0f);
+
+	// suspension-raycast 가 자기 차량을 무시할 수 있도록 word3=ownerUUID (미래 prefilter 용).
+	// word0=WorldDynamic 으로 표준 필터 레이아웃 (word0=ObjectType, word3=ownerUUID) 을 따른다.
+	PxFilterData VehicleQryFilter;
+	VehicleQryFilter.word0 = static_cast<PxU32>(ECollisionChannel::WorldDynamic);
+	VehicleQryFilter.word3 = OwnerUUID;
+
+	// --- wheels sim data ---
+	PxVehicleWheelsSimData* WheelsSimData = PxVehicleWheelsSimData::allocate(NW);
+
+	float SprungMasses[4];
+	PxVehicleComputeSprungMasses(NW, WheelCenters, ChassisCM, ChassisMass, /*gravityDir=Z*/2, SprungMasses);
+
+	for (PxU32 i = 0; i < NW; ++i)
+	{
+		const bool bFront = (i == WO::eFRONT_LEFT || i == WO::eFRONT_RIGHT);
+
+		PxVehicleWheelData Wheel;
+		Wheel.mMass               = WheelMass;
+		Wheel.mMOI                = WheelMOI;
+		Wheel.mRadius             = WheelRadius;
+		Wheel.mWidth              = WheelWidth;
+		Wheel.mMaxBrakeTorque     = 1500.0f;
+		Wheel.mMaxSteer           = bFront ? MaxSteerRad : 0.0f;
+		Wheel.mMaxHandBrakeTorque = bFront ? 0.0f : 4000.0f;
+
+		PxVehicleTireData Tire;
+		Tire.mType = 0;   // FrictionPairs 의 tire 타입 0
+
+		PxVehicleSuspensionData Susp;
+		Susp.mMaxCompression   = 0.3f;
+		Susp.mMaxDroop         = 0.1f;
+		Susp.mSpringStrength   = 35000.0f;
+		Susp.mSpringDamperRate = 4500.0f;
+		Susp.mSprungMass       = SprungMasses[i];
+
+		const PxVec3 CMOffset = WheelCenters[i] - ChassisCM;
+
+		WheelsSimData->setWheelData(i, Wheel);
+		WheelsSimData->setTireData(i, Tire);
+		WheelsSimData->setSuspensionData(i, Susp);
+		WheelsSimData->setSuspTravelDirection(i, PxVec3(0.0f, 0.0f, -1.0f));
+		WheelsSimData->setWheelCentreOffset(i, CMOffset);
+		WheelsSimData->setSuspForceAppPointOffset(i, PxVec3(CMOffset.x, CMOffset.y, -0.3f));
+		WheelsSimData->setTireForceAppPointOffset(i, PxVec3(CMOffset.x, CMOffset.y, -0.3f));
+		WheelsSimData->setSceneQueryFilterData(i, VehicleQryFilter);
+		WheelsSimData->setWheelShapeMapping(i, PxI32(i));
+	}
+
+	// --- drive sim data ---
+	PxVehicleDriveSimData4W DriveSimData;
+
+	PxVehicleDifferential4WData Diff;
+	Diff.mType = PxVehicleDifferential4WData::eDIFF_TYPE_LS_4WD;
+	DriveSimData.setDiffData(Diff);
+
+	PxVehicleEngineData Engine;
+	Engine.mPeakTorque = EnginePeakTorque;
+	Engine.mMaxOmega   = EngineMaxOmega;
+	DriveSimData.setEngineData(Engine);
+
+	PxVehicleGearsData Gears;
+	Gears.mSwitchTime = 0.5f;
+	DriveSimData.setGearsData(Gears);
+
+	PxVehicleClutchData Clutch;
+	Clutch.mStrength = 10.0f;
+	DriveSimData.setClutchData(Clutch);
+
+	PxVehicleAckermannGeometryData Ackermann;
+	Ackermann.mAccuracy       = 1.0f;
+	Ackermann.mAxleSeparation = PxAbs(WheelCenters[WO::eFRONT_LEFT].x - WheelCenters[WO::eREAR_LEFT].x);
+	Ackermann.mFrontWidth     = PxAbs(WheelCenters[WO::eFRONT_LEFT].y - WheelCenters[WO::eFRONT_RIGHT].y);
+	Ackermann.mRearWidth      = PxAbs(WheelCenters[WO::eREAR_LEFT].y  - WheelCenters[WO::eREAR_RIGHT].y);
+	DriveSimData.setAckermannGeometryData(Ackermann);
+
+	// --- chassis PxRigidDynamic + shapes (wheels 0..3, chassis 4) ---
+	PxRigidDynamic* Actor = Physics->createRigidDynamic(PxTransform(PxIdentity));
+
+	// 휠은 sim 충돌 OFF — 서스펜션 raycast 가 지면 접촉을 담당. word3=ownerUUID 로 같은 actor 자동 비충돌.
+	PxFilterData WheelSimFilter;
+	WheelSimFilter.word0 = static_cast<PxU32>(ECollisionChannel::WorldDynamic);
+	WheelSimFilter.word3 = OwnerUUID;
+
+	// 차체는 WorldStatic/WorldDynamic 과 충돌 (충돌/긁힘).
+	PxFilterData ChassisSimFilter;
+	ChassisSimFilter.word0 = static_cast<PxU32>(ECollisionChannel::WorldDynamic);
+	ChassisSimFilter.word1 = ObjectTypeBit(ECollisionChannel::WorldStatic) | ObjectTypeBit(ECollisionChannel::WorldDynamic);
+	ChassisSimFilter.word3 = OwnerUUID;
+
+	for (PxU32 i = 0; i < NW; ++i)
+	{
+		PxShape* WheelShape = PxRigidActorExt::createExclusiveShape(*Actor, PxConvexMeshGeometry(WheelMesh), *Material);
+		WheelShape->setFlag(PxShapeFlag::eSIMULATION_SHAPE, false);   // 서스펜션이 담당 — 휠 자체는 sim 비충돌
+		WheelShape->setSimulationFilterData(WheelSimFilter);
+		WheelShape->setQueryFilterData(VehicleQryFilter);
+		WheelShape->setLocalPose(PxTransform(PxIdentity));            // PxVehicleUpdates 가 매 프레임 갱신
+	}
+
+	PxShape* ChassisShape = PxRigidActorExt::createExclusiveShape(*Actor, PxConvexMeshGeometry(ChassisMesh), *Material);
+	ChassisShape->setSimulationFilterData(ChassisSimFilter);
+	ChassisShape->setQueryFilterData(VehicleQryFilter);
+	ChassisShape->setLocalPose(PxTransform(PxIdentity));
+
+	// shape 가 mesh ref 를 잡았으므로 로컬 생성 ref 해제.
+	WheelMesh->release();
+	ChassisMesh->release();
+
+	Actor->setMass(ChassisMass);
+	Actor->setMassSpaceInertiaTensor(ChassisMOI);
+	Actor->setCMassLocalPose(PxTransform(ChassisCM, PxQuat(PxIdentity)));
+
+	// 스폰 위치 — UpdatedComponent(보통 차체 RootComponent) 의 월드 트랜스폼.
+	if (USceneComponent* Updated = GetUpdatedComponent())
+	{
+		const FVector P = Updated->GetWorldLocation();
+		const FQuat   Q = FQuat::FromMatrix(Updated->GetWorldMatrix());
+		Actor->setGlobalPose(PxTransform(PxVec3(P.X, P.Y, P.Z), PxQuat(Q.X, Q.Y, Q.Z, Q.W)));
+	}
+
+	// --- PxVehicleDrive4W ---
+	PxVehicleDrive4W* Vehicle = PxVehicleDrive4W::allocate(NW);
+	Vehicle->setup(Physics, Actor, *WheelsSimData, DriveSimData, /*nbNonDrivenWheels*/0);
+	WheelsSimData->free();   // setup 이 deep-copy 함
+
+	Vehicle->setToRestState();
+	Vehicle->mDriveDynData.forceGearChange(PxVehicleGearsData::eFIRST);
+	Vehicle->mDriveDynData.setUseAutoGears(true);
+
+	// 차체 actor 는 BodyMappings 밖 — scene post-sync 가 transform 을 건드리지 않게 (actor 가 유일 writer).
+	PScene->addActor(*Actor);
+
+	PVehicle      = Vehicle;
+	PVehicleActor = Actor;
+
+	UE_LOG("[WheeledVehicleMC] CreateVehicle: PxVehicleDrive4W created (mass=%.1f kg).", ChassisMass);
+	return true;
 }
 
 void UWheeledVehicleMovementComponent::DestroyVehicle()

@@ -114,4 +114,18 @@ protected:
 
 	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Max Steer Angle (deg)", Min=0.0f, Max=90.0f, Speed=0.5f)
 	float MaxSteerAngle = 30.0f;        // deg
+
+	// 차체 박스 치수 (parametric convex hull 의 소스). +X=forward, Y=side, +Z=up.
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Length (X)", Min=0.1f, Max=20.0f, Speed=0.05f)
+	float ChassisLength = 4.0f;         // m
+
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Width (Y)", Min=0.1f, Max=10.0f, Speed=0.05f)
+	float ChassisWidth = 2.0f;          // m
+
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Height (Z)", Min=0.1f, Max=10.0f, Speed=0.05f)
+	float ChassisHeight = 1.0f;         // m
+
+	// 무게중심 Z 오프셋 (actor 중심 기준) — 보통 음수로 낮춰 전복 안정성↑.
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="CoM Offset Z", Min=-5.0f, Max=5.0f, Speed=0.01f)
+	float CenterOfMassOffsetZ = -0.5f;  // m
 };
