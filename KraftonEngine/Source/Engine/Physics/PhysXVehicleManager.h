@@ -19,6 +19,8 @@ public:
 	// chassis velocities from the PhysX simulation and “pushed” them back into the Unreal USkeletalMeshComponent.
 	void PostTick();
 
+	void Release();
+
 	void RegisterVehicleMC(UWheeledVehicleMovementComponent* InComponent);
 	void UnRegisterVehicleMC(UWheeledVehicleMovementComponent* InComponent);
 
