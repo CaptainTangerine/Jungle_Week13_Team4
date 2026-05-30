@@ -38,7 +38,7 @@ private:
 	TMap<FString, FMaterialParameterInfo*> ParameterLayout; // 리플렉션 결과 : 쉐이더 constant buffer 레이아웃 정보
 
 public:
-	const TMap<FString, FMaterialParameterInfo*>& gParameterInfo() const { return ParameterLayout; }
+	const TMap<FString, FMaterialParameterInfo*>& GetParameterInfo() const { return ParameterLayout; }
 	void Create(FShader* InShader);
 
 	FShader* GetShader() const { return Shader; }
@@ -83,6 +83,7 @@ private:
 	FMaterialTemplate* Template; // 공유
 
 	// 렌더링 상태 정보 (인스턴스별)
+	UPROPERTY(Edit, Save, Category = "Material", DisplayName = "Translucency Pass", Enum = ETranslucencyPass)
 	ETranslucencyPass TranslucencyPass = ETranslucencyPass::AfterDOF;
 	ERenderPass RenderPass = ERenderPass::Opaque;
 	EBlendState BlendState = EBlendState::Opaque;
