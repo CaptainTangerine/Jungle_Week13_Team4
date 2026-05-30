@@ -35,7 +35,15 @@ public:
 	UBodySetup() = default;
 	~UBodySetup() override = default;
 
-	// [A] void Serialize(FArchive& Ar) override;  // AggGeom / Mass / bSimulatePhysics 영속화
+	// 커스텀 직렬화. 리플렉션(FPropertySerializer)은 인스턴스드 UObject·FRotator 를
+	// 직렬화하지 않으므로(AggGeom 의 Box/Sphyl 회전이 누락됨) 각 구조체의 operator<< 를 직접 사용.
+	void Serialize(FArchive& Ar) override
+	{
+		Ar << BoneName;          // UBodySetupCore (FName)
+		Ar << AggGeom;           // FKAggregateGeom operator<< (FVector/FRotator 포함)
+		Ar << Mass;
+		Ar << bSimulatePhysics;
+	}
 
 	UPROPERTY(Edit, Save, Category="BodySetup", DisplayName="Primitives", Type=Struct)
 	FKAggregateGeom AggGeom;

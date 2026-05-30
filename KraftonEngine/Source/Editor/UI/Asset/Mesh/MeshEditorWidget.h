@@ -10,8 +10,10 @@ struct ImVec2;
 class UAnimSequence;
 class UAnimMontage;
 class UAnimSingleNodeInstance;
+class UPhysicsAsset;
+class UBodySetup;
 
-enum class EMeshEditorTab : uint8 { Skeleton, Mesh, Animation };
+enum class EMeshEditorTab : uint8 { Skeleton, Mesh, Animation, Physics };
 
 struct FAnimationTabState
 {
@@ -76,6 +78,18 @@ private:
 	void RenderSkeletonLayout();
 	void RenderMeshLayout();
 	void RenderAnimationLayout(float TotalHeight);
+	void RenderPhysicsLayout();
+
+	// Physics tab helpers (PhysicsAsset 저작: 발제 2-2)
+	void           RenderPhysicsDetails();
+	UPhysicsAsset* EnsurePhysicsAssetForCurrentSkeleton();
+	void           AddBodyToSelectedBone();
+	void           RemoveBodyAtSelectedBone();
+	void           GenerateConstraintForSelectedBone();
+	int32          FindPhysicsBodyIndexForBone(int32 BoneIndex) const;
+	int32          FindPhysicsConstraintIndexForChild(const FName& ChildBone) const;
+	FName          GetPhysicsBoneName(int32 BoneIndex) const;
+	void           RenderPhysicsBoneTree(const FSkeletalMesh* Asset, int32 Index);
 
 	// Shared helpers
 	void RenderViewportPanel(ImVec2 Size);
@@ -103,6 +117,13 @@ private:
 	int32 SelectedBoneIndex = -1;
 	float HierarchyWidth    = 250.0f;
 	float DetailsWidth      = 300.0f;
+
+	// Physics tab state
+	// EditedObject 는 항상 USkeletalMesh 로 유지하고, 편집 중인 PhysicsAsset 은 따로 보유.
+	// (UPhysicsAsset 을 열면 그 스켈레톤에 호환되는 메시를 EditedObject 로 해석)
+	UPhysicsAsset* CurrentPhysicsAsset     = nullptr;
+	int32          SelectedConstraintIndex = -1;
+	bool           bSimulating             = false;
 
 	uint32  InstanceId;
 	FName   PreviewWorldHandle = FName::None;
