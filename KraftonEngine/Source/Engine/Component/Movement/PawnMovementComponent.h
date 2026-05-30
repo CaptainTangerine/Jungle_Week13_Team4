@@ -11,7 +11,7 @@ class UPawnMovementComponent : public UMovementComponent
 public:
 	GENERATED_BODY()
 
-	virtual void AddInputVector(FVector WorldVector) { PendingInputVectors.push_back(WorldVector); };
+	virtual void AddInputVector(FVector WorldVector) { PendingInputVectors.push(WorldVector); };
 	virtual void ConsumeInputVector();
 	FVector GetLastInputVector();
 	APawn* GetPawnOwner();
@@ -24,4 +24,5 @@ protected:
 
 	std::queue<FVector> PendingInputVectors;
 	FVector LastInputVector = FVector::ZeroVector;
+
 };
