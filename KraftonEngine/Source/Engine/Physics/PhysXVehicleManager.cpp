@@ -2,13 +2,41 @@
 
 #include "Component/Movement/WheeledVehicleMovementComponent.h"
 
+// PhysX 헤더는 .cpp 에서만 (엔진 표면 PhysX-free).
+#include <PxPhysicsAPI.h>
 #include <algorithm>
+
+using namespace physx;
 
 // ============================================================
 // FPhysXVehicleManager — scene 소유 차량 레지스트리 + 배치 업데이트.
-// (memory: physx-vehicle-integration) — 현재는 register/unregister 핸드셰이크만
-// 동작하는 skeleton. PreTick/Tick/PostTick 의 PhysX 배치 경로는 part 2 에서 채운다.
+// (memory: physx-vehicle-integration) — register/unregister 핸드셰이크 + PhysX 컨텍스트
+// 허브. PreTick/Tick/PostTick 의 PhysX 배치 경로는 part 2 에서 채운다.
 // ============================================================
+
+void FPhysXVehicleManager::Init(PxPhysics* InPhysics, PxScene* InScene, PxCooking* InCooking, PxMaterial* InDriveMaterial)
+{
+	Physics       = InPhysics;
+	Scene         = InScene;
+	Cooking       = InCooking;
+	DriveMaterial = InDriveMaterial;
+
+	// 드라이브 표면 ↔ 타이어 마찰 테이블 — minimal: 표면 1종(DriveMaterial) × 타이어 1종.
+	// PxVehicleUpdates 가 이 테이블로 각 타이어의 마찰을 조회한다.
+	if (DriveMaterial)
+	{
+		const PxU32 NumTireTypes    = 1;
+		const PxU32 NumSurfaceTypes = 1;
+
+		const PxMaterial* SurfaceMaterials[NumSurfaceTypes] = { DriveMaterial };
+		PxVehicleDrivableSurfaceType SurfaceTypes[NumSurfaceTypes];
+		SurfaceTypes[0].mType = 0;   // 표면 타입 0 == DriveMaterial
+
+		FrictionPairs = PxVehicleDrivableSurfaceToTireFrictionPairs::allocate(NumTireTypes, NumSurfaceTypes);
+		FrictionPairs->setup(NumTireTypes, NumSurfaceTypes, SurfaceMaterials, SurfaceTypes);
+		FrictionPairs->setTypePairFriction(/*surfaceType*/0, /*tireType*/0, /*friction*/1.0f);
+	}
+}
 
 void FPhysXVehicleManager::PreTick()
 {
@@ -32,7 +60,17 @@ void FPhysXVehicleManager::PostTick()
 
 void FPhysXVehicleManager::Release()
 {
-
+	// FrictionPairs 만 manager 소유 — 나머지 핸들(Physics/Scene/Cooking/Material)은 Scene 소유.
+	if (FrictionPairs)
+	{
+		FrictionPairs->release();
+		FrictionPairs = nullptr;
+	}
+	Vehicles.clear();
+	Physics       = nullptr;
+	Scene         = nullptr;
+	Cooking       = nullptr;
+	DriveMaterial = nullptr;
 }
 
 void FPhysXVehicleManager::RegisterVehicleMC(UWheeledVehicleMovementComponent* InComponent)

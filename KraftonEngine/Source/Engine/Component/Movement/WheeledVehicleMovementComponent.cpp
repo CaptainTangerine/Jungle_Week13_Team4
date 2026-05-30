@@ -116,7 +116,8 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	//   5) PxVehicleDrive4W::allocate(NumWheels) → setup(Physics, Actor, WheelsSimData, DriveSimData, NumNonDriven).
 	//   6) MaxSteerAngle → 휠별 max steer (rad) 반영.
 	//   생성된 PxVehicleDrive4W 는 manager 의 batched PxVehicleUpdates 대상이 된다.
-	UE_LOG("[WheeledVehicleMC] CreateVehicle: PxVehicleDrive4W setup not yet implemented (vehicle part 2).");
+
+
 	return false;
 }
 
