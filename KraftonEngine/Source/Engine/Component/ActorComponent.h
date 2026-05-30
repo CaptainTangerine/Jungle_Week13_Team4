@@ -45,7 +45,6 @@ public:
 	inline void SetComponentTickEnabled(bool bEnabled) {
 		PrimaryComponentTick.SetTickEnabled(bEnabled);
 	}
-	virtual void Serialize(FArchive& Ar) override;
 
 	inline bool IsActive() { return bIsActive; }
 

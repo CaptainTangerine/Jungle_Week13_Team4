@@ -51,15 +51,6 @@ void APawn::UnPossessed()
 
 }
 
-void APawn::Serialize(FArchive& Ar)
-{
-	Super::Serialize(Ar);
-	Ar << bAutoPossessPlayer;
-	Ar << bUseControllerRotationPitch;
-	Ar << bUseControllerRotationYaw;
-	Ar << bUseControllerRotationRoll;
-}
-
 void APawn::ApplyControllerRotationToRoot()
 {
 	if (!bUseControllerRotationPitch && !bUseControllerRotationYaw && !bUseControllerRotationRoll) return;

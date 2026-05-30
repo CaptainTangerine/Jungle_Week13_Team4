@@ -66,8 +66,16 @@ UObject* UObject::DuplicateWithArchiveContext(UObject* NewOuter, FDuplicateArchi
 
 void UObject::Serialize(FArchive& Ar)
 {
-	// 기본 UObject는 직렬화할 상태 없음.
-	// UUID/InternalIndex/Name은 직렬화 금지 (복제 시 새로 발급).
+	SerializeIdentity(Ar);
+	if (Ar.IsSaving())   { OnPreSave(Ar); }
+	if (ShouldReflectProperties()) { SerializeProperties(Ar, PF_Save); }
+	SerializeExtra(Ar);
+	if (Ar.IsLoading())  { OnPostLoad(Ar); }
+}
+
+void UObject::SerializeIdentity(FArchive& Ar)
+{
+	// UUID/InternalIndex/Name 은 직렬화 금지 (복제 시 새로 발급).
 	Ar << ObjectName;
 }
 

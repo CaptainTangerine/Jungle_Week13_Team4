@@ -40,6 +40,7 @@ public:
     ~UAnimMontage() override = default;
 
     void Serialize(FArchive& Ar) override;
+    bool ShouldReflectProperties() const override { return false; }  // 수동 바이너리 포맷 — 반사 비활성
 
     // 본 pose 평가 — Ctx.CurrentTime 은 SOURCE SEQUENCE 의 시간으로 해석.
     // (UAnimMontageInstance 가 section + sectionTime → sequence time 으로 변환 후 호출.)

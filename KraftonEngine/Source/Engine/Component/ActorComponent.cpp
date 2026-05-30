@@ -54,12 +54,6 @@ void UActorComponent::SetActive(bool bNewActive)
 	}
 }
 
-void UActorComponent::Serialize(FArchive& Ar)
-{
-	UObject::Serialize(Ar);
-	SerializeProperties(Ar, PF_Save);
-}
-
 void UActorComponent::SetEditorOnly(bool bInEditorOnly)
 {
 	if (bEditorOnly == bInEditorOnly) return;

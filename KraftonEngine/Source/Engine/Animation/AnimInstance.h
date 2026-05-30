@@ -62,6 +62,10 @@ public:
 	UAnimInstance() = default;
 	~UAnimInstance() override = default;
 
+	// 수동 바이너리 포맷 — 반사 비활성. ULuaAnimInstance/UCharacterAnimInstance 가
+	// Super::Serialize(=UObject 템플릿)로 도달해도 반사 프레이밍이 끼지 않게 한다. (§4-E)
+	bool ShouldReflectProperties() const override { return false; }
+
 	// ── 후크 ──
 	virtual void NativeInitializeAnimation() {}
 	virtual void NativeUpdateAnimation(float DeltaSeconds) { (void)DeltaSeconds; }

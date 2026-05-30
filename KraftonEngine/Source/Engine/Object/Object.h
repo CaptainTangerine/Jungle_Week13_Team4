@@ -57,6 +57,16 @@ public:
 	UObject* DuplicateWithArchiveContext(UObject* NewOuter, FDuplicateArchiveContext& DuplicateContext) const;
 	virtual void Serialize(FArchive& Ar);
 	void SerializeProperties(FArchive& Ar, uint32 RequiredFlags);
+
+protected:
+	// ── 직렬화 훅 (서브클래스가 필요한 것만 오버라이드) ──
+	virtual void SerializeIdentity(FArchive& Ar);                  // 기본: ObjectName 직렬화
+	virtual bool ShouldReflectProperties() const { return true; }  // UPROPERTY(Save) 자동 반사. 수동 포맷만 false
+	virtual void OnPreSave(FArchive& /*Ar*/) {}                    // 반사 전(저장) — 스냅샷 등
+	virtual void SerializeExtra(FArchive& /*Ar*/) {}              // 반사로 못 담는 수동 필드
+	virtual void OnPostLoad(FArchive& /*Ar*/) {}                  // 반사 후(로드) — 파생 상태 재구성
+
+public:
 	virtual void PostDuplicate() {}
 
 	virtual void GetEditableProperties(TArray<FPropertyValue>& OutProps);
