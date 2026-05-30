@@ -431,6 +431,13 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 
 	// Default material (static friction, dynamic friction, restitution)
 	DefaultMaterial = Physics->createMaterial(0.5f, 0.5f, 0.3f);
+	if (!DefaultMaterial)
+	{
+		UE_LOG("[PhysX] Failed to create default material");
+		Scene->release();
+		Scene = nullptr;
+		return;
+	}
 
 	UE_LOG("[PhysX] Initialized successfully (Scene=%p)", Scene);
 }

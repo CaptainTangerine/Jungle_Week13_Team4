@@ -23,7 +23,7 @@ class FPhysXSimulationCallback;
 // ============================================================
 // FPhysXPhysicsScene — PhysX 4.1 기반 물리 시스템
 //
-// IPhysicsScene 인터페이스를 통해 Native와 교체 가능.
+// IPhysicsScene 인터페이스 뒤에서 PhysX 세부 타입을 캡슐화한다.
 //
 // 등록 단위는 Actor — 한 액터의 여러 PrimitiveComponent는 하나의
 // PxRigidActor에 compound shape로 합쳐진다. 각 shape의 LocalPose는
@@ -35,6 +35,7 @@ class FPhysXPhysicsScene : public IPhysicsScene
 public:
 	void Initialize(UWorld* InWorld) override;
 	void Shutdown() override;
+	bool IsInitialized() const override { return Scene != nullptr && Physics != nullptr && DefaultMaterial != nullptr; }
 
 	void RegisterComponent(UPrimitiveComponent* Comp) override;
 	void UnregisterComponent(UPrimitiveComponent* Comp) override;
