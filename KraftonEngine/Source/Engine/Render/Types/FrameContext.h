@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Core/Types/CoreTypes.h"
 #include "Math/Matrix.h"
@@ -6,6 +6,7 @@
 #include "Render/Types/ViewTypes.h"
 #include "Render/Types/LODContext.h"
 #include "Render/Types/BloomTypes.h"
+#include "Render/Types/DOFTypes.h"
 #include "Collision/Math/ConvexVolume.h"
 #include "GameFramework/WorldContext.h"
 #include "GameFramework/Camera/CameraTypes.h"
@@ -69,6 +70,9 @@ struct FFrameContext
 
 	// Bloom mip chain owned by the viewport.
 	const FBloomFrameResources* BloomResources      = nullptr;
+
+	// DOF resources owned by the viewport
+	const FDOF* DOFResources						= nullptr;
 
 	// Cursor position relative to viewport (for debug visualization)
 	uint32 CursorViewportX = UINT32_MAX;
@@ -137,5 +141,6 @@ struct FFrameContext
 		CullingHeatmapRTV       = nullptr;
 		CullingHeatmapSRV       = nullptr;
 		BloomResources          = nullptr;
+		DOFResources			= nullptr;
 	}
 };

@@ -493,6 +493,9 @@
     <Filter Include="ThirdParty\sol2\include\sol\utility">
       <UniqueIdentifier>{9665cc4b-2b87-76ba-7eb3-a148e4c5a694}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shaders\PostProcess\DOF">
+      <UniqueIdentifier>{2d3b6f28-9983-422d-9c72-0433faf313fe}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\Common\ConstantBuffers.hlsli">
@@ -626,6 +629,15 @@
     </FxCompile>
     <FxCompile Include="Shaders\UI\SubUV.hlsl">
       <Filter>Shaders\UI</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostProcess\DOF\DOFCoC.hlsl">
+      <Filter>Shaders\PostProcess\DOF</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostProcess\DOF\DOFBlur.hlsl">
+      <Filter>Shaders\PostProcess\DOF</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostProcess\DOF\DOFComposite.hlsl">
+      <Filter>Shaders\PostProcess\DOF</Filter>
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1676,6 +1688,9 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Intermediate\Generated\Reflection.generated.cpp">
       <Filter>Intermediate\Generated</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\RenderPass\DOFPass.cpp">
+      <Filter>Source\Engine\Render\RenderPass</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -4622,8 +4637,16 @@
     <ClInclude Include="ThirdParty\sol2\include\sol\utility\to_string.hpp">
       <Filter>ThirdParty\sol2\include\sol\utility</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Render\RenderPass\DOFPass.h">
+      <Filter>Source\Engine\Render\RenderPass</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="KraftonEngine.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\PostProcess\DOF\DOFCommon.hlsli">
+      <Filter>Shaders\PostProcess\DOF</Filter>
+    </None>
   </ItemGroup>
 </Project>

@@ -267,6 +267,11 @@ bool FViewport::CreateResources()
 		return false;
 	}
 
+	if (!CreateDOFResources())
+	{
+		return false;
+	}
+
 	// ── 뷰포트 렉트 ──
 	ViewportRect.TopLeftX = 0.0f;
 	ViewportRect.TopLeftY = 0.0f;
@@ -368,9 +373,86 @@ void FViewport::ReleaseBloomMip(FBloomMipResource& Resource)
 	Resource.Height = 0;
 }
 
+bool FViewport::CreateDOFResources()
+{
+	ReleaseDOFResources();
+
+	if (!CreateDOFResource(DOFResources.CoCResources, Width, Height, "ViewportDOFCoC"))
+	{
+		ReleaseDOFResources();
+		return false;
+	}
+
+	if (!CreateDOFResource(DOFResources.BlurResources, Width, Height, "ViewportDOFBlur"))
+	{
+		ReleaseDOFResources();
+		return false;
+	}
+
+	return true;
+}
+
+void FViewport::ReleaseDOFResources()
+{
+	ReleaseDOFResource(DOFResources.CoCResources);
+	ReleaseDOFResource(DOFResources.BlurResources);
+}
+
+bool FViewport::CreateDOFResource(FDOFResources& OutResource, uint32 InWidth, uint32 InHeight, const char* DebugName)
+{
+	ReleaseDOFResource(OutResource);
+
+	D3D11_TEXTURE2D_DESC Desc = {};
+	Desc.Width = InWidth;
+	Desc.Height = InHeight;
+	Desc.MipLevels = 1;
+	Desc.ArraySize = 1;
+	Desc.Format = SceneColorFormat;
+	Desc.SampleDesc.Count = 1;
+	Desc.Usage = D3D11_USAGE_DEFAULT;
+	Desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+
+	HRESULT hr = Device->CreateTexture2D(&Desc, nullptr, &OutResource.Texture);
+	if (FAILED(hr))
+	{
+		return false;
+	}
+	SetDebugName(OutResource.Texture, DebugName);
+
+	hr = Device->CreateRenderTargetView(OutResource.Texture, nullptr, &OutResource.RTV);
+	if (FAILED(hr))
+	{
+		ReleaseDOFResource(OutResource);
+		return false;
+	}
+	SetDebugName(OutResource.RTV, DebugName);
+
+	hr = Device->CreateShaderResourceView(OutResource.Texture, nullptr, &OutResource.SRV);
+	if (FAILED(hr))
+	{
+		ReleaseDOFResource(OutResource);
+		return false;
+	}
+	SetDebugName(OutResource.SRV, DebugName);
+
+	OutResource.Width = InWidth;
+	OutResource.Height = InHeight;
+	return true;
+}
+
+void FViewport::ReleaseDOFResource(FDOFResources& Resource)
+{
+	if (Resource.SRV) { Resource.SRV->Release(); Resource.SRV = nullptr; }
+	if (Resource.RTV) { Resource.RTV->Release(); Resource.RTV = nullptr; }
+	if (Resource.Texture) { Resource.Texture->Release(); Resource.Texture = nullptr; }
+	Resource.Width = 0;
+	Resource.Height = 0;
+}
+
 void FViewport::ReleaseResources()
 {
 	ReleaseBloomResources();
+	ReleaseDOFResources();
 
 	if (CullingHeatmapSRV) { CullingHeatmapSRV->Release(); CullingHeatmapSRV = nullptr; }
 	if (CullingHeatmapRTV) { CullingHeatmapRTV->Release(); CullingHeatmapRTV = nullptr; }

@@ -58,6 +58,7 @@ struct FShowFlags
 	bool bOctree = false;
 	bool bFog = true;
 	bool bBloom = false;
+	bool bDOF = false;
 	bool bFXAA = false;
 	bool bGammaCorrection = true;
 	bool bViewLightCulling = false;
@@ -109,6 +110,12 @@ struct FViewportRenderOptions
 	float BloomSoftKnee = 0.5f;
 	float BloomIntensity = 0.6f;
 	float BloomBlurRadius = 1.0f;
+
+	// DOF 전용 설정
+	float Aperture		= 0.5f;			// 0 = pass disabled
+	float FocusDistance = 20.0f;		// focus plane distance
+	float FocalLength	= 15.0f;		// <= FocusDistance
+	int	  DOFSample		= 32;			// Number of blur taps
 
 	// Tone Mapping / Gamma Correction 전용 설정
 	float Gamma = 2.4f;

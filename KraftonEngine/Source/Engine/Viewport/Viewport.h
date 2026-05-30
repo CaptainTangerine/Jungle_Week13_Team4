@@ -2,6 +2,7 @@
 
 #include "Render/Types/RenderTypes.h"
 #include "Render/Types/BloomTypes.h"
+#include "Render/Types/DOFTypes.h"
 
 class FViewportClient;
 
@@ -59,6 +60,8 @@ public:
 	// Bloom RT chain
 	const FBloomFrameResources* GetBloomResources() const { return &BloomResources; }
 
+	const FDOF* GetDOFResources() const { return &DOFResources; }
+
 	const D3D11_VIEWPORT& GetViewportRect() const { return ViewportRect; }
 
 private:
@@ -68,6 +71,10 @@ private:
 	void ReleaseBloomResources();
 	bool CreateBloomMip(FBloomMipResource& OutResource, uint32 InWidth, uint32 InHeight, const char* DebugName);
 	void ReleaseBloomMip(FBloomMipResource& Resource);
+	bool CreateDOFResources();
+	void ReleaseDOFResources();
+	bool CreateDOFResource(FDOFResources& OutResource, uint32 InWidth, uint32 InHeight, const char* DebugName);
+	void ReleaseDOFResource(FDOFResources& Resource);
 
 private:
 	FViewportClient* ViewportClient = nullptr;
@@ -106,6 +113,9 @@ private:
 
 	// Bloom mip chain: half-res and below, plus ping-pong temp targets.
 	FBloomFrameResources BloomResources;
+
+	// DOF Resources
+	FDOF DOFResources;
 
 	D3D11_VIEWPORT ViewportRect = {};
 
