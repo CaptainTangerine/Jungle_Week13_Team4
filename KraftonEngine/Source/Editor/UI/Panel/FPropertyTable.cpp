@@ -13,6 +13,7 @@
 #include "Object/FName.h"
 #include "Object/Reflection/UClass.h"
 #include "Object/Reflection/UStruct.h"
+#include "Math/Transform.h"
 #include "Core/Logging/Log.h"
 #include "Asset/AssetRegistry.h"
 #include "Materials/MaterialManager.h"
@@ -845,6 +846,44 @@ bool FPropertyTable::RenderValue(TArray<FPropertyValue>& Props, int32& Index, co
 			{
 				Ctx.OnRotatorEdited();
 			}
+		}
+		break;
+	}
+	case EPropertyType::Transform:
+	{
+		// FTransform { Location, FQuat Rotation, Scale } 을 Location / Rotation(Euler) / Scale
+		// 3행으로 렌더. 회전은 FRotator 변환으로 편집(Rotator 케이스와 동일한 X=Roll,Y=Pitch,Z=Yaw).
+		FTransform* Xf = static_cast<FTransform*>(Prop.GetValuePtr());
+		if (!Xf)
+		{
+			break;
+		}
+		const float Speed = Prop.GetSpeed();
+
+		float Loc[3] = { Xf->Location.X, Xf->Location.Y, Xf->Location.Z };
+		ImGui::TextUnformatted("L"); ImGui::SameLine();
+		if (ImGui::DragFloat3("##XfLoc", Loc, Speed))
+		{
+			Xf->Location.X = Loc[0]; Xf->Location.Y = Loc[1]; Xf->Location.Z = Loc[2];
+			bChanged = true;
+		}
+
+		FRotator Rot = Xf->GetRotator();
+		float RotXYZ[3] = { Rot.Roll, Rot.Pitch, Rot.Yaw };
+		ImGui::TextUnformatted("R"); ImGui::SameLine();
+		if (ImGui::DragFloat3("##XfRot", RotXYZ, Speed))
+		{
+			Rot.Roll = RotXYZ[0]; Rot.Pitch = RotXYZ[1]; Rot.Yaw = RotXYZ[2];
+			Xf->SetRotation(Rot);
+			bChanged = true;
+		}
+
+		float Scl[3] = { Xf->Scale.X, Xf->Scale.Y, Xf->Scale.Z };
+		ImGui::TextUnformatted("S"); ImGui::SameLine();
+		if (ImGui::DragFloat3("##XfScl", Scl, Speed))
+		{
+			Xf->Scale.X = Scl[0]; Xf->Scale.Y = Scl[1]; Xf->Scale.Z = Scl[2];
+			bChanged = true;
 		}
 		break;
 	}
