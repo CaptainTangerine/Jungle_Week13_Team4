@@ -38,12 +38,14 @@ enum class ERenderPass : uint32
 	ShadowMap,		// 라이트별 Shadow Depth 렌더링
 	Opaque,			// 불투명 지오메트리 (StaticMesh 등)
 	Decal,			// 데칼 (DepthReadOnly)
-	SelectionMask,	// 선택 스텐실 마스크
-	EditorLines,	// 디버그 라인 + 그리드 (LINELIST)
-	PostProcess,	// 아웃라인 풀스크린, Fog, SceneDepth
+	Fog,
 	AdditiveDecal,	// Additive 빌보드 등
 	AlphaBlend,		// 반투명 지오메트리 (Font, SubUV, Billboard, Translucent)
 	DepthOfField,	// 피사계 심도
+	EditorLines,	// 디버그 라인 + 그리드 (LINELIST)
+	SelectionMask,	// 선택 스텐실 마스크
+	PostProcess,	// 아웃라인 풀스크린, SceneDepth
+	PostDOFAlpha,
 	Bloom,			// HDR SceneColor bloom post process
 	FXAA,			// FXAA 안티앨리어싱 (SceneColor 복사 후 실행)
 	GizmoOuter,		// 기즈모 외곽 (깊이 테스트 O)
@@ -62,12 +64,14 @@ inline const char* GetRenderPassName(ERenderPass Pass)
 		"RenderPass::ShadowMap",
 		"RenderPass::Opaque",
 		"RenderPass::Decal",
-		"RenderPass::SelectionMask",
-		"RenderPass::EditorLines",
-		"RenderPass::PostProcess",
+		"RenderPass::Fog",
 		"RenderPass::AdditiveDecal",
 		"RenderPass::AlphaBlend",
 		"RenderPass::DepthOfField",
+		"RenderPass::EditorLines",
+		"RenderPass::SelectionMask",
+		"RenderPass::PostProcess",
+		"RenderPass::PostDOFAlpha",
 		"RenderPass::Bloom",
 		"RenderPass::FXAA",
 		"RenderPass::GizmoOuter",
@@ -89,12 +93,14 @@ namespace RenderStateStrings
 		{ "ShadowMap",     (int)ERenderPass::ShadowMap },
 		{ "Opaque",        (int)ERenderPass::Opaque },
 		{ "Decal",         (int)ERenderPass::Decal },
-		{ "SelectionMask", (int)ERenderPass::SelectionMask },
-		{ "EditorLines",   (int)ERenderPass::EditorLines },
-		{ "PostProcess",   (int)ERenderPass::PostProcess },
+		{ "Fog",		   (int)ERenderPass::Fog},
 		{ "AdditiveDecal", (int)ERenderPass::AdditiveDecal },
 		{ "AlphaBlend",    (int)ERenderPass::AlphaBlend },
-		{ "AlphaBlend",    (int)ERenderPass::DepthOfField },
+		{ "DepthOfField",  (int)ERenderPass::DepthOfField },
+		{ "EditorLines",   (int)ERenderPass::EditorLines },
+		{ "SelectionMask", (int)ERenderPass::SelectionMask },
+		{ "PostProcess",   (int)ERenderPass::PostProcess },
+		{ "PostDOFAlpha",  (int)ERenderPass::PostDOFAlpha },
 		{ "Bloom",         (int)ERenderPass::Bloom },
 		{ "FXAA",          (int)ERenderPass::FXAA },
 		{ "GizmoOuter",    (int)ERenderPass::GizmoOuter },

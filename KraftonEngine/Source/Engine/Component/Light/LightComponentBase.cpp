@@ -1,4 +1,4 @@
-#include "LightComponentBase.h"
+﻿#include "LightComponentBase.h"
 #include "Serialization/Archive.h"
 #include "Object/Reflection/ObjectFactory.h"
 #include "GameFramework/AActor.h"

@@ -5,6 +5,7 @@
 #include "Math/Transform.h"
 #include "Physics/Asset/PhysicsAssetTypes.h"
 #include "Physics/PhysicsHandles.h"
+#include "Physics/BodyInstanceCore.h"
 #include "Object/Reflection/ObjectMacros.h"
 
 #include "Source/Engine/Physics/Asset/BodySetup.generated.h"
@@ -50,13 +51,10 @@ public:
 	UBodySetup() = default;
 	~UBodySetup() override = default;
 
-	// 리플렉션 자동 직렬화. SerializeProperties 는 PF_Save 프로퍼티를 부모(UBodySetupCore
-	// 의 BoneName 포함)까지 순회하며, FStructProperty(AggGeom)·FArrayProperty·Vec3·Rotator
-	// 를 모두 재귀 처리한다(FGenericProperty 가 Rotator/Vec3 지원). 별도 operator<< 불필요.
-	void Serialize(FArchive& Ar) override
-	{
-		SerializeProperties(Ar, PF_Save);
-	}
+	// 직렬화는 소유자 UPhysicsAsset::Serialize 가 SerializeProperties(Ar, PF_Save) 를 직접 호출해
+	// 처리한다(인스턴스드 UObject 배열 — ObjectName 등 identity 는 굽지 않는다). 별도 Serialize
+	// 오버라이드는 불필요. SerializeProperties 가 부모 UBodySetupCore(BoneName/PhysicsType)까지
+	// 순회하며 FStructProperty(AggGeom)·FArrayProperty·Vec3·Rotator 를 모두 재귀 처리한다.
 
 	bool AddShapesToRigidActor(IPhysicsScene* Scene, FPhysicsActorHandle ActorHandle,
 		const FVector& Scale3D = FVector(1.0f, 1.0f, 1.0f),
@@ -68,4 +66,8 @@ public:
 	FKAggregateGeom AggGeom;
 	UPROPERTY(Edit, Save, Category="BodySetup", DisplayName="Default Mass", Min=0.f, Speed=0.1f)
 	float DefaultMass = 1.f;
+	// 본별 기본 바디 인스턴스 설정(Simulate / Enable Gravity / Start Awake / Override Mass 등).
+	// FBodyInstance::InitBody 가 런타임 인스턴스 생성 시 여기서 플래그를 복사한다.
+	UPROPERTY(Edit, Save, Category="Physics", DisplayName="Default Instance", Type=Struct)
+	FBodyInstanceCore DefaultInstance;
 };

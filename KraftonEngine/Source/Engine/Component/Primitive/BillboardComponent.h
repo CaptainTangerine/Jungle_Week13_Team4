@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "Component/PrimitiveComponent.h"
 #include "Render/Resource/MeshBufferManager.h"
 #include "Core/Types/ResourceTypes.h"

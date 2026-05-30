@@ -481,6 +481,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Editor\UI\Panel\EditorPlayToolbarWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\Panel\EditorProjectSettingsWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\Panel\EditorPropertyWidget.cpp" />
+    <ClCompile Include="Source\Editor\UI\Panel\FPropertyTable.cpp" />
     <ClCompile Include="Source\Editor\UI\Panel\EditorSceneWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\Panel\EditorStatWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\Panel\EditorViewportWidget.cpp" />
@@ -684,6 +685,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Engine\Physics\BodyInstance.cpp" />
     <ClCompile Include="Source\Engine\Physics\BodyInstanceCore.cpp" />
     <ClCompile Include="Source\Engine\Physics\PhysXPhysicsScene.cpp" />
+    <ClCompile Include="Source\Engine\Physics\Asset\BodyConstraintGenerator.cpp" />
     <ClCompile Include="Source\Engine\Physics\Asset\BodySetup.cpp" />
     <ClCompile Include="Source\Engine\Physics\Asset\PhysicsAsset.cpp" />
     <ClCompile Include="Source\Engine\Physics\Asset\PhysicsAssetManager.cpp" />
@@ -734,6 +736,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Engine\Render\RenderPass\DecalPass.cpp" />
     <ClCompile Include="Source\Engine\Render\RenderPass\EditorLinesPass.cpp" />
     <ClCompile Include="Source\Engine\Render\RenderPass\FXAAPass.cpp" />
+    <ClCompile Include="Source\Engine\Render\RenderPass\FogPass.cpp" />
     <ClCompile Include="Source\Engine\Render\RenderPass\GammaCorrectionPass.cpp" />
     <ClCompile Include="Source\Engine\Render\RenderPass\GizmoInnerPass.cpp" />
     <ClCompile Include="Source\Engine\Render\RenderPass\GizmoOuterPass.cpp" />
@@ -741,6 +744,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Engine\Render\RenderPass\OpaquePass.cpp" />
     <ClCompile Include="Source\Engine\Render\RenderPass\OverlayFontPass.cpp" />
     <ClCompile Include="Source\Engine\Render\RenderPass\PassRenderStateTable.cpp" />
+    <ClCompile Include="Source\Engine\Render\RenderPass\PostDOFAlphaPass.cpp" />
     <ClCompile Include="Source\Engine\Render\RenderPass\PostProcessPass.cpp" />
     <ClCompile Include="Source\Engine\Render\RenderPass\PreDepthPass.cpp" />
     <ClCompile Include="Source\Engine\Render\RenderPass\RenderPassBase.cpp" />
@@ -846,6 +850,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Editor\UI\Panel\EditorPlayToolbarWidget.h" />
     <ClInclude Include="Source\Editor\UI\Panel\EditorProjectSettingsWidget.h" />
     <ClInclude Include="Source\Editor\UI\Panel\EditorPropertyWidget.h" />
+    <ClInclude Include="Source\Editor\UI\Panel\FPropertyTable.h" />
     <ClInclude Include="Source\Editor\UI\Panel\EditorSceneWidget.h" />
     <ClInclude Include="Source\Editor\UI\Panel\EditorStatWidget.h" />
     <ClInclude Include="Source\Editor\UI\Panel\EditorViewportWidget.h" />
@@ -1097,6 +1102,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Engine\Physics\PhysXPhysicsScene.h" />
     <ClInclude Include="Source\Engine\Physics\PhysicsHandles.h" />
     <ClInclude Include="Source\Engine\Physics\PhysicsInterfaceTypes.h" />
+    <ClInclude Include="Source\Engine\Physics\Asset\BodyConstraintGenerator.h" />
     <ClInclude Include="Source\Engine\Physics\Asset\BodySetup.h" />
     <ClInclude Include="Source\Engine\Physics\Asset\ConstraintSetup.h" />
     <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAsset.h" />
@@ -1156,6 +1162,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Engine\Render\RenderPass\DecalPass.h" />
     <ClInclude Include="Source\Engine\Render\RenderPass\EditorLinesPass.h" />
     <ClInclude Include="Source\Engine\Render\RenderPass\FXAAPass.h" />
+    <ClInclude Include="Source\Engine\Render\RenderPass\FogPass.h" />
     <ClInclude Include="Source\Engine\Render\RenderPass\GammaCorrectionPass.h" />
     <ClInclude Include="Source\Engine\Render\RenderPass\GizmoInnerPass.h" />
     <ClInclude Include="Source\Engine\Render\RenderPass\GizmoOuterPass.h" />
@@ -1163,6 +1170,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Engine\Render\RenderPass\OpaquePass.h" />
     <ClInclude Include="Source\Engine\Render\RenderPass\OverlayFontPass.h" />
     <ClInclude Include="Source\Engine\Render\RenderPass\PassRenderStateTable.h" />
+    <ClInclude Include="Source\Engine\Render\RenderPass\PostDOFAlphaPass.h" />
     <ClInclude Include="Source\Engine\Render\RenderPass\PostProcessPass.h" />
     <ClInclude Include="Source\Engine\Render\RenderPass\PreDepthPass.h" />
     <ClInclude Include="Source\Engine\Render\RenderPass\RenderPassBase.h" />
