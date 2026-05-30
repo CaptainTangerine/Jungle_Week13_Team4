@@ -11,13 +11,22 @@
 
 class IPhysicsScene;
 
+UENUM()
+enum EPhysicsType
+{
+	// Follow owner component simulation state.
+	PhysType_Default,
+	// Kinematic body: moves from animation/explicit target, not simulation.
+	PhysType_Kinematic,
+	// Simulated body: driven by physics.
+	PhysType_Simulated
+};
+
 // =====================================================================================
-// UBodySetupCore / UBodySetup — 발제 클래스 계층 그대로.
-//   UBodySetupCore : BoneName 만 보유 (어느 본에 붙는지)
-//   UBodySetup     : AggGeom(= Primitives) + Mass 등 실제 바디 설정
-//
-// [B 제안 / A 확정 예정] 직렬화(인스턴스드 UObject 영속화)는 A 가 .cpp 에서 구현.
-// 여기서는 필드 형태만 확정 제안하고 Serialize override 는 비워 둔다(= base 사용).
+// UBodySetupCore / UBodySetup — UE BodySetup 계층의 최소형.
+//   UBodySetupCore : PhysicsAsset 에서 본 연결과 기본 physics type 을 보유.
+//   UBodySetup     : 공유되는 collision geometry 와 기본 질량 데이터.
+//   FBodyInstance  : 월드에 생성된 actor handle 과 런타임 상태.
 // =====================================================================================
 UCLASS()
 class UBodySetupCore : public UObject
@@ -29,6 +38,8 @@ public:
 
 	UPROPERTY(Edit, Save, Category="BodySetup", DisplayName="Bone Name")
 	FName BoneName;
+	UPROPERTY(Edit, Save, Category="Physics", DisplayName="Physics Type", Enum=EPhysicsType)
+	EPhysicsType PhysicsType = PhysType_Default;
 };
 
 UCLASS()
@@ -55,8 +66,6 @@ public:
 
 	UPROPERTY(Edit, Save, Category="BodySetup", DisplayName="Primitives", Type=Struct)
 	FKAggregateGeom AggGeom;
-	UPROPERTY(Edit, Save, Category="BodySetup", DisplayName="Mass", Min=0.f, Speed=0.1f)
-	float Mass = 1.f;
-	UPROPERTY(Edit, Save, Category="BodySetup", DisplayName="Simulate Physics")
-	bool  bSimulatePhysics = true;
+	UPROPERTY(Edit, Save, Category="BodySetup", DisplayName="Default Mass", Min=0.f, Speed=0.1f)
+	float DefaultMass = 1.f;
 };

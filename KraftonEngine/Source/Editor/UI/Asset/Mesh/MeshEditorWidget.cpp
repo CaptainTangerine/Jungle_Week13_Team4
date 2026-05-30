@@ -1586,8 +1586,14 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 	}
 	else if (UBodySetup* Body = CurrentPhysicsAsset->BodySetups[BodyIdx])
 	{
-		if (ImGui::DragFloat("Mass", &Body->Mass, 0.1f, 0.0f, 0.0f, "%.2f"))      { MarkDirty(); }
-		if (ImGui::Checkbox("Simulate Physics", &Body->bSimulatePhysics))         { MarkDirty(); }
+		if (ImGui::DragFloat("Default Mass", &Body->DefaultMass, 0.1f, 0.0f, 0.0f, "%.2f")) { MarkDirty(); }
+		const char* PhysicsTypeLabels[] = { "Default", "Kinematic", "Simulated" };
+		int32 PhysicsTypeIndex = static_cast<int32>(Body->PhysicsType);
+		if (ImGui::Combo("Physics Type", &PhysicsTypeIndex, PhysicsTypeLabels, IM_ARRAYSIZE(PhysicsTypeLabels)))
+		{
+			Body->PhysicsType = static_cast<EPhysicsType>(PhysicsTypeIndex);
+			MarkDirty();
+		}
 
 		ImGui::Text("Primitives  S:%d  B:%d  C:%d",
 			static_cast<int32>(Body->AggGeom.SphereElems.size()),

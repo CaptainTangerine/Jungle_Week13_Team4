@@ -12,14 +12,25 @@ bool FBodyInstance::InitBody(UBodySetup* Setup, const FTransform& Transform, IPh
 	}
 
 	BodySetup = Setup;
-	BoneName = Setup->BoneName;
 	InstanceBoneIndex = BoneIndex;
-	bSimulatePhysics = Setup->bSimulatePhysics;
+	switch (Setup->PhysicsType)
+	{
+	case PhysType_Simulated:
+		bSimulatePhysics = true;
+		break;
+	case PhysType_Kinematic:
+		bSimulatePhysics = false;
+		break;
+	case PhysType_Default:
+	default:
+		// OwnerComponent 기반 상속은 아직 없으므로 기존 instance 값을 유지한다.
+		break;
+	}
 
 	FActorCreationParams ActorParams;
 	ActorParams.InitialTM = Transform;
 	ActorParams.bStatic = false;
-	ActorParams.bSimulatePhysics = bSimulatePhysics;
+	ActorParams.bSimulatePhysics = ShouldInstanceSimulatingPhysics();
 	ActorParams.bStartAwake = bStartAwake;
 	ActorParams.bEnableGravity = bEnableGravity;
 	ActorParams.UserData = this;
@@ -41,7 +52,7 @@ bool FBodyInstance::InitBody(UBodySetup* Setup, const FTransform& Transform, IPh
 		return false;
 	}
 
-	InRBScene->SetActorKinematic(ActorHandle, !bSimulatePhysics);
+	InRBScene->SetActorKinematic(ActorHandle, !ShouldInstanceSimulatingPhysics());
 	UpdateMassProperties(InRBScene);
 	return true;
 }
@@ -56,6 +67,11 @@ void FBodyInstance::TermBody(IPhysicsScene* InRBScene)
 	ActorHandle = {};
 	BodySetup = nullptr;
 	InstanceBoneIndex = -1;
+}
+
+UBodySetup* FBodyInstance::GetBodySetup() const
+{
+	return static_cast<UBodySetup*>(BodySetup);
 }
 
 FTransform FBodyInstance::GetUnrealWorldTransform(IPhysicsScene* InRBScene) const
@@ -81,7 +97,7 @@ void FBodyInstance::SetInstanceSimulatePhysics(IPhysicsScene* InRBScene, bool bS
 	bSimulatePhysics = bSimulate;
 	if (InRBScene && ActorHandle.IsValid())
 	{
-		InRBScene->SetActorKinematic(ActorHandle, !bSimulatePhysics);
+		InRBScene->SetActorKinematic(ActorHandle, !ShouldInstanceSimulatingPhysics());
 	}
 }
 
@@ -95,8 +111,10 @@ void FBodyInstance::SetKinematicTarget(IPhysicsScene* InRBScene, const FTransfor
 
 void FBodyInstance::UpdateMassProperties(IPhysicsScene* InRBScene)
 {
-	if (InRBScene && ActorHandle.IsValid() && BodySetup)
+	UBodySetup* Setup = GetBodySetup();
+	if (InRBScene && ActorHandle.IsValid() && Setup)
 	{
-		InRBScene->SetActorMass(ActorHandle, BodySetup->Mass);
+		const float EffectiveMass = (bOverrideMass && MassInKgOverride > 0.0f) ? MassInKgOverride : Setup->DefaultMass;
+		InRBScene->SetActorMass(ActorHandle, EffectiveMass);
 	}
 }
