@@ -42,6 +42,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 
 // Paths.h가 끌어오는 Windows.h는 GetCurrentTime을 GetTickCount로 치환한다.
 #ifdef GetCurrentTime
@@ -1655,6 +1656,28 @@ UPhysicsAsset* FMeshEditorWidget::EnsurePhysicsAssetForCurrentSkeleton()
 		return nullptr;
 	}
 	Asset->SkeletonBinding = Mesh->GetSkeletonBinding();
+
+	// SkeletalMesh 에셋 경로 기준으로 <stem>_Physics.uasset 경로를 잡고(중복 시 _1, _2 …)
+	// 즉시 디스크에 저장한다 — 콘텐츠 브라우저에 바로 뜨고, 이후 Save 버튼이 활성화된다.
+	const FString& MeshPath = Mesh->GetAssetPathFileName();
+	if (!MeshPath.empty() && MeshPath != "None")
+	{
+		const std::filesystem::path MeshFsPath(FPaths::ToWide(MeshPath));
+		const std::filesystem::path Dir  = MeshFsPath.parent_path();
+		const FString               Stem = FPaths::ToUtf8(MeshFsPath.stem().wstring());
+
+		std::filesystem::path Candidate = Dir / FPaths::ToWide(Stem + "_Physics.uasset");
+		int32 Suffix = 1;
+		while (std::filesystem::exists(FPaths::MakeProjectRelative(FPaths::ToUtf8(Candidate.generic_wstring()))))
+		{
+			Candidate = Dir / FPaths::ToWide(Stem + "_Physics_" + std::to_string(Suffix) + ".uasset");
+			++Suffix;
+		}
+
+		Asset->SetSourcePath(FPaths::ToUtf8(Candidate.generic_wstring()));
+		FPhysicsAssetManager::Get().Save(Asset);
+	}
+
 	CurrentPhysicsAsset = Asset;
 	MarkDirty();
 	return CurrentPhysicsAsset;
