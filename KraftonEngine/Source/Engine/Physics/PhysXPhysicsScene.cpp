@@ -1,4 +1,4 @@
-#include "Physics/PhysXPhysicsScene.h"
+﻿#include "Physics/PhysXPhysicsScene.h"
 #include "Component/PrimitiveComponent.h"
 #include "Component/Shape/BoxComponent.h"
 #include "Component/Shape/SphereComponent.h"
@@ -48,6 +48,8 @@ static PxDefaultAllocator GPhysXAllocator;
 // ============================================================
 static PxFoundation* GSharedFoundation = nullptr;
 static PxPhysics* GSharedPhysics = nullptr;
+static PxCooking* GSharedCooking = nullptr;
+static bool GVehicleSDKInitialized = false;
 static int32 GSharedRefCount = 0;
 
 static void AcquireSharedPhysX(PxFoundation*& OutFoundation, PxPhysics*& OutPhysics)
@@ -58,6 +60,19 @@ static void AcquireSharedPhysX(PxFoundation*& OutFoundation, PxPhysics*& OutPhys
 		if (GSharedFoundation)
 		{
 			GSharedPhysics = PxCreatePhysics(PX_PHYSICS_VERSION, *GSharedFoundation, PxTolerancesScale());
+		}
+
+		if (GSharedPhysics)
+		{
+			GSharedCooking = PxCreateCooking(PX_PHYSICS_VERSION, *GSharedFoundation, PxCookingParams(GSharedPhysics->getTolerancesScale()));
+
+			if (PxInitVehicleSDK(*GSharedPhysics))
+			{
+				// Up, then forward vector
+				PxVehicleSetBasisVectors(PxVec3(0.f, 0.f, 1.f), PxVec3(1.f , 0.f, 0.f));
+				PxVehicleSetUpdateMode(PxVehicleUpdateMode::eACCELERATION);
+				GVehicleSDKInitialized = true;
+			}
 		}
 	}
 	++GSharedRefCount;
