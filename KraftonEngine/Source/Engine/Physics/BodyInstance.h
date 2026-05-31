@@ -17,6 +17,11 @@ struct FBodyInstance : public FBodyInstanceCore
 
 	float MassInKgOverride = 0.0f;
 
+	// 부분 래그돌용 per-body 블렌드 가중치(0=anim 키네마틱, 1=물리 시뮬). 컴포넌트가
+	// 매 프레임 Target 으로 보간하고, 이 값으로 본 포즈를 anim↔시뮬 블렌드한다.
+	float PhysicsBlendWeight = 0.0f;
+	float PhysicsBlendWeightTarget = 0.0f;
+
 	bool InitBody(UBodySetup* Setup, const FTransform& Transform, IPhysicsScene* InRBScene, int32 BoneIndex = -1);
 	void TermBody(IPhysicsScene* InRBScene);
 
