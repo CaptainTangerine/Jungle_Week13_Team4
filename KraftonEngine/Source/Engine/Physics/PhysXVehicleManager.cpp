@@ -26,7 +26,52 @@ namespace
 	};
 	static const PxFixedSizeLookupTable<8> gSteerVsForwardSpeedTable(gSteerVsForwardSpeedData, 4);
 
+	PxQueryHitType::Enum WheelRaycastPreFilter(
+		PxFilterData, PxFilterData object,
+		const void*, PxU32, PxHitFlags&)
+	{
+		return (object.word3 & DRIVABLE_SURFACE_FLAG)
+			? PxQueryHitType::eBLOCK : PxQueryHitType::eNONE;
+	}
+
 } // anonymous namespce
+
+struct FPhysXVehicleManager::FVehicleSceneQueryData
+{
+	PxBatchQuery* BatchQuery = nullptr;
+	TArray<PxRaycastQueryResult>           RaycastResults;   // [총 바퀴]
+	TArray<PxRaycastHit>                   RaycastHits;      // [총 바퀴]
+	TArray<PxWheelQueryResult>             WheelResults;     // [총 바퀴]
+	TArray<PxVehicleWheelQueryResult>      VehicleResults;   // [차량 수]
+
+	// 총 바퀴 수가 바뀌면 (재)할당. BatchQuery 는 Scene 에서 생성.
+	void Ensure(PxScene* Scene, uint32 NumVehicles, uint32 TotalWheels)
+	{
+		if (WheelResults.size() == TotalWheels && BatchQuery) return;
+		Release();
+
+		RaycastResults.resize(TotalWheels);
+		RaycastHits.resize(TotalWheels);
+		WheelResults.resize(TotalWheels);
+		VehicleResults.resize(NumVehicles);
+
+		PxBatchQueryDesc Desc(TotalWheels, 0, 0);
+		Desc.queryMemory.userRaycastResultBuffer = RaycastResults.data();
+		Desc.queryMemory.userRaycastTouchBuffer = RaycastHits.data();
+		Desc.queryMemory.raycastTouchBufferSize = TotalWheels;
+		Desc.preFilterShader = WheelRaycastPreFilter;
+		BatchQuery = Scene->createBatchQuery(Desc);
+	}
+
+	void Release()
+	{
+		if (BatchQuery) { BatchQuery->release(); BatchQuery = nullptr; }
+		RaycastResults.clear(); RaycastHits.clear();
+		WheelResults.clear();   VehicleResults.clear();
+	}
+};
+
+
 // ============================================================
 // FPhysXVehicleManager — scene 소유 차량 레지스트리 + 배치 업데이트.
 // (memory: physx-vehicle-integration) — register/unregister 핸드셰이크 + PhysX 컨텍스트
@@ -117,19 +162,10 @@ void FPhysXVehicleManager::Tick(float DeltaTime)
 	if (PxVehicles.empty()) return;
 
 	// 2. 서스펜션 레이캐스트(Suspension Raycasts) 수행
-	PxBatchQuery* BatchQuery;
-	PxVehicleWheelQueryResult* WheelQueryResults;
-
-	if (BatchQuery && WheelQueryResults)
-	{
-		PxVehicleSuspensionRaycasts(
-			BatchQuery,
-			PxVehicles.size(),
-			PxVehicles.data(),
-			TotalWheelCount,
-			WheelQueryResults
-		);
-	}
+	if (!SqData || SqData->BatchQuery) return;
+	PxVehicleSuspensionRaycasts(
+		SqData->BatchQuery, PxVehicles.size(), PxVehicles.data(),
+		SqData->RaycastResults.size(), SqData->RaycastResults.data());
 
 	// 3. PxVehicleUpdates에 필요한 환경 변수 가져오기
 	PxScene* Scene = GetScene();
@@ -140,14 +176,10 @@ void FPhysXVehicleManager::Tick(float DeltaTime)
 	PxVehicleWheelQueryResult* VehicleWheelQueryResults;
 
 	// 4. 차량 물리 상태 업데이트 (속도, 토크, 서스펜션 변위 등 계산)
-	physx::PxVehicleUpdates(
-		DeltaTime,
-		Gravity,
-		*FrictionPairs,
-		PxVehicles.size(),
-		PxVehicles.data(),
-		VehicleWheelQueryResults
-	);
+	PxVehicleUpdates(
+		DeltaTime, Gravity, *FrictionPairs,
+		PxVehicles.size(), PxVehicles.data(),
+		SqData->VehicleResults.data());
 }
 
 void FPhysXVehicleManager::PostTick(float DeltaTime)
@@ -163,6 +195,10 @@ void FPhysXVehicleManager::Release()
 	{
 		FrictionPairs->release();
 		FrictionPairs = nullptr;
+	}
+	if (SqData)
+	{
+		SqData->Release(); delete SqData; SqData = nullptr;
 	}
 	Vehicles.clear();
 	Physics       = nullptr;
