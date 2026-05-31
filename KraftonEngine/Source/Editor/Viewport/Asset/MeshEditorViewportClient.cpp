@@ -41,6 +41,7 @@ void FMeshEditorViewportClient::Release()
 	UObjectManager::Get().DestroyObject(Gizmo);
 	Gizmo = nullptr;
 	BoneDebugComponent = nullptr;
+	PhysicsDebugComponent = nullptr;   // 프리뷰 액터와 함께 파괴됨 — SetSelectedBone 의 댕글링 접근 방지
 
 	bIsRenderable = false;
 
@@ -61,6 +62,22 @@ void FMeshEditorViewportClient::CreateBoneDebugComponent()
 	BoneDebugComponent->SetTargetMeshComponent(PreviewMeshComponent);
 	BoneDebugComponent->SetSelectedBoneIndex(SelectedBoneIndex);
 	BoneDebugComponent->CreateRenderState();
+}
+
+void FMeshEditorViewportClient::CreatePhysicsAssetDebugComponent()
+{
+	PhysicsDebugComponent = PreviewActor->AddComponent<UPhysicsAssetDebugComponent>();
+	PhysicsDebugComponent->SetTargetMeshComponent(PreviewMeshComponent);
+	PhysicsDebugComponent->SetSelectedBoneIndex(SelectedBoneIndex);
+	PhysicsDebugComponent->CreateRenderState();
+}
+
+void FMeshEditorViewportClient::SetDebugPhysicsAsset(UPhysicsAsset* InAsset)
+{
+	if (PhysicsDebugComponent)
+	{
+		PhysicsDebugComponent->SetPhysicsAsset(InAsset);
+	}
 }
 
 void FMeshEditorViewportClient::ResetCameraToPreviousBounds()
@@ -186,6 +203,12 @@ void FMeshEditorViewportClient::SetSelectedBone(USkeletalMesh* Mesh, int32 BoneI
 	{
 		BoneDebugComponent->SetTargetMeshComponent(PreviewMeshComponent);
 		BoneDebugComponent->SetSelectedBoneIndex(BoneIndex);
+	}
+
+	if (PhysicsDebugComponent)
+	{
+		PhysicsDebugComponent->SetTargetMeshComponent(PreviewMeshComponent);
+		PhysicsDebugComponent->SetSelectedBoneIndex(BoneIndex);
 	}
 }
 

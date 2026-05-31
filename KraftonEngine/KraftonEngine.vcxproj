@@ -481,11 +481,11 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Editor\UI\Panel\EditorPlayToolbarWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\Panel\EditorProjectSettingsWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\Panel\EditorPropertyWidget.cpp" />
-    <ClCompile Include="Source\Editor\UI\Panel\FPropertyTable.cpp" />
     <ClCompile Include="Source\Editor\UI\Panel\EditorSceneWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\Panel\EditorStatWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\Panel\EditorViewportWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\Panel\EditorWorldSettingsWidget.cpp" />
+    <ClCompile Include="Source\Editor\UI\Panel\FPropertyTable.cpp" />
     <ClCompile Include="Source\Editor\UI\Toolbar\ViewportToolbar.cpp" />
     <ClCompile Include="Source\Editor\UI\Util\EditorDragSource.cpp" />
     <ClCompile Include="Source\Editor\UI\Util\EditorFileUtils.cpp" />
@@ -553,6 +553,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Engine\Component\Camera\SpringArmComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\Debug\BoneDebugComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\Debug\GizmoComponent.cpp" />
+    <ClCompile Include="Source\Engine\Component\Debug\PhysicsAssetDebugComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\Debug\TemporaryBoneAnimatorComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\Input\ActionComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\Input\InputComponent.cpp" />
@@ -718,6 +719,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Engine\Render\Proxy\DecalSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\GizmoSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\ParticleSystemSceneProxy.cpp" />
+    <ClCompile Include="Source\Engine\Render\Proxy\PhysicsAssetDebugSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\PrimitiveSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\ShapeSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\SkeletalMeshSceneProxy.cpp" />
@@ -851,11 +853,11 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Editor\UI\Panel\EditorPlayToolbarWidget.h" />
     <ClInclude Include="Source\Editor\UI\Panel\EditorProjectSettingsWidget.h" />
     <ClInclude Include="Source\Editor\UI\Panel\EditorPropertyWidget.h" />
-    <ClInclude Include="Source\Editor\UI\Panel\FPropertyTable.h" />
     <ClInclude Include="Source\Editor\UI\Panel\EditorSceneWidget.h" />
     <ClInclude Include="Source\Editor\UI\Panel\EditorStatWidget.h" />
     <ClInclude Include="Source\Editor\UI\Panel\EditorViewportWidget.h" />
     <ClInclude Include="Source\Editor\UI\Panel\EditorWorldSettingsWidget.h" />
+    <ClInclude Include="Source\Editor\UI\Panel\FPropertyTable.h" />
     <ClInclude Include="Source\Editor\UI\Toolbar\ViewportToolbar.h" />
     <ClInclude Include="Source\Editor\UI\Util\EditorDragSource.h" />
     <ClInclude Include="Source\Editor\UI\Util\EditorFileUtils.h" />
@@ -937,6 +939,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Engine\Component\Camera\SpringArmComponent.h" />
     <ClInclude Include="Source\Engine\Component\Debug\BoneDebugComponent.h" />
     <ClInclude Include="Source\Engine\Component\Debug\GizmoComponent.h" />
+    <ClInclude Include="Source\Engine\Component\Debug\PhysicsAssetDebugComponent.h" />
     <ClInclude Include="Source\Engine\Component\Debug\TemporaryBoneAnimatorComponent.h" />
     <ClInclude Include="Source\Engine\Component\Input\ActionComponent.h" />
     <ClInclude Include="Source\Engine\Component\Input\InputComponent.h" />
@@ -1144,6 +1147,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Engine\Render\Proxy\DirtyFlag.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\GizmoSceneProxy.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\ParticleSystemSceneProxy.h" />
+    <ClInclude Include="Source\Engine\Render\Proxy\PhysicsAssetDebugSceneProxy.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\PrimitiveSceneProxy.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\ShapeSceneProxy.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\SkeletalMeshSceneProxy.h" />
