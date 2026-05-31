@@ -923,6 +923,7 @@ void FPhysXPhysicsScene::Tick(float DeltaTime)
 	}
 
 	// ── Simulate ──
+	if (VehicleManager) { VehicleManager->PreTick(DeltaTime); VehicleManager->Tick(DeltaTime); }
 	Scene->simulate(DeltaTime);
 	Scene->fetchResults(true);
 
