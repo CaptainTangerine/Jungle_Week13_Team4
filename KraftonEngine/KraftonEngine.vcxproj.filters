@@ -764,6 +764,9 @@
     <ClCompile Include="Source\Editor\UI\Panel\EditorWorldSettingsWidget.cpp">
       <Filter>Source\Editor\UI\Panel</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Editor\UI\Panel\FPropertyTable.cpp">
+      <Filter>Source\Editor\UI\Panel</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Editor\UI\Toolbar\ViewportToolbar.cpp">
       <Filter>Source\Editor\UI\Toolbar</Filter>
     </ClCompile>
@@ -963,6 +966,9 @@
       <Filter>Source\Engine\Component\Debug</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Component\Debug\GizmoComponent.cpp">
+      <Filter>Source\Engine\Component\Debug</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Component\Debug\PhysicsAssetDebugComponent.cpp">
       <Filter>Source\Engine\Component\Debug</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Component\Debug\TemporaryBoneAnimatorComponent.cpp">
@@ -1361,6 +1367,9 @@
     <ClCompile Include="Source\Engine\Physics\PhysXPhysicsScene.cpp">
       <Filter>Source\Engine\Physics</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Physics\Asset\BodyConstraintGenerator.cpp">
+      <Filter>Source\Engine\Physics\Asset</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Physics\Asset\BodySetup.cpp">
       <Filter>Source\Engine\Physics\Asset</Filter>
     </ClCompile>
@@ -1452,6 +1461,9 @@
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\Proxy\ParticleSystemSceneProxy.cpp">
+      <Filter>Source\Engine\Render\Proxy</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Proxy\PhysicsAssetDebugSceneProxy.cpp">
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\Proxy\PrimitiveSceneProxy.cpp">
@@ -1859,6 +1871,9 @@
     <ClInclude Include="Source\Editor\UI\Panel\EditorWorldSettingsWidget.h">
       <Filter>Source\Editor\UI\Panel</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Editor\UI\Panel\FPropertyTable.h">
+      <Filter>Source\Editor\UI\Panel</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Editor\UI\Toolbar\ViewportToolbar.h">
       <Filter>Source\Editor\UI\Toolbar</Filter>
     </ClInclude>
@@ -2100,6 +2115,9 @@
       <Filter>Source\Engine\Component\Debug</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Component\Debug\GizmoComponent.h">
+      <Filter>Source\Engine\Component\Debug</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Component\Debug\PhysicsAssetDebugComponent.h">
       <Filter>Source\Engine\Component\Debug</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Component\Debug\TemporaryBoneAnimatorComponent.h">
@@ -2600,6 +2618,9 @@
     <ClInclude Include="Source\Engine\Physics\PhysicsInterfaceTypes.h">
       <Filter>Source\Engine\Physics</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\Asset\BodyConstraintGenerator.h">
+      <Filter>Source\Engine\Physics\Asset</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Physics\Asset\BodySetup.h">
       <Filter>Source\Engine\Physics\Asset</Filter>
     </ClInclude>
@@ -2715,6 +2736,9 @@
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Proxy\ParticleSystemSceneProxy.h">
+      <Filter>Source\Engine\Render\Proxy</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Proxy\PhysicsAssetDebugSceneProxy.h">
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Proxy\PrimitiveSceneProxy.h">
