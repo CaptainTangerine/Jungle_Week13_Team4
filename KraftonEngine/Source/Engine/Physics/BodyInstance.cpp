@@ -11,6 +11,11 @@ bool FBodyInstance::InitBody(UBodySetup* Setup, const FTransform& Transform, IPh
 		return false;
 	}
 
+	// 저작된 기본 인스턴스 플래그(Simulate/EnableGravity/StartAwake/OverrideMass 등)를 설정에서
+	// 복사한다. 아래 PhysicsType 스위치가 bSimulatePhysics 를 최종 결정(Default 면 이 복사값 유지).
+	// DefaultInstance.BodySetup 은 null 이므로 복사 직후 this->BodySetup 을 다시 세팅한다.
+	static_cast<FBodyInstanceCore&>(*this) = Setup->DefaultInstance;
+
 	BodySetup = Setup;
 	InstanceBoneIndex = BoneIndex;
 	switch (Setup->PhysicsType)

@@ -2,6 +2,7 @@
 #include "Object/Reflection/ObjectFactory.h"
 #include "Serialization/Archive.h"
 #include "GameFramework/AActor.h"
+#include "GameFramework/World.h"
 
 HIDE_FROM_COMPONENT_LIST(UActorComponent)
 
@@ -11,6 +12,12 @@ void UActorComponent::BeginPlay()
 	{
 		Activate();
 	}
+	CreatePhysicsState();
+}
+
+void UActorComponent::EndPlay()
+{
+	DestroyPhysicsState();
 }
 
 void UActorComponent::Activate()
@@ -25,6 +32,32 @@ void UActorComponent::Deactivate()
 	PrimaryComponentTick.SetTickEnabled(false);
 }
 
+void UActorComponent::CreatePhysicsState()
+{
+	UWorld* World = GetWorld();
+	if (!bPhysicsStateCreated && World && World->GetPhysicsScene() && ShouldCreatePhysicsState())
+	{
+		OnCreatePhysicsState();
+	}
+}
+
+void UActorComponent::DestroyPhysicsState()
+{
+	if (bPhysicsStateCreated)
+	{
+		OnDestroyPhysicsState();
+	}
+}
+
+void UActorComponent::OnCreatePhysicsState()
+{
+	bPhysicsStateCreated = true;
+}
+
+void UActorComponent::OnDestroyPhysicsState()
+{
+	bPhysicsStateCreated = false;
+}
 
 UWorld* UActorComponent::GetWorld() const
 {

@@ -27,6 +27,8 @@
 #include "Physics/Asset/PhysicsAsset.h"
 #include "Physics/Asset/PhysicsAssetManager.h"
 #include "Physics/Asset/BodySetup.h"
+#include "Physics/Asset/BodyConstraintGenerator.h"
+#include "Editor/UI/Panel/FPropertyTable.h"
 #include "Physics/Asset/ConstraintSetup.h"
 #include "Math/MathUtils.h"
 #include "UI/Asset/Animation/AnimationTransportBar.h"
@@ -37,6 +39,7 @@
 #include "Editor/UI/Util/EditorTextureManager.h"
 #include "Platform/Paths.h"
 #include "Object/Object.h"
+#include "Core/Logging/Log.h"
 
 #include <imgui.h>
 #include <algorithm>
@@ -162,6 +165,55 @@ namespace
 		return nullptr;
 	}
 
+	// 메시 → PhysicsAsset 역방향 해석. 생성(EnsurePhysicsAssetForCurrentSkeleton) 시
+	// <MeshStem>_Physics.uasset 규칙으로 메시 옆에 저장하므로, 같은 경로를 계산해 디스크에
+	// 있으면 로드한다 — 메시를 다시 열 때 기존 PhysicsAsset 이 자동 연결되도록.
+	UPhysicsAsset* ResolvePhysicsAssetForMesh(const USkeletalMesh* Mesh)
+	{
+		if (!Mesh)
+		{
+			return nullptr;
+		}
+		const FString& MeshPath = Mesh->GetAssetPathFileName();
+		if (MeshPath.empty() || MeshPath == "None")
+		{
+			return nullptr;
+		}
+
+		const std::filesystem::path MeshFsPath(FPaths::ToWide(MeshPath));
+		const std::filesystem::path Dir  = MeshFsPath.parent_path();
+		const FString               Stem = FPaths::ToUtf8(MeshFsPath.stem().wstring());
+		const std::filesystem::path Candidate = Dir / FPaths::ToWide(Stem + "_Physics.uasset");
+		const FString CandidatePath = FPaths::ToUtf8(Candidate.generic_wstring());
+
+		if (!std::filesystem::exists(FPaths::MakeProjectRelative(CandidatePath)))
+		{
+			return nullptr;
+		}
+		return FPhysicsAssetManager::Get().Load(CandidatePath);
+	}
+
+	void LinkPhysicsAssetToMesh(USkeletalMesh* Mesh, UPhysicsAsset* PhysAsset, bool bSaveMesh)
+	{
+		if (!Mesh || !PhysAsset || PhysAsset->GetSourcePath().empty())
+		{
+			return;
+		}
+
+		if (Mesh->GetPhysicsAsset() == PhysAsset && Mesh->GetPhysicsAssetPath() == PhysAsset->GetSourcePath())
+		{
+			return;
+		}
+
+		Mesh->SetPhysicsAsset(PhysAsset);
+		if (bSaveMesh && !FMeshManager::SaveSkeletalMesh(Mesh))
+		{
+			UE_LOG("PhysicsAsset link save failed. Mesh=%s PhysicsAsset=%s",
+				Mesh->GetName().c_str(),
+				PhysAsset->GetSourcePath().c_str());
+		}
+	}
+
 	EUberLitDefines::ELightingModel GetLightingModelForViewMode(EViewMode ViewMode)
 	{
 		switch (ViewMode)
@@ -257,6 +309,17 @@ void FMeshEditorWidget::Open(UObject* Object)
 	FAssetEditorWidget::Open(MeshObject);
 	CurrentPhysicsAsset = PhysAsset;
 
+	// 메시로 열렸는데(=PhysAsset 직접 지정이 아님) 이 스켈레톤용 PhysicsAsset 이 디스크에 이미
+	// 있으면 자동 연결한다. 없으면 nullptr → Physics 탭의 Create 버튼이 노출된다.
+	if (!CurrentPhysicsAsset)
+	{
+		if (USkeletalMesh* Mesh = Cast<USkeletalMesh>(EditedObject))
+		{
+			CurrentPhysicsAsset = ResolvePhysicsAssetForMesh(Mesh);
+			LinkPhysicsAssetToMesh(Mesh, CurrentPhysicsAsset, true);
+		}
+	}
+
 	FWorldContext& WorldContext = GEngine->CreateWorldContext(EWorldType::EditorPreview, PreviewWorldHandle);
 	WorldContext.World->SetWorldType(EWorldType::EditorPreview);
 	WorldContext.World->InitWorld();
@@ -291,6 +354,8 @@ void FMeshEditorWidget::Open(UObject* Object)
 
 	ViewportClient.CreatePreviewGizmo();
 	ViewportClient.CreateBoneDebugComponent();
+	ViewportClient.CreatePhysicsAssetDebugComponent();
+	ViewportClient.SetDebugPhysicsAsset(CurrentPhysicsAsset);
 	ViewportClient.ResetCameraToPreviousBounds();
 
 	WorldContext.World->SetEditorPOVProvider(&ViewportClient);
@@ -302,8 +367,8 @@ void FMeshEditorWidget::Open(UObject* Object)
 	// 디스크의 기존 AnimSequence .uasset 들을 목록에 채워 둔다(런타임 Load/Save 만으론 안 잡힘).
 	FAnimationManager::Get().RefreshAvailableAnimations();
 
-	// PhysicsAsset 로 열렸으면 Physics 탭부터(= "열면서 ActiveTab만 바꾸고").
-	ActiveTab               = CurrentPhysicsAsset ? EMeshEditorTab::Physics : EMeshEditorTab::Skeleton;
+	// PhysicsAsset 로 직접 열렸으면 Physics 탭부터. 메시로 열렸으면(자동 연결돼도) Skeleton 탭 유지.
+	ActiveTab               = PhysAsset ? EMeshEditorTab::Physics : EMeshEditorTab::Skeleton;
 	AnimTabState            = FAnimationTabState {};
 	SelectedBoneIndex       = -1;
 	SelectedConstraintIndex = -1;
@@ -1499,11 +1564,32 @@ void FMeshEditorWidget::RenderPhysicsLayout()
 	// Center: viewport
 	ImGui::BeginGroup();
 	{
-		float  ViewportWidth = ImGui::GetContentRegionAvail().x - DetailsWidth - ImGui::GetStyle().ItemSpacing.x;
+		const float SplitterWidth = 4.0f;
+		float  ViewportWidth = ImGui::GetContentRegionAvail().x - DetailsWidth - SplitterWidth - ImGui::GetStyle().ItemSpacing.x * 2.0f;
+		ViewportWidth        = std::max(ViewportWidth, 50.0f);
 		ImVec2 Size          = ImVec2(ViewportWidth, ImGui::GetContentRegionAvail().y);
 		RenderViewportPanel(Size);
 	}
 	ImGui::EndGroup();
+
+	ImGui::SameLine();
+
+	// Splitter (viewport <-> details) — 디테일 패널 폭을 드래그로 늘리고 줄인다.
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+	ImGui::Button("##physDetailsSplitter", ImVec2(4.0f, -1.0f));
+	if (ImGui::IsItemActive())
+	{
+		// 스플리터를 왼쪽으로 끌면 디테일 폭이 커지고, 오른쪽으로 끌면 작아진다.
+		DetailsWidth -= ImGui::GetIO().MouseDelta.x;
+		DetailsWidth = std::max(180.0f, std::min(DetailsWidth, ImGui::GetWindowWidth() - HierarchyWidth - 200.0f));
+	}
+	if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+	{
+		ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+	}
+	ImGui::PopStyleColor(3);
 
 	ImGui::SameLine();
 
@@ -1535,6 +1621,10 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 		return;
 	}
 
+	// 콜리전 프리미티브 디버그 드로우에 현재 에셋을 동기화(편집/포즈 즉시 반영 — 드래프트 단계의
+	// 단순 매-프레임 푸시. 추후 변경 시에만 푸시하도록 최적화 가능).
+	ViewportClient.SetDebugPhysicsAsset(CurrentPhysicsAsset);
+
 	// 저장 — 편집 내용을 .uasset 으로 영속화. SourcePath 가 있어야(= 디스크 에셋) 저장 가능.
 	const bool bHasSourcePath = !CurrentPhysicsAsset->GetSourcePath().empty();
 	if (!bHasSourcePath) ImGui::BeginDisabled();
@@ -1562,6 +1652,16 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 	ImGui::Text("Bodies: %d   Constraints: %d",
 		static_cast<int32>(CurrentPhysicsAsset->BodySetups.size()),
 		static_cast<int32>(CurrentPhysicsAsset->ConstraintSetups.size()));
+
+	// 전체 스켈레톤에 대해 바디/조인트 초기값을 일괄 생성(이미 있는 본은 건너뜀) — 생성기에 위임.
+	if (ImGui::Button("Generate All (Bodies + Constraints)", ImVec2(-1.0f, 0.0f)))
+	{
+		if (const FSkeletalMesh* MeshAsset = SkeletalMesh->GetSkeletalMeshAsset())
+		{
+			FBodyConstraintGenerator::GenerateAll(CurrentPhysicsAsset, MeshAsset);
+			MarkDirty();
+		}
+	}
 	ImGui::Separator();
 
 	if (SelectedBoneIndex == -1)
@@ -1586,25 +1686,57 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 	}
 	else if (UBodySetup* Body = CurrentPhysicsAsset->BodySetups[BodyIdx])
 	{
-		if (ImGui::DragFloat("Default Mass", &Body->DefaultMass, 0.1f, 0.0f, 0.0f, "%.2f")) { MarkDirty(); }
-		const char* PhysicsTypeLabels[] = { "Default", "Kinematic", "Simulated" };
-		int32 PhysicsTypeIndex = static_cast<int32>(Body->PhysicsType);
-		if (ImGui::Combo("Physics Type", &PhysicsTypeIndex, PhysicsTypeLabels, IM_ARRAYSIZE(PhysicsTypeLabels)))
+		// 스칼라/플래그(BoneName / Physics Type / Default Mass / Default Instance)는 리플렉션으로.
+		// AggGeom 은 struct→배열→원소struct(깊이 3) 중첩이라 좁은 셀 안에선 겹쳐서 못 쓴다 →
+		// 여기선 스킵하고 아래에서 원소별로 RenderStruct(전체 폭) 로 따로 편집한다.
+		FPropertyTable::FContext Ctx;
+		Ctx.ShouldSkipProperty = [](const FProperty* P)
 		{
-			Body->PhysicsType = static_cast<EPhysicsType>(PhysicsTypeIndex);
-			MarkDirty();
-		}
+			return P && P->Name && std::strcmp(P->Name, "AggGeom") == 0;
+		};
+		if (FPropertyTable::RenderObject(Body, Ctx)) { MarkDirty(); }
 
-		ImGui::Text("Primitives  S:%d  B:%d  C:%d",
-			static_cast<int32>(Body->AggGeom.SphereElems.size()),
-			static_cast<int32>(Body->AggGeom.BoxElems.size()),
-			static_cast<int32>(Body->AggGeom.SphylElems.size()));
+		// ── Primitives (충돌 프리미티브) ──
+		ImGui::Dummy(ImVec2(0, 4));
+		ImGui::SeparatorText("Primitives");
+
+		// 타입별 빠른 추가 — 올바른 프리미티브 종류를 한 번에 넣는 편의 버튼.
 		if (ImGui::SmallButton("+ Capsule")) { Body->AggGeom.SphylElems.push_back(FKSphylElem{}); MarkDirty(); }
 		ImGui::SameLine();
 		if (ImGui::SmallButton("+ Sphere"))  { Body->AggGeom.SphereElems.push_back(FKSphereElem{}); MarkDirty(); }
 		ImGui::SameLine();
 		if (ImGui::SmallButton("+ Box"))     { Body->AggGeom.BoxElems.push_back(FKBoxElem{}); MarkDirty(); }
 
+		// 각 원소를 전체 폭 2열 테이블(RenderStruct)로 — Center/Radius/Rotation/HalfExtent/Length 직접 편집.
+		auto RenderShapeArray = [&](const char* TypeLabel, auto& Elems, UStruct* StructType)
+		{
+			for (int32 i = 0; i < static_cast<int32>(Elems.size()); ++i)
+			{
+				ImGui::PushID(StructType);
+				ImGui::PushID(i);
+				char Header[64];
+				std::snprintf(Header, sizeof(Header), "%s %d###shape", TypeLabel, i);
+				if (ImGui::CollapsingHeader(Header, ImGuiTreeNodeFlags_DefaultOpen))
+				{
+					if (FPropertyTable::RenderStruct(StructType, &Elems[i], CurrentPhysicsAsset, Ctx)) { MarkDirty(); }
+					if (ImGui::SmallButton("Remove"))
+					{
+						Elems.erase(Elems.begin() + i);
+						MarkDirty();
+						ImGui::PopID();
+						ImGui::PopID();
+						break;
+					}
+				}
+				ImGui::PopID();
+				ImGui::PopID();
+			}
+		};
+		RenderShapeArray("Capsule", Body->AggGeom.SphylElems,  FKSphylElem::StaticStruct());
+		RenderShapeArray("Sphere",  Body->AggGeom.SphereElems, FKSphereElem::StaticStruct());
+		RenderShapeArray("Box",     Body->AggGeom.BoxElems,    FKBoxElem::StaticStruct());
+
+		ImGui::Dummy(ImVec2(0, 4));
 		if (ImGui::Button("Remove Body", ImVec2(-1.0f, 0.0f)))
 		{
 			RemoveBodyAtSelectedBone();
@@ -1629,12 +1761,10 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 		FConstraintSetup& C = CurrentPhysicsAsset->ConstraintSetups[ConIdx];
 		ImGui::Text("Parent: %s", C.ParentBone.ToString().c_str());
 
-		// 각도 제한(라디안). PxD6Joint 의 eTWIST / eSWING1 / eSWING2 매핑.
-		if (ImGui::SliderFloat("Twist",  &C.TwistLimit,  0.0f, FMath::Pi, "%.3f rad")) { MarkDirty(); }
-		if (ImGui::SliderFloat("Swing1", &C.Swing1Limit, 0.0f, FMath::Pi, "%.3f rad")) { MarkDirty(); }
-		if (ImGui::SliderFloat("Swing2", &C.Swing2Limit, 0.0f, FMath::Pi, "%.3f rad")) { MarkDirty(); }
-		if (ImGui::DragFloat("Drive Stiffness", &C.DriveStiffness, 1.0f, 0.0f, 0.0f, "%.1f")) { MarkDirty(); }
-		if (ImGui::DragFloat("Drive Damping",   &C.DriveDamping,   1.0f, 0.0f, 0.0f, "%.1f")) { MarkDirty(); }
+		// FConstraintSetup 의 UPROPERTY(Edit) 전체(Bones / Frames / Twist·Swing Limits / Drive)를
+		// 리플렉션으로 자동 노출. Owner=CurrentPhysicsAsset 으로 PostEditChange 디스패치.
+		FPropertyTable::FContext Ctx;
+		if (FPropertyTable::RenderStruct(FConstraintSetup::StaticStruct(), &C, CurrentPhysicsAsset, Ctx)) { MarkDirty(); }
 
 		if (ImGui::Button("Remove Constraint", ImVec2(-1.0f, 0.0f)))
 		{
@@ -1682,6 +1812,7 @@ UPhysicsAsset* FMeshEditorWidget::EnsurePhysicsAssetForCurrentSkeleton()
 
 		Asset->SetSourcePath(FPaths::ToUtf8(Candidate.generic_wstring()));
 		FPhysicsAssetManager::Get().Save(Asset);
+		LinkPhysicsAssetToMesh(Mesh, Asset, true);
 	}
 
 	CurrentPhysicsAsset = Asset;
@@ -1691,26 +1822,18 @@ UPhysicsAsset* FMeshEditorWidget::EnsurePhysicsAssetForCurrentSkeleton()
 
 void FMeshEditorWidget::AddBodyToSelectedBone()
 {
-	UPhysicsAsset* Asset = EnsurePhysicsAssetForCurrentSkeleton();
-	if (!Asset || SelectedBoneIndex == -1)
+	UPhysicsAsset*       Asset     = EnsurePhysicsAssetForCurrentSkeleton();
+	USkeletalMesh*       Mesh      = Cast<USkeletalMesh>(EditedObject);
+	const FSkeletalMesh* MeshAsset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+	if (!Asset || !MeshAsset || SelectedBoneIndex == -1)
 	{
 		return;
 	}
-	if (FindPhysicsBodyIndexForBone(SelectedBoneIndex) != -1)
+	// 바디 생성 + 본 형상 캡슐 피팅은 FBodyConstraintGenerator 가 전담(이미 있으면 nullptr).
+	if (FBodyConstraintGenerator::GenerateBody(Asset, MeshAsset, SelectedBoneIndex))
 	{
-		return;   // 이미 존재
+		MarkDirty();
 	}
-
-	UBodySetup* Body = UObjectManager::Get().CreateObject<UBodySetup>(Asset);
-	if (!Body)
-	{
-		return;
-	}
-	Body->BoneName = GetPhysicsBoneName(SelectedBoneIndex);
-	// 랙돌 기본 프리미티브로 캡슐 1개(본 로컬). 실제 크기 피팅은 추후.
-	Body->AggGeom.SphylElems.push_back(FKSphylElem{});
-	Asset->BodySetups.push_back(Body);
-	MarkDirty();
 }
 
 void FMeshEditorWidget::RemoveBodyAtSelectedBone()
@@ -1741,26 +1864,13 @@ void FMeshEditorWidget::GenerateConstraintForSelectedBone()
 	{
 		return;
 	}
-
-	const int32 ParentBoneIndex = MeshAsset->Bones[SelectedBoneIndex].ParentIndex;
-	if (ParentBoneIndex == -1)
+	// 조인트 생성 + 프레임 피팅은 FBodyConstraintGenerator 가 전담(루트/중복이면 -1).
+	const int32 NewIndex = FBodyConstraintGenerator::GenerateConstraint(Asset, MeshAsset, SelectedBoneIndex);
+	if (NewIndex != -1)
 	{
-		return;   // 루트 본은 부모 조인트 없음
+		SelectedConstraintIndex = NewIndex;
+		MarkDirty();
 	}
-
-	const FName ChildName  = GetPhysicsBoneName(SelectedBoneIndex);
-	const FName ParentName = GetPhysicsBoneName(ParentBoneIndex);
-	if (FindPhysicsConstraintIndexForChild(ChildName) != -1)
-	{
-		return;   // 중복 방지
-	}
-
-	FConstraintSetup NewConstraint;
-	NewConstraint.ParentBone = ParentName;
-	NewConstraint.ChildBone  = ChildName;
-	Asset->ConstraintSetups.push_back(NewConstraint);
-	SelectedConstraintIndex = static_cast<int32>(Asset->ConstraintSetups.size()) - 1;
-	MarkDirty();
 }
 
 int32 FMeshEditorWidget::FindPhysicsBodyIndexForBone(int32 BoneIndex) const

@@ -15,6 +15,7 @@
 #include "Object/Reflection/UClass.h"
 #include "Core/Types/PropertyTypes.h"
 #include "Editor/UI/Asset/Animation/MorphCurveEditObject.h"
+#include "Editor/UI/Panel/FPropertyTable.h"
 
 #include <imgui.h>
 #include <algorithm>
@@ -121,183 +122,6 @@ namespace
 			}
 		}
 		return Ellipsis;
-	}
-
-	// 한 UObject 의 UPROPERTY(Edit) 필드를 인플레이스로 그려준다. Notify/NotifyState 의
-	// payload 편집용 경량 인스펙터 — 풀 FEditorPropertyWidget 의존성 없이 timeline 패널 안에서
-	// 자족. 지원 타입은 Notify payload 에 흔히 쓰일 단순형 (Bool/Int/Float/String/Vec3/Vec4/Color4).
-	// 그 외 타입은 disabled placeholder.
-	bool RenderObjectPropertiesInline(UObject* Object)
-	{
-		if (!Object)
-		{
-			ImGui::TextDisabled("(no object)");
-			return false;
-		}
-		TArray<FPropertyValue> Props;
-		Object->GetEditableProperties(Props);
-		if (Props.empty())
-		{
-			ImGui::TextDisabled("(no editable properties)");
-			return false;
-		}
-
-		bool bAnyChanged = false;
-
-		if (ImGui::BeginTable("##notifyProps", 2,
-		                      ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerV))
-		{
-			ImGui::TableSetupColumn("##label", ImGuiTableColumnFlags_WidthFixed, 120.0f);
-			ImGui::TableSetupColumn("##value", ImGuiTableColumnFlags_WidthStretch);
-
-			for (FPropertyValue& Prop : Props)
-			{
-				const bool bReadOnly = Prop.Property && (Prop.Property->Flags & PF_ReadOnly) != 0;
-				const char* Disp = Prop.GetDisplayName();
-				if (!Disp || !*Disp) Disp = Prop.GetName();
-
-				ImGui::PushID(Prop.GetName() ? Prop.GetName() : "");
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::AlignTextToFramePadding();
-				ImGui::TextUnformatted(Disp ? Disp : "");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SetNextItemWidth(-FLT_MIN);
-
-				if (bReadOnly) ImGui::BeginDisabled();
-
-				bool bChanged = false;
-				switch (Prop.GetType())
-				{
-				case EPropertyType::Bool:
-				{
-					bool* V = static_cast<bool*>(Prop.GetValuePtr());
-					if (V) bChanged = ImGui::Checkbox("##v", V);
-					break;
-				}
-				case EPropertyType::ByteBool:
-				{
-					uint8* V = static_cast<uint8*>(Prop.GetValuePtr());
-					if (V)
-					{
-						bool b = (*V != 0);
-						if (ImGui::Checkbox("##v", &b)) { *V = b ? 1 : 0; bChanged = true; }
-					}
-					break;
-				}
-				case EPropertyType::Int:
-				{
-					int32* V = static_cast<int32*>(Prop.GetValuePtr());
-					if (V) bChanged = ImGui::DragInt("##v", V, Prop.GetSpeed());
-					break;
-				}
-				case EPropertyType::Float:
-				{
-					float* V = static_cast<float*>(Prop.GetValuePtr());
-					if (V) bChanged = ImGui::DragFloat("##v", V, Prop.GetSpeed());
-					break;
-				}
-				case EPropertyType::Vec3:
-				{
-					float* V = static_cast<float*>(Prop.GetValuePtr());
-					if (V) bChanged = ImGui::DragFloat3("##v", V, Prop.GetSpeed());
-					break;
-				}
-				case EPropertyType::Vec4:
-				{
-					float* V = static_cast<float*>(Prop.GetValuePtr());
-					if (V) bChanged = ImGui::DragFloat4("##v", V, Prop.GetSpeed());
-					break;
-				}
-				case EPropertyType::Color4:
-				{
-					float* V = static_cast<float*>(Prop.GetValuePtr());
-					if (V) bChanged = ImGui::ColorEdit4("##v", V);
-					break;
-				}
-				case EPropertyType::String:
-				{
-					FString* S = static_cast<FString*>(Prop.GetValuePtr());
-					if (S)
-					{
-						char Buf[256];
-						strncpy_s(Buf, sizeof(Buf), S->c_str(), _TRUNCATE);
-						if (ImGui::InputText("##v", Buf, sizeof(Buf)))
-						{
-							*S = Buf;
-							bChanged = true;
-						}
-					}
-					break;
-				}
-				case EPropertyType::Name:
-				{
-					FName* N = static_cast<FName*>(Prop.GetValuePtr());
-					if (N)
-					{
-						FString Cur = N->ToString();
-						char Buf[256];
-						strncpy_s(Buf, sizeof(Buf), Cur.c_str(), _TRUNCATE);
-						if (ImGui::InputText("##v", Buf, sizeof(Buf)))
-						{
-							*N = FName(FString(Buf));
-							bChanged = true;
-						}
-					}
-					break;
-				}
-				case EPropertyType::Enum:
-				{
-					const FEnum* EnumType = Prop.GetEnumType();
-					if (EnumType && EnumType->GetNames() && EnumType->GetCount() > 0 && Prop.GetValuePtr())
-					{
-						const char** EnumNames = EnumType->GetNames();
-						const uint32 EnumCount = EnumType->GetCount();
-						const uint32 EnumSize = EnumType->GetSize();
-						int32 Val = 0;
-						std::memcpy(&Val, Prop.GetValuePtr(), EnumSize);
-						const char* Preview = ((uint32)Val < EnumCount) ? EnumNames[Val] : "Unknown";
-						if (ImGui::BeginCombo("##v", Preview))
-						{
-							for (uint32 EnumIndex = 0; EnumIndex < EnumCount; ++EnumIndex)
-							{
-								const bool bSelected = Val == static_cast<int32>(EnumIndex);
-								if (ImGui::Selectable(EnumNames[EnumIndex], bSelected))
-								{
-									int32 NewVal = static_cast<int32>(EnumIndex);
-									std::memcpy(Prop.GetValuePtr(), &NewVal, EnumSize);
-									bChanged = true;
-								}
-								if (bSelected)
-								{
-									ImGui::SetItemDefaultFocus();
-								}
-							}
-							ImGui::EndCombo();
-						}
-					}
-					break;
-				}
-				default:
-					ImGui::TextDisabled("(unsupported type)");
-					break;
-				}
-
-				if (bReadOnly) ImGui::EndDisabled();
-
-				if (bChanged)
-				{
-					bAnyChanged = true;
-					if (Prop.Property)
-					{
-						Object->PostEditProperty(Prop.Property->Name);
-					}
-				}
-				ImGui::PopID();
-			}
-			ImGui::EndTable();
-		}
-		return bAnyChanged;
 	}
 
 	static float ClampMorphCurveValue(float Value)
@@ -1531,11 +1355,11 @@ bool FAnimationTimelinePanel::RenderNotifyDetails(UAnimSequence* Seq, int32 Sele
 
 	if (N.Notify)
 	{
-		if (RenderObjectPropertiesInline(N.Notify))      bChanged = true;
+		if (FPropertyTable::RenderObject(N.Notify, {}))      bChanged = true;
 	}
 	if (N.NotifyState)
 	{
-		if (RenderObjectPropertiesInline(N.NotifyState)) bChanged = true;
+		if (FPropertyTable::RenderObject(N.NotifyState, {})) bChanged = true;
 	}
 	if (!N.Notify && !N.NotifyState)
 	{
@@ -1636,7 +1460,7 @@ bool FAnimationTimelinePanel::RenderMorphDetails(
 		ImGui::TextUnformatted(SelectedKey ? "Reflected Morph Curve / Key Properties" : "Reflected Morph Curve Properties");
 		ImGui::Separator();
 
-		if (RenderObjectPropertiesInline(sMorphEditObject))
+		if (FPropertyTable::RenderObject(sMorphEditObject, {}))
 		{
 			sMorphEditObject->ApplyTo(Curve, SelectedKey);
 			if (SelectedKey)
