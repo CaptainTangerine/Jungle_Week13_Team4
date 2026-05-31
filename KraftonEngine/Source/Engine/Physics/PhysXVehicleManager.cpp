@@ -265,3 +265,29 @@ void FPhysXVehicleManager::UnRegisterVehicleMC(UWheeledVehicleMovementComponent*
 {
 	Vehicles.erase(std::remove(Vehicles.begin(), Vehicles.end(), InComponent), Vehicles.end());
 }
+
+int32 FPhysXVehicleManager::GetWheelLocalPoses(const UWheeledVehicleMovementComponent* MC, FTransform* Out, int32 Max) const
+{
+	if (!SqData || !MC || !Out || Max <= 0) return 0;
+
+	// ActiveVehicles[i] ↔ VehicleResults[i] (Tick 에서 같은 순서로 구성). MC 의 결과만 복사.
+	for (size_t i = 0; i < SqData->ActiveVehicles.size(); ++i)
+	{
+		if (SqData->ActiveVehicles[i] != MC) continue;
+
+		const PxVehicleWheelQueryResult& VR = SqData->VehicleResults[i];
+		if (!VR.wheelQueryResults) return 0;
+
+		const int32 Count = std::min<int32>(Max, static_cast<int32>(VR.nbWheelQueryResults));
+		for (int32 w = 0; w < Count; ++w)
+		{
+			const PxTransform& L = VR.wheelQueryResults[w].localPose;
+			Out[w] = FTransform(
+				FVector(L.p.x, L.p.y, L.p.z),
+				FQuat(L.q.x, L.q.y, L.q.z, L.q.w),
+				FVector(1.0f, 1.0f, 1.0f));
+		}
+		return Count;
+	}
+	return 0;
+}

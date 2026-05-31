@@ -1,13 +1,13 @@
 #include "WheeledVehicle.h"
 
-#include "Component/Primitive/StaticMeshComponent.h"
+#include "Component/Primitive/SkeletalMeshComponent.h"
 #include "Component/Movement/WheeledVehicleMovementComponent.h"
 #include "Component/Input/InputComponent.h"
 #include "Math/Transform.h"
 
 void AWheeledVehicle::BeginPlay()
 {
-	// 컴포넌트는 component-BeginPlay(= MC::CreateVehicle, UpdatedComponent/spawn pose 필요) 전에
+	// 컴포넌트는 component-BeginPlay(= MC::CreateVehicle, UpdatedComponent/wheel bone 필요) 전에
 	// 존재해야 한다. AActor::BeginPlay 가 OwnedComponents 의 BeginPlay 를 먼저 돌리므로 여기서 선보장.
 	EnsureComponents();
 	Super::BeginPlay();   // → AActor (component BeginPlays) → APawn (InputComponent + SetupInputComponent)
@@ -16,52 +16,33 @@ void AWheeledVehicle::BeginPlay()
 void AWheeledVehicle::PostDuplicate()
 {
 	Super::PostDuplicate();
-	// dup/load 후 멤버 포인터 + wheel 링크 재수립 (이미 컴포넌트가 존재하므로 생성은 일어나지 않음).
+	// dup/load 후 멤버 포인터 재획득 (이미 컴포넌트가 존재하므로 생성은 일어나지 않음).
 	EnsureComponents();
 }
 
 void AWheeledVehicle::EnsureComponents()
 {
-	// 1) Chassis = Root. 최초엔 생성, 이후엔 재획득.
-	VehicleBody = Cast<UStaticMeshComponent>(GetRootComponent());
+	// 1) 차체 skeletal mesh = Root. 최초엔 생성, 이후엔 재획득 (uniquely-typed → GetComponentByClass 로 충분).
+	VehicleBody = Cast<USkeletalMeshComponent>(GetRootComponent());
 	if (!VehicleBody)
 	{
-		VehicleBody = AddComponent<UStaticMeshComponent>();
+		VehicleBody = GetComponentByClass<USkeletalMeshComponent>();
+	}
+	if (!VehicleBody)
+	{
+		VehicleBody = AddComponent<USkeletalMeshComponent>();
 		SetRootComponent(VehicleBody);
-		// TODO: 차체 visual mesh/material 지정. scaffold 에선 빈(=NoCollision) 컴포넌트 —
-		//       물리는 MC 의 parametric convex hull 이 담당하므로 mesh 없이도 동작.
+		// TODO: 차체 skeletal mesh 지정 (editor 의 Skeletal Mesh 프로퍼티 또는 코드).
+		//       mesh/wheel bone 이 없으면 MC 가 parametric wheel 위치로 fallback (chassis 는 정상 구동).
 	}
 
-	// 2) Wheels = chassis 의 static-mesh 자식. 모두 같은 타입이라 GetComponentByClass 로 구분 불가 →
-	//    "Root 의 자식" 으로 식별 (생성 시 4개 부착 / load·dup 시 자식에서 재획득).
-	int32 Found = 0;
-	for (USceneComponent* Child : VehicleBody->GetChildren())
-	{
-		if (Found >= NumWheels) break;
-		if (UStaticMeshComponent* Wheel = Cast<UStaticMeshComponent>(Child))
-		{
-			WheelMeshes[Found++] = Wheel;
-		}
-	}
-	for (; Found < NumWheels; ++Found)
-	{
-		WheelMeshes[Found] = AddComponent<UStaticMeshComponent>();
-		WheelMeshes[Found]->AttachToComponent(VehicleBody);
-	}
-
-	// 3) Movement component.
+	// 2) Movement component.
 	VehicleMC = GetComponentByClass<UWheeledVehicleMovementComponent>();
 	if (!VehicleMC)
 	{
 		VehicleMC = AddComponent<UWheeledVehicleMovementComponent>();
 	}
 	VehicleMC->SetUpdatedComponent(VehicleBody);
-
-	// 4) Wheel 시각 컴포넌트 링크 — transient pointer wiring 이므로 매 재획득 시 재연결.
-	for (int32 i = 0; i < NumWheels; ++i)
-	{
-		VehicleMC->SetWheelComponent(i, WheelMeshes[i]);
-	}
 }
 
 void AWheeledVehicle::Tick(float DeltaTime)
@@ -69,7 +50,7 @@ void AWheeledVehicle::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	if (!VehicleMC || !VehicleBody) return;
 
-	// Output readback: 시뮬레이션 후 chassis world pose 를 Root 에 반영.
+	// Output readback (post-fetch): chassis world pose 를 Root 에 반영.
 	// chassis 는 BodyMappings 밖이라 scene post-sync 가 안 건드림 — 이 Tick 이 유일 writer.
 	FTransform Chassis;
 	if (VehicleMC->GetChassisWorldTransform(Chassis))
@@ -78,10 +59,8 @@ void AWheeledVehicle::Tick(float DeltaTime)
 		VehicleBody->SetRelativeRotation(Chassis.Rotation);   // Root: relative == world
 	}
 
-	// TODO(part 3): wheel local pose readback. FPhysXVehicleManager 에
-	//   int32 GetWheelLocalPoses(MC, FTransform* out, int32 max) 추가 후
-	//     for (i): VehicleMC->ApplyWheelPose(i, Poses[i]);
-	//   현재 wheel 적용 로직은 FPhysXVehicleManager::PostTick 에 reference 로 보존됨.
+	// Wheel bone pose 반영 (suspension 변위 + steer/spin) — manager 의 이번 프레임 결과를 본에 쓴다.
+	VehicleMC->UpdateWheelBonesFromSimulation();
 }
 
 void AWheeledVehicle::SetupInputComponent()

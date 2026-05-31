@@ -2,6 +2,7 @@
 #include "Core/Types/CoreTypes.h"
 
 class UWheeledVehicleMovementComponent;
+struct FTransform;
 
 namespace physx
 {
@@ -38,6 +39,10 @@ public:
 
 	void RegisterVehicleMC(UWheeledVehicleMovementComponent* InComponent);
 	void UnRegisterVehicleMC(UWheeledVehicleMovementComponent* InComponent);
+
+	// 특정 차량의 이번 프레임 wheel local pose(actor/component 공간)들을 Out[0..n) 에 채워 개수 반환.
+	// AWheeledVehicle::Tick 의 output readback 용 — pose 는 SqData 소유, 다음 Tick 까지 유효.
+	int32 GetWheelLocalPoses(const UWheeledVehicleMovementComponent* MC, FTransform* Out, int32 Max) const;
 
 	// --- PhysX 컨텍스트 접근 (UWheeledVehicleMovementComponent::CreateVehicle 가 사용) ---
 	physx::PxPhysics*  GetPhysics()       const { return Physics; }

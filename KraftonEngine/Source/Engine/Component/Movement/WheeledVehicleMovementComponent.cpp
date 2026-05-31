@@ -3,6 +3,7 @@
 #include "Physics/PhysXPhysicsScene.h"
 #include "Physics/PhysXVehicleManager.h"
 #include "Component/SceneComponent.h"
+#include "Component/Primitive/SkeletalMeshComponent.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
 #include "Core/Types/CollisionTypes.h"   // ECollisionChannel, ObjectTypeBit
@@ -186,19 +187,43 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	using WO = PxVehicleDrive4WWheelOrder;
 	const PxU32 NW = static_cast<PxU32>(NumWheels);
 
-	// --- 치수 / 휠 배치 (parametric — tunable 기반). +X=forward, Y=side, +Z=up ---
+	// --- 치수 / 휠 배치. +X=forward, Y=side, +Z=up ---
 	const float HalfX  = ChassisLength * 0.5f;
 	const float HalfY  = ChassisWidth  * 0.5f;
 	const float HalfZ  = ChassisHeight * 0.5f;
-	const float FrontX = HalfX - WheelRadius;   // 앞/뒤 축을 차체 끝에서 살짝 안쪽으로
+
+	// Wheel 위치는 skeletal mesh 의 wheel bone(component-space) 에서 가져온다 (UE WheelSetup 패턴).
+	// 아래는 rigged mesh/본이 없을 때의 parametric fallback (차체 4코너).
+	const float FrontX = HalfX - WheelRadius;
 	const float TrackY = HalfY;
-	const float WheelZ = -HalfZ;                // 휠 센터를 차체 바닥 높이에
+	const float WheelZ = -HalfZ;
 
 	PxVec3 WheelCenters[4];
 	WheelCenters[WO::eFRONT_LEFT]  = PxVec3( FrontX,  TrackY, WheelZ);
 	WheelCenters[WO::eFRONT_RIGHT] = PxVec3( FrontX, -TrackY, WheelZ);
 	WheelCenters[WO::eREAR_LEFT]   = PxVec3(-FrontX,  TrackY, WheelZ);
 	WheelCenters[WO::eREAR_RIGHT]  = PxVec3(-FrontX, -TrackY, WheelZ);
+
+	// UpdatedComponent 가 skeletal mesh 면 wheel bone 의 component-space 위치로 override + 본 인덱스 캐시.
+	// (component-space == 차체 actor 원점 기준 == wheel centre offset 의 기준계.)
+	SkeletalBody = Cast<USkeletalMeshComponent>(GetUpdatedComponent());
+	for (int32 i = 0; i < NumWheels; ++i) WheelBoneIndices[i] = -1;
+	if (SkeletalBody)
+	{
+		const FString WheelBoneNames[4] = { WheelBoneFL, WheelBoneFR, WheelBoneRL, WheelBoneRR };
+		TArray<FTransform> BoneGlobals;
+		SkeletalBody->GetCurrentBoneGlobalTransforms(BoneGlobals);
+		for (int32 i = 0; i < NumWheels; ++i)
+		{
+			const int32 BoneIdx = SkeletalBody->FindBoneIndex(WheelBoneNames[i]);
+			WheelBoneIndices[i] = BoneIdx;
+			if (BoneIdx >= 0 && BoneIdx < static_cast<int32>(BoneGlobals.size()))
+			{
+				const FVector P = BoneGlobals[BoneIdx].Location;
+				WheelCenters[i] = PxVec3(P.X, P.Y, P.Z);
+			}
+		}
+	}
 
 	const PxVec3 ChassisCM(0.0f, 0.0f, CenterOfMassOffsetZ);
 
@@ -377,29 +402,30 @@ void UWheeledVehicleMovementComponent::DestroyVehicle()
 }
 
 // ============================================================
-// 시각 바퀴 pose (manager PostTick → actor 가 호출)
+// Wheel pose 출력 — skeletal mesh 의 wheel bone 에 반영 (AWheeledVehicle::Tick → 여기)
 // ============================================================
-void UWheeledVehicleMovementComponent::SetWheelComponent(int32 WheelIndex, USceneComponent* WheelComp)
+void UWheeledVehicleMovementComponent::UpdateWheelBonesFromSimulation()
 {
-	if (WheelIndex < 0 || WheelIndex >= NumWheels)
+	if (!VehicleManager || !SkeletalBody) return;
+
+	FTransform Poses[NumWheels];
+	const int32 Count = VehicleManager->GetWheelLocalPoses(this, Poses, NumWheels);
+	for (int32 i = 0; i < Count; ++i)
 	{
-		return;
+		ApplyWheelPose(i, Poses[i]);
 	}
-	WheelComponents[WheelIndex] = WheelComp;
 }
 
 void UWheeledVehicleMovementComponent::ApplyWheelPose(int32 WheelIndex, const FTransform& LocalPose)
 {
-	if (WheelIndex < 0 || WheelIndex >= NumWheels)
-	{
-		return;
-	}
-	USceneComponent* WheelComp = WheelComponents[WheelIndex];
-	if (!WheelComp)
-	{
-		return;
-	}
-	// 시뮬레이션이 준 휠 local pose (서스펜션 변위 + 스핀/스티어 회전) 를 시각 컴포넌트에 반영.
-	WheelComp->SetRelativeLocation(LocalPose.Location);
-	WheelComp->SetRelativeRotation(LocalPose.Rotation);
+	if (WheelIndex < 0 || WheelIndex >= NumWheels) return;
+	if (!SkeletalBody) return;
+
+	const int32 BoneIdx = WheelBoneIndices[WheelIndex];
+	if (BoneIdx < 0) return;
+
+	// PhysX wheelQueryResults[w].localPose 는 vehicle actor(=skeletal mesh component) 공간.
+	// 여기서는 wheel bone 이 root bone(컴포넌트 원점)의 직계 자식이라 가정 → component-space ≈ bone-local.
+	// 중간 본/offset 이 있는 일반 계층에서는 parent component-space 로의 변환이 필요 (follow-up).
+	SkeletalBody->SetBoneLocalTransformByIndex(BoneIdx, LocalPose);
 }
