@@ -8,6 +8,25 @@
 
 using namespace physx;
 
+namespace 
+{
+	static const PxVehicleKeySmoothingData gKeySmoothingData =
+	{	// ACCEL, BRAKE, HANDBRAKE, STEER_LEFT, STEER_RIGHT
+		{  6.f,   6.f,   12.f,      2.5f,       2.5f },     // Rise rates
+		{ 10.f,   10.f,  12.f,      5.f,        5.f},       // Fall rates
+	};
+
+	// Scales down the maximum allowable steering angle as the vehicle's forward velocity increases
+	static const PxF32 gSteerVsForwardSpeedData[] =
+	{
+		0.0f,        0.75f,
+		5.0f,        0.75f,
+		30.0f,       0.125f,
+		120.0f,      0.1f,
+	};
+	static const PxFixedSizeLookupTable<8> gSteerVsForwardSpeedTable(gSteerVsForwardSpeedData, 4);
+
+} // anonymous namespce
 // ============================================================
 // FPhysXVehicleManager — scene 소유 차량 레지스트리 + 배치 업데이트.
 // (memory: physx-vehicle-integration) — register/unregister 핸드셰이크 + PhysX 컨텍스트
@@ -38,7 +57,7 @@ void FPhysXVehicleManager::Init(PxPhysics* InPhysics, PxScene* InScene, PxCookin
 	}
 }
 
-void FPhysXVehicleManager::PreTick()
+void FPhysXVehicleManager::PreTick(float DeltaTime)
 {
 	// TODO(vehicle part 2): 등록된 각 차량의 입력(Throttle/Steer/Brake/Handbrake)을 읽어
 	//   PxVehicleDrive4WRawInputData 로 smoothing → setAnalogInputs.
@@ -53,19 +72,19 @@ void FPhysXVehicleManager::PreTick()
 		const float RawBrake	= MC->GetBrakeInput();
 		const float RawHandbrake  = MC->GetHandbrakeInput();
 
-		physx::PxVehicleDrive4WRawInputData RawInputData;
+		PxVehicleDrive4WRawInputData RawInputData;
 		RawInputData.setDigitalAccel(RawThrottle > 0.f);
 		RawInputData.setDigitalSteerLeft(RawSteer < 0.f);
 		RawInputData.setDigitalSteerRight(RawSteer > 0.f);
 		RawInputData.setDigitalBrake(RawBrake > 0.f);
 		RawInputData.setDigitalHandbrake(RawHandbrake > 0.f);
 
-		physx::PxVehicleDrive4W* Vehicle = MC->GetPxVehicle();
+		PxVehicleDrive4W* Vehicle = MC->GetPxVehicle();
 		if (!Vehicle) continue;
 
-		const physx::PxVehicleKeySmoothingData& KeySmoothingData;
+		//PxFixedSizeLookupTable<8> 
 		
-		
+		PxVehicleDrive4WSmoothDigitalRawInputsAndSetAnalogInputs(gKeySmoothingData, gSteerVsForwardSpeedTable, RawInputData, DeltaTime, false, *Vehicle);
 	}
 }
 
