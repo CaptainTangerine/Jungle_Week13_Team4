@@ -63,12 +63,17 @@ public:
     UPhysicsAsset* GetPhysicsAssetOverride() const { return PhysicsAssetOverride; }
     UPhysicsAsset* GetPhysicsAsset() const;
 
-    // 랙돌 제어: 모든 바디를 시뮬레이션(true)/키네마틱(false)으로 전환한다.
-    // true 로 켜면 바디가 없을 경우 RefPose 기준으로 인스턴스화하고, 이후 매 프레임
-    // 시뮬레이션된 바디의 월드 변환을 본 포즈로 되읽어(SyncComponentPoseFromBodies)
-    // 메시가 물리를 따르게 한다.
+    // 랙돌 제어: PhysicsBlendWeight(0=순수 anim, 1=순수 물리)로 anim 포즈와 시뮬 포즈를
+    // 본별로 블렌드한다. SetSimulatePhysics 는 weight 를 0/1 로 두는 단축 API.
     void SetSimulatePhysics(bool bSimulate) override;
-    bool IsSimulatingPhysics() const { return bSimulatingPhysics; }
+    bool IsSimulatingPhysics() const { return PhysicsBlendTarget > 0.0f; }
+
+    // 물리 블렌드 가중치 설정. [0,1] 로 클램프. bInterpolate=true 면 PhysicsBlendInterpSpeed
+    // 로 매 프레임 목표까지 부드럽게 보간(서서히 쓰러짐/일어남), false 면 즉시 적용.
+    // weight>0 이 되면 바디가 없을 경우 RefPose 로 인스턴스화하고 다이내믹으로 전환한다.
+    void  SetPhysicsBlendWeight(float Weight, bool bInterpolate = true);
+    float GetPhysicsBlendWeight() const { return PhysicsBlendWeight; }
+    void  SetPhysicsBlendInterpSpeed(float InSpeed) { PhysicsBlendInterpSpeed = InSpeed; }
     const TArray<FBodyInstance*>& GetBodies() const { return Bodies; }
     const TArray<FConstraintInstance*>& GetConstraints() const { return Constraints; }
     FBodyInstance* GetBodyInstance(FName BoneName) const;
@@ -105,11 +110,19 @@ private:
     bool InstantiatePhysicsAsset_Internal(UPhysicsAsset* InPhysicsAsset, const TArray<FTransform>& BoneWorldTransforms);
     void TermArticulated();
 
-    // 시뮬레이션된 바디들의 월드 변환을 본 로컬 포즈로 환산해 SetBoneLocalTransforms 로 푸시.
-    void SyncComponentPoseFromBodies();
+    // anim 컴포넌트-글로벌(AnimGlobals)과 시뮬 바디 포즈를 Weight 로 본별 블렌드(컴포넌트
+    // 공간에서 위치 lerp + 회전 slerp)해 SetBoneLocalTransforms 로 푸시. Weight=1 이면 순수
+    // 물리 되읽기, 0 이면 순수 anim. 바디 없는 본은 anim 로컬을 블렌드된 부모에 누적해 따른다.
+    void ApplyPhysicsBlendedPose(const TArray<FMatrix>& AnimGlobals, float Weight);
 
     // anim 으로 갱신된 본 월드 변환을 키네마틱 바디의 타깃으로 밀어 바디가 포즈를 추종하게 한다.
     void SyncBodiesFromComponentPose();
+
+    // 레퍼런스 포즈 기준 컴포넌트-공간 글로벌(블렌드 anim 기준이 없을 때 폴백).
+    void BuildReferencePoseGlobals(TArray<FMatrix>& OutGlobals) const;
+
+    // PhysicsBlendWeight/Target 에 따라 바디를 다이내믹/키네마틱으로 전환(변화 시에만).
+    void UpdateBodySimulationState();
 
 protected:
     // Animation 런타임 상태.
@@ -126,6 +139,12 @@ protected:
     TArray<FBodyInstance*>     Bodies;
     TArray<FConstraintInstance*> Constraints;
 
-    // 랙돌 활성 여부. true 인 동안 TickComponent 가 anim 평가 대신 물리→본 포즈 되읽기를 수행.
-    bool                       bSimulatingPhysics = false;
+    // 물리 블렌드 상태. PhysicsBlendWeight(현재 적용값)가 Target 으로 InterpSpeed 만큼 보간된다.
+    //   weight 0   : 순수 anim(바디 키네마틱 추종)
+    //   0<weight<1 : anim↔시뮬 본별 블렌드
+    //   weight 1   : 순수 랙돌
+    float                      PhysicsBlendWeight = 0.0f;
+    float                      PhysicsBlendTarget = 0.0f;
+    float                      PhysicsBlendInterpSpeed = 4.0f;  // /sec (~0.25s, 0 이하면 즉시)
+    bool                       bBodiesSimulating = false;       // 바디 다이내믹 상태(중복 전환 방지)
 };
