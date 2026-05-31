@@ -46,6 +46,9 @@ public:
 	virtual void SetActorKinematic(FPhysicsActorHandle Actor, bool bKinematic) = 0;
 	virtual void SetActorKinematicTarget(FPhysicsActorHandle Actor, const FTransform& WorldPose) = 0;
 	virtual void SetActorMass(FPhysicsActorHandle Actor, float Mass) = 0;
+	// 액터의 모든 shape 에 self-collision 그룹 ID(filter word3)를 설정한다. 같은 ID 끼리는
+	// KraftonFilterShader 가 충돌을 무시 → 랙돌 바디들이 서로(및 자기 캡슐과) 안 부딪치게.
+	virtual void SetActorSelfCollisionGroup(FPhysicsActorHandle Actor, uint32 GroupId) = 0;
 
 	// --- Raw physics constraint path (PhysicsAsset / ragdoll) ---
 	virtual FPhysicsConstraintHandle CreateConstraint(const FConstraintCreationParams& Params) = 0;

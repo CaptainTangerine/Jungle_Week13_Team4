@@ -59,6 +59,7 @@ public:
 	void SetActorKinematic(FPhysicsActorHandle Actor, bool bKinematic) override;
 	void SetActorKinematicTarget(FPhysicsActorHandle Actor, const FTransform& WorldPose) override;
 	void SetActorMass(FPhysicsActorHandle Actor, float Mass) override;
+	void SetActorSelfCollisionGroup(FPhysicsActorHandle Actor, uint32 GroupId) override;
 
 	FPhysicsConstraintHandle CreateConstraint(const FConstraintCreationParams& Params) override;
 	void ReleaseConstraint(FPhysicsConstraintHandle Constraint) override;

@@ -842,6 +842,33 @@ void FPhysXPhysicsScene::SetActorMass(FPhysicsActorHandle Actor, float Mass)
 	PxRigidBodyExt::setMassAndUpdateInertia(*Dynamic, std::max(Mass, 0.001f));
 }
 
+void FPhysXPhysicsScene::SetActorSelfCollisionGroup(FPhysicsActorHandle Actor, uint32 GroupId)
+{
+	PxRigidActor* RigidActor = static_cast<PxRigidActor*>(Actor.Internal);
+	if (!RigidActor)
+	{
+		return;
+	}
+
+	const PxU32 ShapeCount = RigidActor->getNbShapes();
+	if (ShapeCount == 0)
+	{
+		return;
+	}
+
+	std::vector<PxShape*> Shapes(ShapeCount);
+	RigidActor->getShapes(Shapes.data(), ShapeCount);
+	for (PxShape* Shape : Shapes)
+	{
+		if (!Shape) continue;
+		// 같은 GroupId(=owner UUID) 끼리는 KraftonFilterShader 가 충돌 무시.
+		// (word3 비교는 simulation filter data 만 사용하므로 sim filter 만 갱신.)
+		PxFilterData Filter = Shape->getSimulationFilterData();
+		Filter.word3 = static_cast<PxU32>(GroupId);
+		Shape->setSimulationFilterData(Filter);
+	}
+}
+
 FPhysicsConstraintHandle FPhysXPhysicsScene::CreateConstraint(const FConstraintCreationParams& Params)
 {
 	PxRigidActor* Actor1 = static_cast<PxRigidActor*>(Params.Actor1.Internal);
