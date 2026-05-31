@@ -41,25 +41,81 @@ namespace
 	}
 
 	// 본의 첫 자식 방향/거리로 캡슐(본-로컬)을 피팅. 자식 없으면(=leaf) 작은 기본값.
-	void FitBodyCapsule(const FSkeletalMesh* Mesh, int32 BoneIndex, FKSphylElem& Out)
+	// (Fallback) 부모→첫 자식 세그먼트로 캡슐 피팅. 스킨 버텍스가 없을 때만 사용.
+	bool FitCapsuleFromChildSegment(const FSkeletalMesh* Mesh, int32 BoneIndex, FKSphylElem& Out)
 	{
 		const int32 Child = FindFirstChildBone(Mesh, BoneIndex);
-		if (Child != -1)
+		if (Child == -1)
 		{
-			// 자식은 이 본의 자식이므로 자식 ReferenceLocalPose 의 translation = 본-로컬에서의 자식 원점.
-			const FVector ChildLocal = MatrixTranslation(Mesh->Bones[Child].ReferenceLocalPose);
-			const float Len = std::sqrt(ChildLocal.X * ChildLocal.X + ChildLocal.Y * ChildLocal.Y + ChildLocal.Z * ChildLocal.Z);
-			if (Len >= 1e-3f)
-			{
-				const FVector Dir(ChildLocal.X / Len, ChildLocal.Y / Len, ChildLocal.Z / Len);
-				Out.Center   = FVector(ChildLocal.X * 0.5f, ChildLocal.Y * 0.5f, ChildLocal.Z * 0.5f);
-				Out.Radius   = std::max(Len * 0.12f, 0.05f);
-				Out.Length   = std::max(Len - 2.0f * Out.Radius, Len * 0.1f);
-				Out.Rotation = RotationYToDir(Dir).ToRotator();
-				return;
-			}
+			return false;
 		}
-		// leaf 또는 길이 0 — 작은 기본 캡슐.
+		// 자식은 이 본의 자식이므로 자식 ReferenceLocalPose 의 translation = 본-로컬에서의 자식 원점.
+		const FVector ChildLocal = MatrixTranslation(Mesh->Bones[Child].ReferenceLocalPose);
+		const float Len = std::sqrt(ChildLocal.X * ChildLocal.X + ChildLocal.Y * ChildLocal.Y + ChildLocal.Z * ChildLocal.Z);
+		if (Len < 1e-3f)
+		{
+			return false;
+		}
+		const FVector Dir(ChildLocal.X / Len, ChildLocal.Y / Len, ChildLocal.Z / Len);
+		Out.Center   = FVector(ChildLocal.X * 0.5f, ChildLocal.Y * 0.5f, ChildLocal.Z * 0.5f);
+		Out.Radius   = std::max(Len * 0.12f, 0.05f);
+		Out.Length   = std::max(Len - 2.0f * Out.Radius, Len * 0.1f);
+		Out.Rotation = RotationYToDir(Dir).ToRotator();
+		return true;
+	}
+
+	// 본에 스킨된 버텍스들을 본-로컬(ref pose 기준)로 모아 AABB 를 구하고 캡슐을 피팅한다.
+	// 세그먼트가 없는 본(겹친 루트)·다분기 본(Pelvis 등)·말단 본도 실제 메시 부피에 맞게 잡힌다.
+	// 스킨 버텍스가 없으면 세그먼트 휴리스틱 → 기본 캡슐 순으로 폴백.
+	void FitBodyCapsule(const FSkeletalMesh* Mesh, int32 BoneIndex, FKSphylElem& Out)
+	{
+		// 1) 스킨 버텍스 AABB (본-로컬). ReferenceGlobalPose 역행렬로 model-space 버텍스를 본-로컬로.
+		const FMatrix InvRef = Mesh->Bones[BoneIndex].GetReferenceGlobalPose().GetInverseFast();
+		FVector Min( 1e30f,  1e30f,  1e30f);
+		FVector Max(-1e30f, -1e30f, -1e30f);
+		int32 Count = 0;
+		for (const FVertexPNCTBW& V : Mesh->Vertices)
+		{
+			float Weight = 0.0f;
+			for (int32 i = 0; i < 4; ++i)
+			{
+				if (V.BoneIndices[i] == BoneIndex) { Weight += V.BoneWeights[i]; }
+			}
+			if (Weight < 0.2f) { continue; }   // 주요 영향 버텍스만(노이즈/약한 가중치 제외)
+
+			const FVector L = InvRef.TransformPositionWithW(V.Position);
+			Min.X = std::min(Min.X, L.X); Min.Y = std::min(Min.Y, L.Y); Min.Z = std::min(Min.Z, L.Z);
+			Max.X = std::max(Max.X, L.X); Max.Y = std::max(Max.Y, L.Y); Max.Z = std::max(Max.Z, L.Z);
+			++Count;
+		}
+
+		if (Count > 0)
+		{
+			Out.Center = FVector((Min.X + Max.X) * 0.5f, (Min.Y + Max.Y) * 0.5f, (Min.Z + Max.Z) * 0.5f);
+			const float HX = std::max((Max.X - Min.X) * 0.5f, 1e-4f);
+			const float HY = std::max((Max.Y - Min.Y) * 0.5f, 1e-4f);
+			const float HZ = std::max((Max.Z - Min.Z) * 0.5f, 1e-4f);
+
+			// 가장 긴 축 = 캡슐 길이축, 나머지 둘 중 큰 쪽을 반경으로(버텍스 포함). 캡슐 길이축 규약=본-로컬 Y.
+			float HalfLongest, CrossA, CrossB;
+			FVector AxisDir;
+			if (HX >= HY && HX >= HZ)      { HalfLongest = HX; CrossA = HY; CrossB = HZ; AxisDir = FVector(1, 0, 0); }
+			else if (HY >= HX && HY >= HZ) { HalfLongest = HY; CrossA = HX; CrossB = HZ; AxisDir = FVector(0, 1, 0); }
+			else                           { HalfLongest = HZ; CrossA = HX; CrossB = HY; AxisDir = FVector(0, 0, 1); }
+
+			Out.Radius   = std::max(std::max(CrossA, CrossB), 0.01f);
+			Out.Length   = std::max(2.0f * HalfLongest - 2.0f * Out.Radius, 0.0f);
+			Out.Rotation = RotationYToDir(AxisDir).ToRotator();
+			return;
+		}
+
+		// 2) 스킨 버텍스 없음(비스킨 본 등) → 세그먼트 휴리스틱.
+		if (FitCapsuleFromChildSegment(Mesh, BoneIndex, Out))
+		{
+			return;
+		}
+
+		// 3) 기본 캡슐.
 		Out.Center   = FVector(0.0f, 0.0f, 0.0f);
 		Out.Rotation = FRotator(0.0f, 0.0f, 0.0f);
 		Out.Radius   = 0.5f;
