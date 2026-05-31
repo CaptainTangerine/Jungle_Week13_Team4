@@ -585,7 +585,20 @@ def build_array_inner_property(
         )
 
     if element_property_type == "Struct":
-        struct_type = prop.struct_type or f"{element_cpp_type}::StaticStruct()"
+        # 배열 원소가 struct 면 struct 타입은 "원소 타입"이다. prop.struct_type 은 배열
+        # 프로퍼티 자신의 Type= 표현식(배열엔 무의미 → "nullptr" 문자열)이라 그대로 쓰면
+        # StructType=nullptr 가 되어 원소가 직렬화되지 않는다(필드가 전부 기본값으로 로드 —
+        # FConstraintSetup 의 ParentBone/ChildBone 이 None 으로 와서 랙돌 조인트가 끊긴 원인).
+        # 그래서 element_cpp_type 으로부터 StaticStruct() 를 도출한다.
+        # 단, element_property_type 분류 버그로 primitive(float 등)·math 타입(FVector 등)이
+        # "Struct" 로 잘못 분류돼 들어올 수 있는데 이들은 StaticStruct() 가 없으므로
+        # TYPE_MAP 에 있는 타입은 기존처럼 nullptr 로 둔다(해당 직렬화는 별개 이슈).
+        if prop.struct_type and prop.struct_type != "nullptr":
+            struct_type = prop.struct_type
+        elif element_cpp_type not in TYPE_MAP:
+            struct_type = f"{element_cpp_type}::StaticStruct()"
+        else:
+            struct_type = "nullptr"
         return (
             f"\tnew FStructProperty(\n"
             f"\t\t{cpp_string_literal(inner_name)},\n"
