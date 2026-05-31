@@ -62,6 +62,10 @@ public:
 	// 배치 업데이트 대상 PhysX 차량 핸들. 미생성 시 nullptr.
 	physx::PxVehicleDrive4W* GetPxVehicle() const { return PVehicle; }
 
+	// 시뮬레이션 후 chassis 의 world transform. AWheeledVehicle::Tick 의 output readback 용
+	// (chassis = PxRigidDynamic, 컴포넌트 소유). 미생성 시 false.
+	bool GetChassisWorldTransform(FTransform& Out) const;
+
 	// 시각용 바퀴 컴포넌트(0..3) 등록 — PostTick 이 서스펜션/회전 pose 를 여기에 반영한다.
 	void SetWheelComponent(int32 WheelIndex, USceneComponent* WheelComp);
 	// PostTick 이 호출 — WheelIndex 바퀴의 local pose 를 시각 컴포넌트에 적용.
