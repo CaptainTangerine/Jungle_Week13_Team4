@@ -67,8 +67,12 @@ void USkeletalMeshComponent::OnDestroyPhysicsState()
 
 bool USkeletalMeshComponent::ShouldCreatePhysicsState() const
 {
+    // physics asset 이 연결돼 있으면 충돌-쿼리 enable 여부와 무관하게 바디를 생성한다.
+    // (IsCollisionEnabled 는 scene query 등록을 게이트할 뿐 articulated body 존재와 별개.
+    //  바디가 스폰 시 만들어져야 키네마틱으로 anim 을 추종하다가 자연스럽게 래그돌로 전환됨.)
+    // World/PhysicsScene 존재는 상위 UActorComponent::RecreatePhysicsState 가 이미 검사.
     UPhysicsAsset* PhysAsset = GetPhysicsAsset();
-    return GetSkeletalMesh() != nullptr && IsCollisionEnabled() && PhysAsset && !PhysAsset->BodySetups.empty();
+    return GetSkeletalMesh() != nullptr && PhysAsset && !PhysAsset->BodySetups.empty();
 }
 
 bool USkeletalMeshComponent::HasValidPhysicsState() const
