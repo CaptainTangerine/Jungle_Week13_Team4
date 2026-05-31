@@ -190,6 +190,25 @@ void FPhysXVehicleManager::PostTick(float DeltaTime)
 {
 	// TODO(vehicle part 2): fetch 후 각 차량의 chassis/wheel pose 를 읽어
 	//   UWheeledVehicleMovementComponent::ApplyWheelPose 로 push.
+
+	for (uint16 Idx = 0; Idx < Vehicles.size(); Idx++)
+	{
+		UWheeledVehicleMovementComponent* MC = Vehicles[Idx];
+		if (!MC) continue;
+
+		// 1. PhysX 차량 인스턴스 가져오기
+		PxVehicleDrive4W* Vehicle = MC->GetPxVehicle();
+		if (!Vehicle) continue;
+
+		// 2. 이 차량의 바퀴 개수 확인
+		const uint32 NumWheels = Vehicle->mWheelsSimData.getNbWheels();
+
+		// 3. 각 바퀴를 순회하며 PhysX가 계산한 최신 Pose(Transform) 추출
+		for (uint32 WheelIdx = 0; WheelIdx < NumWheels; WheelIdx++)
+		{
+
+		}
+	}
 }
 
 void FPhysXVehicleManager::Release()
