@@ -69,8 +69,10 @@ namespace
 	// 스킨 버텍스가 없으면 세그먼트 휴리스틱 → 기본 캡슐 순으로 폴백.
 	void FitBodyCapsule(const FSkeletalMesh* Mesh, int32 BoneIndex, FKSphylElem& Out)
 	{
-		// 1) 스킨 버텍스 AABB (본-로컬). ReferenceGlobalPose 역행렬로 model-space 버텍스를 본-로컬로.
-		const FMatrix InvRef = Mesh->Bones[BoneIndex].GetReferenceGlobalPose().GetInverseFast();
+		// 1) 스킨 버텍스 AABB (본-로컬). 스키닝과 동일하게 InverseBindPose 로 bind-pose 버텍스를
+		//    본-로컬로 가져온다. (스킨 바인드 포즈 ≠ 레퍼런스 포즈인 경우 — 루트 90° 등 — 에도
+		//    드로우/시뮬과 정확히 일치: elem(bind-local) * 현재 본 글로벌 = 스킨된 버텍스 위치.)
+		const FMatrix InvRef = Mesh->Bones[BoneIndex].GetInverseBindPose();
 		FVector Min( 1e30f,  1e30f,  1e30f);
 		FVector Max(-1e30f, -1e30f, -1e30f);
 		int32 Count = 0;
