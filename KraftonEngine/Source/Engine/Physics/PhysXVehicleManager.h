@@ -9,6 +9,7 @@ namespace physx
 	class PxScene;
 	class PxCooking;
 	class PxMaterial;
+	class PxBatchQuery;
 	class PxVehicleDrivableSurfaceToTireFrictionPairs;
 }
 
@@ -54,4 +55,7 @@ private:
 	physx::PxCooking*  Cooking       = nullptr;
 	physx::PxMaterial* DriveMaterial = nullptr;
 	physx::PxVehicleDrivableSurfaceToTireFrictionPairs* FrictionPairs = nullptr;
+
+	struct FVehicleSceneQueryData;        // defined in .cpp (PhysX-free 헤더 유지)
+	FVehicleSceneQueryData* SqData = nullptr;
 };
