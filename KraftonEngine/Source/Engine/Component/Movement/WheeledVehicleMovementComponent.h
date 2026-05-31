@@ -13,7 +13,7 @@ namespace physx
 }
 
 class FPhysXVehicleManager;
-class USceneComponent;
+class USkeletalMeshComponent;
 
 // ============================================================
 // UWheeledVehicleMovementComponent — PxVehicleDrive4W 기반 4륜 차량 이동 컴포넌트.
@@ -66,10 +66,11 @@ public:
 	// (chassis = PxRigidDynamic, 컴포넌트 소유). 미생성 시 false.
 	bool GetChassisWorldTransform(FTransform& Out) const;
 
-	// 시각용 바퀴 컴포넌트(0..3) 등록 — PostTick 이 서스펜션/회전 pose 를 여기에 반영한다.
-	void SetWheelComponent(int32 WheelIndex, USceneComponent* WheelComp);
-	// PostTick 이 호출 — WheelIndex 바퀴의 local pose 를 시각 컴포넌트에 적용.
+	// WheelIndex 바퀴의 시뮬레이션 local pose 를 skeletal mesh 의 wheel bone 에 적용.
 	void ApplyWheelPose(int32 WheelIndex, const FTransform& LocalPose);
+	// 이번 프레임 wheel pose 들을 manager 에서 가져와 wheel bone 에 일괄 반영.
+	// AWheeledVehicle::Tick 이 호출 (output readback — post-fetch).
+	void UpdateWheelBonesFromSimulation();
 
 	static constexpr int32 NumWheels = 4;
 
@@ -95,7 +96,21 @@ protected:
 	float SteeringInput   = 0.0f;
 	bool  bHandbrakeInput = false;
 
-	USceneComponent* WheelComponents[NumWheels] = { nullptr, nullptr, nullptr, nullptr };
+	// wheel → skeletal-mesh bone 매핑 (UE WheelSetup.BoneName 패턴). CreateVehicle 가 wheel 위치를
+	// 이 본들의 component-space 위치에서 가져오고, 출력 시 같은 본에 pose 를 쓴다.
+	// 순서: FrontLeft / FrontRight / RearLeft / RearRight (PxVehicleDrive4WWheelOrder).
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Bone FL")
+	FString WheelBoneFL = "Wheel_FL";
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Bone FR")
+	FString WheelBoneFR = "Wheel_FR";
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Bone RL")
+	FString WheelBoneRL = "Wheel_RL";
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Bone RR")
+	FString WheelBoneRR = "Wheel_RR";
+
+	// CreateVehicle 가 해석/캐시 (비-reflected). SkeletalBody = UpdatedComponent cast.
+	USkeletalMeshComponent* SkeletalBody = nullptr;
+	int32 WheelBoneIndices[NumWheels] = { -1, -1, -1, -1 };
 
 	// --- Editor-tunable setup (UE FVehicleEngineData / FWheelSetup 의 minimal subset) ---
 	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Mass", Min=1.0f, Max=10000.0f, Speed=1.0f)
