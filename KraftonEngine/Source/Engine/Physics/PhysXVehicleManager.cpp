@@ -204,6 +204,8 @@ void FPhysXVehicleManager::Tick(float DeltaTime)
 		SqData->VehicleResults.data());
 }
 
+
+// Deprecated. Will migrate to AWheeledVehicle::Tick()
 void FPhysXVehicleManager::PostTick(float DeltaTime)
 {
 	if (!SqData) return;

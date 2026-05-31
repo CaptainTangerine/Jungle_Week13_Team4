@@ -87,6 +87,20 @@ float UWheeledVehicleMovementComponent::GetForwardSpeed() const
 	return PVehicle ? PVehicle->computeForwardSpeed() : 0.0f;
 }
 
+bool UWheeledVehicleMovementComponent::GetChassisWorldTransform(FTransform& Out) const
+{
+	if (!PVehicleActor)
+	{
+		return false;
+	}
+	const PxTransform T = PVehicleActor->getGlobalPose();
+	Out = FTransform(
+		FVector(T.p.x, T.p.y, T.p.z),
+		FQuat(T.q.x, T.q.y, T.q.z, T.q.w),
+		FVector(1.0f, 1.0f, 1.0f));
+	return true;
+}
+
 // ============================================================
 // Lifecycle
 // ============================================================
