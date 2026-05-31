@@ -62,6 +62,13 @@ public:
     void SetPhysicsAssetOverride(UPhysicsAsset* InPhysicsAsset);
     UPhysicsAsset* GetPhysicsAssetOverride() const { return PhysicsAssetOverride; }
     UPhysicsAsset* GetPhysicsAsset() const;
+
+    // 랙돌 제어: 모든 바디를 시뮬레이션(true)/키네마틱(false)으로 전환한다.
+    // true 로 켜면 바디가 없을 경우 RefPose 기준으로 인스턴스화하고, 이후 매 프레임
+    // 시뮬레이션된 바디의 월드 변환을 본 포즈로 되읽어(SyncComponentPoseFromBodies)
+    // 메시가 물리를 따르게 한다.
+    void SetSimulatePhysics(bool bSimulate) override;
+    bool IsSimulatingPhysics() const { return bSimulatingPhysics; }
     const TArray<FBodyInstance*>& GetBodies() const { return Bodies; }
     const TArray<FConstraintInstance*>& GetConstraints() const { return Constraints; }
     FBodyInstance* GetBodyInstance(FName BoneName) const;
@@ -98,6 +105,12 @@ private:
     bool InstantiatePhysicsAsset_Internal(UPhysicsAsset* InPhysicsAsset, const TArray<FTransform>& BoneWorldTransforms);
     void TermArticulated();
 
+    // 시뮬레이션된 바디들의 월드 변환을 본 로컬 포즈로 환산해 SetBoneLocalTransforms 로 푸시.
+    void SyncComponentPoseFromBodies();
+
+    // anim 으로 갱신된 본 월드 변환을 키네마틱 바디의 타깃으로 밀어 바디가 포즈를 추종하게 한다.
+    void SyncBodiesFromComponentPose();
+
 protected:
     // Animation 런타임 상태.
     UPROPERTY(Edit, Save, Category="Animation", DisplayName="Animation Mode", Enum=EAnimationMode)
@@ -112,4 +125,7 @@ protected:
     UPhysicsAsset*             PhysicsAssetOverride = nullptr;
     TArray<FBodyInstance*>     Bodies;
     TArray<FConstraintInstance*> Constraints;
+
+    // 랙돌 활성 여부. true 인 동안 TickComponent 가 anim 평가 대신 물리→본 포즈 되읽기를 수행.
+    bool                       bSimulatingPhysics = false;
 };

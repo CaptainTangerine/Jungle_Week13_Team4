@@ -39,6 +39,22 @@ void USkeletalMeshComponent::OnCreatePhysicsState()
 {
     if (InstantiatePhysicsAssetRefPose())
     {
+        // 래그돌 트리거 전까지는 모든 바디가 키네마틱으로 anim 포즈를 추종한다.
+        // (저작된 PhysicsType 이 Simulated 라도 시작 시 떨어지지 않도록 강제.)
+        UWorld* World = GetWorld();
+        IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+        if (PhysicsScene)
+        {
+            for (FBodyInstance* Body : Bodies)
+            {
+                if (Body && Body->IsValidBodyInstance())
+                {
+                    Body->SetInstanceSimulatePhysics(PhysicsScene, false);
+                }
+            }
+        }
+        bSimulatingPhysics = false;
+
         UActorComponent::OnCreatePhysicsState();
     }
 }
@@ -533,15 +549,148 @@ void USkeletalMeshComponent::TermArticulated()
     Bodies.clear();
 }
 
+void USkeletalMeshComponent::SetSimulatePhysics(bool bSimulate)
+{
+    Super::SetSimulatePhysics(bSimulate);
+
+    // 켤 때 바디가 아직 없으면 (PhysicsState 미생성) RefPose 기준으로 인스턴스화 시도.
+    if (bSimulate && Bodies.empty())
+    {
+        InstantiatePhysicsAssetRefPose();
+    }
+
+    UWorld* World = GetWorld();
+    IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+    if (PhysicsScene)
+    {
+        for (FBodyInstance* Body : Bodies)
+        {
+            if (Body && Body->IsValidBodyInstance())
+            {
+                Body->SetInstanceSimulatePhysics(PhysicsScene, bSimulate);
+            }
+        }
+    }
+
+    bSimulatingPhysics = bSimulate && !Bodies.empty();
+}
+
+void USkeletalMeshComponent::SyncComponentPoseFromBodies()
+{
+    UWorld* World = GetWorld();
+    IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+    USkeletalMesh* Mesh = GetSkeletalMesh();
+    FSkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+    if (!PhysicsScene || !Asset || Asset->Bones.empty() || Bodies.empty())
+    {
+        return;
+    }
+
+    const int32 BoneCount = static_cast<int32>(Asset->Bones.size());
+
+    // 바디 actor 의 변환은 본 프레임의 "월드" 변환이므로, 컴포넌트 로컬로 끌어내린 뒤
+    // 부모 기준 로컬 포즈로 환산해 SetBoneLocalTransforms 에 넘긴다.
+    const FMatrix WorldToComponent = GetWorldMatrix().GetInverse();
+
+    TArray<FMatrix> CompGlobal;   // 본의 컴포넌트-공간 글로벌 행렬 (parent-first 누적)
+    CompGlobal.resize(BoneCount);
+    TArray<FTransform> LocalPose;
+    LocalPose.resize(BoneCount);
+
+    const bool bHasEditPose = (BoneEditLocalMatrices.size() == static_cast<size_t>(BoneCount));
+
+    for (int32 i = 0; i < BoneCount; ++i)
+    {
+        const int32 ParentIndex = Asset->Bones[i].ParentIndex;
+
+        FBodyInstance* Body = GetBodyInstance(i);
+        if (Body && Body->IsValidBodyInstance())
+        {
+            // 시뮬레이션된 바디의 월드 변환 = 본 프레임의 월드 변환.
+            const FTransform BodyWorld = Body->GetUnrealWorldTransform(PhysicsScene);
+            CompGlobal[i] = BodyWorld.ToMatrix() * WorldToComponent;
+        }
+        else
+        {
+            // 바디가 없는 본은 직전 로컬 포즈를 유지하면서 부모 글로벌에 누적.
+            const FMatrix Local = bHasEditPose
+                ? BoneEditLocalMatrices[i]
+                : Asset->Bones[i].GetReferenceLocalPose();
+            CompGlobal[i] = (ParentIndex >= 0) ? Local * CompGlobal[ParentIndex] : Local;
+        }
+
+        const FMatrix LocalMatrix = (ParentIndex >= 0)
+            ? CompGlobal[i] * CompGlobal[ParentIndex].GetInverse()
+            : CompGlobal[i];
+        LocalPose[i] = FTransform(LocalMatrix);
+    }
+
+    SetBoneLocalTransforms(LocalPose);
+}
+
+void USkeletalMeshComponent::SyncBodiesFromComponentPose()
+{
+    UWorld* World = GetWorld();
+    IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+    USkeletalMesh* Mesh = GetSkeletalMesh();
+    FSkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+    if (!PhysicsScene || !Asset || Bodies.empty())
+    {
+        return;
+    }
+
+    // 현재(애니메이션으로 갱신된) 본 포즈의 컴포넌트-공간 글로벌 행렬.
+    TArray<FMatrix> CompGlobal;
+    BuildBoneEditGlobalMatrices(CompGlobal);
+    if (CompGlobal.empty())
+    {
+        return;
+    }
+
+    const FMatrix& ComponentToWorld = GetWorldMatrix();
+    for (FBodyInstance* Body : Bodies)
+    {
+        if (!Body || !Body->IsValidBodyInstance())
+        {
+            continue;
+        }
+
+        const int32 BoneIndex = Body->InstanceBoneIndex;
+        if (BoneIndex < 0 || BoneIndex >= static_cast<int32>(CompGlobal.size()))
+        {
+            continue;
+        }
+
+        const FMatrix BoneWorldMatrix = CompGlobal[BoneIndex] * ComponentToWorld;
+        Body->SetKinematicTarget(PhysicsScene, FTransform(BoneWorldMatrix));
+    }
+}
+
 void USkeletalMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
 {
-    if (EvaluateAnimInstance(DeltaTime))
+    // 랙돌 활성 시: anim 평가를 건너뛰고 시뮬레이션된 바디 포즈를 본에 되읽는다.
+    if (bSimulatingPhysics && !Bodies.empty())
     {
+        SyncComponentPoseFromBodies();
         UMeshComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
         return;
     }
 
-    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    if (EvaluateAnimInstance(DeltaTime))
+    {
+        UMeshComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    }
+    else
+    {
+        Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    }
+
+    // 비-랙돌 상태: anim 으로 갱신된 본 포즈를 키네마틱 바디에 추종시켜
+    // 래그돌로 전환되는 순간 바디가 올바른 위치/자세에서 시작하도록 한다.
+    if (!Bodies.empty())
+    {
+        SyncBodiesFromComponentPose();
+    }
 }
 
 // ──────────────────────────────────────────────
