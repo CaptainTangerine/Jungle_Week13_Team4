@@ -476,14 +476,18 @@ void FDrawCommandBuilder::BuildProxyCommands(const FFrameContext& Frame, FScene&
 		}
 		else if (Proxy->HasProxyFlag(EPrimitiveProxyFlags::PhysicsAssetDebug))
 		{
-			const FPhysicsAssetDebugSceneProxy* PhysProxy = static_cast<const FPhysicsAssetDebugSceneProxy*>(Proxy);
-			for (const FWireLine& Line : PhysProxy->GetCachedLines())
+			// 기존 Collision 토글(에디터 bCollision / 게임 bShowCollisionShape)로 On/Off.
+			if (bShowCollision)
 			{
-				EditorLines.AddLine(Line.Start, Line.End, PhysProxy->GetBodyColor());
-			}
-			for (const FWireLine& Line : PhysProxy->GetCachedSelectedLines())
-			{
-				EditorLines.AddLine(Line.Start, Line.End, PhysProxy->GetSelectedColor());
+				const FPhysicsAssetDebugSceneProxy* PhysProxy = static_cast<const FPhysicsAssetDebugSceneProxy*>(Proxy);
+				for (const FWireLine& Line : PhysProxy->GetCachedLines())
+				{
+					EditorLines.AddLine(Line.Start, Line.End, PhysProxy->GetBodyColor());
+				}
+				for (const FWireLine& Line : PhysProxy->GetCachedSelectedLines())
+				{
+					EditorLines.AddLine(Line.Start, Line.End, PhysProxy->GetSelectedColor());
+				}
 			}
 		}
 		else if (Proxy->HasProxyFlag(EPrimitiveProxyFlags::WireShape))

@@ -170,33 +170,40 @@ void FPhysicsAssetDebugSceneProxy::RebuildLines()
 		const int32 BoneIndex = FindBoneIndexByName(MeshAsset, Body->BoneName);
 		if (BoneIndex < 0) continue;
 
-		// 본 월드 트랜스폼(스케일은 1 가정).
-		const FVector BonePos  = MeshComp->GetBoneLocationByIndex(BoneIndex);
-		const FQuat   BoneQuat = MeshComp->GetBoneQuatByIndex(BoneIndex);
+		// 본 월드 트랜스폼. elem 은 본-로컬(컴포넌트 단위)이므로 본 월드 스케일까지 적용해야
+		// 컴포넌트 월드 스케일(예: cm→m 변환)에서 크기가 어긋나지 않는다.
+		const FVector BonePos   = MeshComp->GetBoneLocationByIndex(BoneIndex);
+		const FQuat   BoneQuat  = MeshComp->GetBoneQuatByIndex(BoneIndex);
+		const FVector BoneScale = MeshComp->GetBoneScaleByIndex(BoneIndex);
+		const float   S = (BoneScale.X + BoneScale.Y + BoneScale.Z) / 3.0f;   // 균등 스케일 근사(반경/길이용)
+
+		// 본-로컬 점 → 월드(스케일·회전·이동 순).
+		auto ToWorld = [&](const FVector& Local) -> FVector
+		{
+			return BonePos + BoneQuat.RotateVector(FVector(Local.X * BoneScale.X, Local.Y * BoneScale.Y, Local.Z * BoneScale.Z));
+		};
 
 		TArray<FWireLine>& Out = (BoneIndex == SelectedBone) ? CachedSelectedLines : CachedLines;
 
 		// Sphere — 회전 불필요. 월드 축 정렬 링.
 		for (const FKSphereElem& Elem : Body->AggGeom.SphereElems)
 		{
-			const FVector C = BonePos + BoneQuat.RotateVector(Elem.Center);
-			BuildSphere(Out, C, FVector(1, 0, 0), FVector(0, 1, 0), FVector(0, 0, 1), Elem.Radius);
+			BuildSphere(Out, ToWorld(Elem.Center), FVector(1, 0, 0), FVector(0, 1, 0), FVector(0, 0, 1), Elem.Radius * S);
 		}
 
 		// Box / Capsule — elem.Rotation 을 본 회전과 합성해 월드 기준 축 산출.
 		for (const FKBoxElem& Elem : Body->AggGeom.BoxElems)
 		{
-			const FVector C = BonePos + BoneQuat.RotateVector(Elem.Center);
-			const FQuat   Q = BoneQuat * Elem.Rotation.ToQuaternion();
-			BuildBox(Out, C, Q.RotateVector(FVector(1, 0, 0)), Q.RotateVector(FVector(0, 1, 0)), Q.RotateVector(FVector(0, 0, 1)), Elem.HalfExtent);
+			const FQuat Q = BoneQuat * Elem.Rotation.ToQuaternion();
+			BuildBox(Out, ToWorld(Elem.Center), Q.RotateVector(FVector(1, 0, 0)), Q.RotateVector(FVector(0, 1, 0)), Q.RotateVector(FVector(0, 0, 1)),
+				FVector(Elem.HalfExtent.X * S, Elem.HalfExtent.Y * S, Elem.HalfExtent.Z * S));
 		}
 
 		for (const FKSphylElem& Elem : Body->AggGeom.SphylElems)
 		{
-			const FVector C = BonePos + BoneQuat.RotateVector(Elem.Center);
-			const FQuat   Q = BoneQuat * Elem.Rotation.ToQuaternion();
-			BuildCapsule(Out, C, Q.RotateVector(FVector(1, 0, 0)), Q.RotateVector(FVector(0, 1, 0)), Q.RotateVector(FVector(0, 0, 1)),
-				Elem.Radius, Elem.Length * 0.5f);
+			const FQuat Q = BoneQuat * Elem.Rotation.ToQuaternion();
+			BuildCapsule(Out, ToWorld(Elem.Center), Q.RotateVector(FVector(1, 0, 0)), Q.RotateVector(FVector(0, 1, 0)), Q.RotateVector(FVector(0, 0, 1)),
+				Elem.Radius * S, Elem.Length * 0.5f * S);
 		}
 	}
 }

@@ -41,6 +41,7 @@ void FMeshEditorViewportClient::Release()
 	UObjectManager::Get().DestroyObject(Gizmo);
 	Gizmo = nullptr;
 	BoneDebugComponent = nullptr;
+	PhysicsDebugComponent = nullptr;   // 프리뷰 액터와 함께 파괴됨 — SetSelectedBone 의 댕글링 접근 방지
 
 	bIsRenderable = false;
 
