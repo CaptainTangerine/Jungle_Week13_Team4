@@ -43,6 +43,30 @@ void FPhysXVehicleManager::PreTick()
 	// TODO(vehicle part 2): 등록된 각 차량의 입력(Throttle/Steer/Brake/Handbrake)을 읽어
 	//   PxVehicleDrive4WRawInputData 로 smoothing → setAnalogInputs.
 	//   이후 Tick 의 PxVehicleSuspensionRaycasts + PxVehicleUpdates 가 소비.
+
+	for (uint16 Idx = 0; Idx < Vehicles.size(); Idx++)
+	{
+		UWheeledVehicleMovementComponent* MC = Vehicles[Idx]; if (!MC) continue;
+		
+		const float RawThrottle = MC->GetThrottleInput();
+		const float RawSteer	= MC->GetSteeringInput();
+		const float RawBrake	= MC->GetBrakeInput();
+		const float RawHandbrake  = MC->GetHandbrakeInput();
+
+		physx::PxVehicleDrive4WRawInputData RawInputData;
+		RawInputData.setDigitalAccel(RawThrottle > 0.f);
+		RawInputData.setDigitalSteerLeft(RawSteer < 0.f);
+		RawInputData.setDigitalSteerRight(RawSteer > 0.f);
+		RawInputData.setDigitalBrake(RawBrake > 0.f);
+		RawInputData.setDigitalHandbrake(RawHandbrake > 0.f);
+
+		physx::PxVehicleDrive4W* Vehicle = MC->GetPxVehicle();
+		if (!Vehicle) continue;
+
+		const physx::PxVehicleKeySmoothingData& KeySmoothingData;
+		
+		
+	}
 }
 
 void FPhysXVehicleManager::Tick(float /*DeltaTime*/)
