@@ -29,6 +29,32 @@
 #include <algorithm>
 #include <cstring>
 
+namespace
+{
+    // 스케일이 섞인 affine 행렬에서 rigid FTransform(스케일 1)을 추출한다.
+    // FQuat::FromMatrix 는 스케일을 나눠내지 않고 raw 원소로 쿼터니언을 뽑은 뒤 마지막에
+    // Normalize 만 하므로, 비단위 스케일이 섞이면 회전 자체가 왜곡된다
+    // (예: uniform 2배 스케일에서 90도 회전이 ~106도로 추출됨).
+    // 물리<->본 변환은 컴포넌트 월드 스케일(S)의 역수(1/S)를 행렬에 싣게 되므로,
+    // 회전 추출 전에 각 축을 정규화해 스케일을 제거해야 한다. 래그돌 본은 rigid 이므로
+    // 스케일은 1로 고정.
+    FTransform MakeRigidTransform(const FMatrix& Mat)
+    {
+        const FVector Scale = Mat.GetScale();
+        const float SX = Scale.X > 1e-6f ? Scale.X : 1.0f;
+        const float SY = Scale.Y > 1e-6f ? Scale.Y : 1.0f;
+        const float SZ = Scale.Z > 1e-6f ? Scale.Z : 1.0f;
+
+        FMatrix Rot = Mat;
+        Rot.M[0][0] /= SX; Rot.M[0][1] /= SX; Rot.M[0][2] /= SX;
+        Rot.M[1][0] /= SY; Rot.M[1][1] /= SY; Rot.M[1][2] /= SY;
+        Rot.M[2][0] /= SZ; Rot.M[2][1] /= SZ; Rot.M[2][2] /= SZ;
+        Rot.M[3][0] = 0.0f; Rot.M[3][1] = 0.0f; Rot.M[3][2] = 0.0f;
+
+        return FTransform(Mat.GetLocation(), Rot.ToQuat(), FVector(1.0f, 1.0f, 1.0f));
+    }
+}
+
 USkeletalMeshComponent::~USkeletalMeshComponent()
 {
     DestroyPhysicsState();
@@ -441,8 +467,10 @@ bool USkeletalMeshComponent::InstantiatePhysicsAssetRefPose()
     const FMatrix& ComponentToWorld = GetWorldMatrix();
     for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(Asset->Bones.size()); ++BoneIndex)
     {
+        // 스케일-안전 추출: ComponentToWorld 의 스케일이 FTransform 분해 시 회전을
+        // 왜곡하지 않도록 rigid 변환으로 만든다. (바디 actor 는 스케일을 갖지 않음.)
         const FMatrix BoneWorldMatrix = Asset->Bones[BoneIndex].GetReferenceGlobalPose() * ComponentToWorld;
-        BoneWorldTransforms[BoneIndex] = FTransform(BoneWorldMatrix);
+        BoneWorldTransforms[BoneIndex] = MakeRigidTransform(BoneWorldMatrix);
     }
 
     return InstantiatePhysicsAsset_Internal(PhysAsset, BoneWorldTransforms);
@@ -462,6 +490,12 @@ bool USkeletalMeshComponent::InstantiatePhysicsAsset_Internal(
     {
         return false;
     }
+
+    // 랙돌 바디들이 서로(및 자기 캐릭터 캡슐과) 충돌하지 않도록 같은 self-collision 그룹
+    // (owner UUID)으로 묶는다. 조인트로 연결된 인접 쌍만 막던 기존 방식으론 비인접 바디끼리
+    // (특히 WorldScale 로 부푼 캡슐들이) 겹쳐 다이내믹 전환 시 폭발한다.
+    AActor* OwnerActor = GetOwner();
+    const uint32 SelfCollisionGroup = OwnerActor ? OwnerActor->GetUUID() : GetUUID();
 
     const FVector WorldScale = GetWorldScale();
     for (UBodySetup* BodySetup : InPhysicsAsset->BodySetups)
@@ -485,6 +519,7 @@ bool USkeletalMeshComponent::InstantiatePhysicsAsset_Internal(
 
         if (BodyInstance->InitBody(BodySetup, BoneWorldTransforms[BoneIndex], PhysicsScene, BoneIndex))
         {
+            PhysicsScene->SetActorSelfCollisionGroup(BodyInstance->GetPhysicsActorHandle(), SelfCollisionGroup);
             Bodies.push_back(BodyInstance);
         }
         else
@@ -510,7 +545,7 @@ bool USkeletalMeshComponent::InstantiatePhysicsAsset_Internal(
         }
 
         FConstraintInstance* ConstraintInstance = new FConstraintInstance();
-        if (ConstraintInstance->InitConstraint(PhysicsScene, ChildBody, ParentBody, &ConstraintSetup))
+        if (ConstraintInstance->InitConstraint(PhysicsScene, ChildBody, ParentBody, &ConstraintSetup, WorldScale))
         {
             Constraints.push_back(ConstraintInstance);
         }
@@ -610,23 +645,30 @@ void USkeletalMeshComponent::SyncComponentPoseFromBodies()
         FBodyInstance* Body = GetBodyInstance(i);
         if (Body && Body->IsValidBodyInstance())
         {
-            // 시뮬레이션된 바디의 월드 변환 = 본 프레임의 월드 변환.
+            // 시뮬레이션된 바디의 월드 변환 -> 컴포넌트-공간 글로벌.
+            // bodyWorld * worldInv 에는 컴포넌트 월드 스케일의 역수(1/S)가 basis 에
+            // 실린다. 이를 제거해 스케일 1 로 정규화한다 — anim 의
+            // BuildBoneEditGlobalMatrices(스케일 1) 와 같은 규약이라야 자식 본 누적과
+            // 렌더 재구성이 동일 스케일 공간에서 일관된다. (정규화를 안 하면 자식 위치가
+            // S 배로 튀어 메시가 커진다.)
             const FTransform BodyWorld = Body->GetUnrealWorldTransform(PhysicsScene);
-            CompGlobal[i] = BodyWorld.ToMatrix() * WorldToComponent;
+            CompGlobal[i] = MakeRigidTransform(BodyWorld.ToMatrix() * WorldToComponent).ToMatrix();
+
+            // CompGlobal 들이 스케일 1 이므로 분해(FromMatrix)가 안전.
+            const FMatrix LocalMatrix = (ParentIndex >= 0)
+                ? CompGlobal[i] * CompGlobal[ParentIndex].GetInverse()
+                : CompGlobal[i];
+            LocalPose[i] = FTransform(LocalMatrix);
         }
         else
         {
-            // 바디가 없는 본은 직전 로컬 포즈를 유지하면서 부모 글로벌에 누적.
+            // 바디가 없는 본은 직전 로컬 포즈를 그대로 보존 (round-trip 없이).
             const FMatrix Local = bHasEditPose
                 ? BoneEditLocalMatrices[i]
                 : Asset->Bones[i].GetReferenceLocalPose();
             CompGlobal[i] = (ParentIndex >= 0) ? Local * CompGlobal[ParentIndex] : Local;
+            LocalPose[i] = FTransform(Local);
         }
-
-        const FMatrix LocalMatrix = (ParentIndex >= 0)
-            ? CompGlobal[i] * CompGlobal[ParentIndex].GetInverse()
-            : CompGlobal[i];
-        LocalPose[i] = FTransform(LocalMatrix);
     }
 
     SetBoneLocalTransforms(LocalPose);
@@ -665,8 +707,10 @@ void USkeletalMeshComponent::SyncBodiesFromComponentPose()
             continue;
         }
 
+        // BoneWorldMatrix 에는 컴포넌트 월드 스케일이 실려 있어 단순 FTransform 분해 시
+        // 키네마틱 타깃 회전이 깨진다. 스케일-안전 rigid 변환으로 추출.
         const FMatrix BoneWorldMatrix = CompGlobal[BoneIndex] * ComponentToWorld;
-        Body->SetKinematicTarget(PhysicsScene, FTransform(BoneWorldMatrix));
+        Body->SetKinematicTarget(PhysicsScene, MakeRigidTransform(BoneWorldMatrix));
     }
 }
 

@@ -9,7 +9,8 @@ bool FConstraintInstance::InitConstraint(
 	IPhysicsScene* Scene,
 	FBodyInstance* InBodyInstance1,
 	FBodyInstance* InBodyInstance2,
-	const FConstraintSetup* InConstraintSetup)
+	const FConstraintSetup* InConstraintSetup,
+	const FVector& Scale)
 {
 	TermConstraint(Scene);
 
@@ -31,6 +32,12 @@ bool FConstraintInstance::InitConstraint(
 	JointName = ConstraintBone1;
 	RefFrame1 = InConstraintSetup->ChildFrame;
 	RefFrame2 = InConstraintSetup->ParentFrame;
+
+	// 프레임 앵커 오프셋을 바디 월드 스케일에 맞춘다. 바디 actor 는 본 월드 변환
+	// (RefGlobalPose * ComponentToWorld, 스케일 포함)에 놓이는데 프레임 translation 은
+	// 본-로컬(언스케일)이라, 스케일을 안 곱하면 앵커가 1/Scale 위치를 가리켜 수축한다.
+	RefFrame1.Location = FVector(RefFrame1.Location.X * Scale.X, RefFrame1.Location.Y * Scale.Y, RefFrame1.Location.Z * Scale.Z);
+	RefFrame2.Location = FVector(RefFrame2.Location.X * Scale.X, RefFrame2.Location.Y * Scale.Y, RefFrame2.Location.Z * Scale.Z);
 
 	FConstraintCreationParams Params;
 	Params.Actor1 = InBodyInstance1->GetPhysicsActorHandle();
