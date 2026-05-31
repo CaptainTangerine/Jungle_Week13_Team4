@@ -47,6 +47,7 @@ struct FPhysXVehicleManager::FVehicleSceneQueryData
 	TArray<PxRaycastHit>                   RaycastHits;      // [총 바퀴]
 	TArray<PxWheelQueryResult>             WheelResults;     // [총 바퀴]
 	TArray<PxVehicleWheelQueryResult>      VehicleResults;   // [차량 수]
+	TArray<UWheeledVehicleMovementComponent*> ActiveVehicles;
 
 	// 총 바퀴 수가 바뀌면 (재)할당. BatchQuery 는 Scene 에서 생성.
 	void Ensure(PxScene* Scene, uint32 NumVehicles, uint32 TotalWheels)
@@ -139,53 +140,53 @@ void FPhysXVehicleManager::PreTick(float DeltaTime)
 
 void FPhysXVehicleManager::Tick(float DeltaTime)
 {
-	// TODO(vehicle part 2): PxVehicleSuspensionRaycasts(BatchQuery, ...) →
-	//   PxVehicleUpdates(dt, gravity, frictionPairs, NumVehicles, Vehicles, queryResults).
-	//   Scene->simulate() 직전(pre-sim hook)에 호출되어야 한다.
-
 	if (Vehicles.empty()) return;
-	const uint16 NumVehicles = static_cast<uint16>(Vehicles.size());
+	PxScene* Scene = GetScene();
+	if (!Scene) return;
 
-	// 1. 레이캐스트 처리를 위한 PhysX 차량 포인터 배열 및 결과 배열 준비
+	if (!SqData) SqData = new FVehicleSceneQueryData();
+	SqData->ActiveVehicles.clear();
+
+	// 1. 활성 차량 + 총 바퀴 수 수집 (PostTick 과 동일 순서로 정렬 보장).
 	TArray<PxVehicleWheels*> PxVehicles;
-	PxVehicles.reserve(NumVehicles);
-
 	uint32 TotalWheelCount = 0;
-	for (uint16 Idx = 0; Idx < NumVehicles; Idx++)
+	for (uint16 Idx = 0; Idx < Vehicles.size(); ++Idx)
 	{
 		UWheeledVehicleMovementComponent* MC = Vehicles[Idx];
-		if (MC)
-		{
-			PxVehicleDrive4W* Vehicle = MC->GetPxVehicle();
-			if (!Vehicle) continue;
-			PxVehicles.push_back(Vehicle);
-			TotalWheelCount += 4;
-		}
+		if (!MC) continue;
+		PxVehicleDrive4W* Vehicle = MC->GetPxVehicle();
+		if (!Vehicle) continue;
+		PxVehicles.push_back(Vehicle);
+		SqData->ActiveVehicles.push_back(MC);
+		TotalWheelCount += Vehicle->mWheelsSimData.getNbWheels();
 	}
-
 	if (PxVehicles.empty()) return;
 
-	// 2. 서스펜션 레이캐스트(Suspension Raycasts) 수행
-	if (!SqData || SqData->BatchQuery) return;
+	// 2. 버퍼 (재)할당 + per-vehicle wheelQueryResults 를 WheelResults 서브레인지에 연결.
+	SqData->Ensure(Scene, (uint32)PxVehicles.size(), TotalWheelCount);
+	if (!SqData->BatchQuery) return;
+
+	uint32 WheelOffset = 0;
+	for (uint16 i = 0; i < PxVehicles.size(); ++i)
+	{
+		const uint32 nb = PxVehicles[i]->mWheelsSimData.getNbWheels();
+		SqData->VehicleResults[i].nbWheelQueryResults = nb;
+		SqData->VehicleResults[i].wheelQueryResults = &SqData->WheelResults[WheelOffset];
+		WheelOffset += nb;
+	}
+
+	// 3. 서스펜션 레이캐스트
 	PxVehicleSuspensionRaycasts(
 		SqData->BatchQuery, PxVehicles.size(), PxVehicles.data(),
 		SqData->RaycastResults.size(), SqData->RaycastResults.data());
 
-	// 3. PxVehicleUpdates에 필요한 환경 변수 가져오기
-	PxScene* Scene = GetScene();
-	if (!Scene) return;
-
+	// 4. 차량 물리 업데이트
 	const PxVec3 Gravity = Scene->getGravity();
-	PxVehicleDrivableSurfaceToTireFrictionPairs* FrictionPairs = GetFrictionPairs();
-	PxVehicleWheelQueryResult* VehicleWheelQueryResults;
-
-	// 4. 차량 물리 상태 업데이트 (속도, 토크, 서스펜션 변위 등 계산)
 	PxVehicleUpdates(
-		DeltaTime, Gravity, *FrictionPairs,
+		DeltaTime, Gravity, *GetFrictionPairs(),
 		PxVehicles.size(), PxVehicles.data(),
 		SqData->VehicleResults.data());
 }
-
 void FPhysXVehicleManager::PostTick(float DeltaTime)
 {
 	// TODO(vehicle part 2): fetch 후 각 차량의 chassis/wheel pose 를 읽어
