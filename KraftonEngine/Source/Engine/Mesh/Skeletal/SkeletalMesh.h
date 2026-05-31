@@ -62,7 +62,8 @@ private:
 
     FSkeletonBinding SkeletonBinding;
     USkeleton*       Skeleton = nullptr;
-    UPhysicsAsset*   PhysicsAsset = nullptr;
+    // GetPhysicsAsset() 에서 경로로 lazy 해석해 채우므로 const 게터에서 갱신 가능하도록 mutable.
+    mutable UPhysicsAsset* PhysicsAsset = nullptr;
     UPROPERTY(Edit, Save, Category="Physics", DisplayName="Physics Asset", AssetType="PhysicsAsset")
     FSoftObjectPtr   PhysicsAssetPath = "None";
 };

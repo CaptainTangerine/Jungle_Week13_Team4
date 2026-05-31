@@ -3,6 +3,7 @@
 #include "Serialization/Archive.h"
 #include "Animation/Skeleton/Skeleton.h"
 #include "Physics/Asset/PhysicsAsset.h"
+#include "Physics/Asset/PhysicsAssetManager.h"
 
 namespace
 {
@@ -158,6 +159,16 @@ void USkeletalMesh::SetPhysicsAssetPath(const FString& InPath)
 
 UPhysicsAsset* USkeletalMesh::GetPhysicsAsset() const
 {
+    // Lazy 해석 폴백: 포인터가 비어 있고 경로가 유효하면 그 자리에서 로드해 채운다.
+    // (FMeshManager::LoadSkeletalMesh 의 해석 경로를 타지 않은 메시도 null 이 안 되도록 보장.)
+    if (!PhysicsAsset)
+    {
+        const FString Path = PhysicsAssetPath.ToString();
+        if (!Path.empty() && Path != "None")
+        {
+            PhysicsAsset = FPhysicsAssetManager::Get().Load(Path);
+        }
+    }
     return PhysicsAsset;
 }
 
