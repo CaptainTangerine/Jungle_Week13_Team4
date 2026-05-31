@@ -23,7 +23,7 @@ public:
 
 	// Gathers inputs (Throttle, Steering, Brake) from the UWheeledVehicleMovementComponent
 	// and copies them into the PhysX SDK’s PxVehicleInputData structures.
-	void PreTick();
+	void PreTick(float DeltaTime);
 
 	// Batch Update happens here
 	void Tick(float DeltaTime);
