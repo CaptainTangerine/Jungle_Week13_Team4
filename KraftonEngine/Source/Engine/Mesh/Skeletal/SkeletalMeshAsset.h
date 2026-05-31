@@ -205,6 +205,62 @@ struct FSkeletalMesh
 		return Index >= 0 ? &MorphTargets[Index] : nullptr;
 	}
 
+	int32 FindBoneIndex(const FString& BoneName) const
+	{
+		for (int32 Index = 0; Index < static_cast<int32>(Bones.size()); ++Index)
+		{
+			if (Bones[Index].Name == BoneName)
+			{
+				return Index;
+			}
+		}
+		return -1;
+	}
+
+	// 이 본이 스키닝에 관여하는가(= 어떤 버텍스든 가중치>0 으로 참조). 헬퍼/IK/트위스트처럼
+	// 스킨에 안 쓰이는 본을 걸러낼 때 사용(예: PhysicsAsset 바디 자동 생성 대상 판정).
+	// 최초 호출 시 버텍스를 1회 스캔해 마스크를 캐싱한다(직렬화 제외).
+	bool IsBoneSkinned(int32 BoneIndex) const
+	{
+		if (BoneIndex < 0 || BoneIndex >= static_cast<int32>(Bones.size()))
+		{
+			return false;
+		}
+		EnsureSkinnedBoneMask();
+		return SkinnedBoneMask[BoneIndex];
+	}
+
+	bool IsBoneSkinned(const FString& BoneName) const
+	{
+		return IsBoneSkinned(FindBoneIndex(BoneName));
+	}
+
+	// 스키닝 관여 본 마스크 캐시(직렬화 제외, lazy 빌드). 메시 재임포트 시 FSkeletalMesh 객체가
+	// 재생성되므로 별도 무효화는 두지 않는다. IsBoneSkinned 가 최초 호출 시 한 번 채운다.
+	void EnsureSkinnedBoneMask() const
+	{
+		if (bSkinnedBoneMaskValid)
+		{
+			return;
+		}
+		SkinnedBoneMask.assign(Bones.size(), false);
+		for (const FVertexPNCTBW& Vertex : Vertices)
+		{
+			for (int32 i = 0; i < 4; ++i)
+			{
+				const int32 BoneIdx = Vertex.BoneIndices[i];
+				if (BoneIdx >= 0 && BoneIdx < static_cast<int32>(SkinnedBoneMask.size()) && Vertex.BoneWeights[i] > 0.0f)
+				{
+					SkinnedBoneMask[BoneIdx] = true;
+				}
+			}
+		}
+		bSkinnedBoneMaskValid = true;
+	}
+
+	mutable TArray<bool> SkinnedBoneMask;
+	mutable bool         bSkinnedBoneMaskValid = false;
+
 	void NormalizeBonePoseData()
 	{
 		for (FBone& Bone : Bones)

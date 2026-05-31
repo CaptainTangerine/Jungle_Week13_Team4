@@ -141,12 +141,13 @@ void FBodyConstraintGenerator::GenerateAll(UPhysicsAsset* Asset, const FSkeletal
 
 	const int32 BoneCount = static_cast<int32>(Mesh->Bones.size());
 
-	// 바디 — 자식 있는 본(캡슐 방향 산출 가능)에 한해 생성(이미 있는 건 GenerateBody 가 스킵).
+	// 바디 — 스키닝에 관여하는 본만 생성(헬퍼/IK/트위스트 등 스킨 비참여 본 제외).
+	// 이미 있는 건 GenerateBody 가 스킵. leaf 스킨 본은 FitBodyCapsule 이 기본 캡슐로 처리.
 	for (int32 i = 0; i < BoneCount; ++i)
 	{
-		if (FindFirstChildBone(Mesh, i) == -1)
+		if (!Mesh->IsBoneSkinned(i))
 		{
-			continue;   // leaf
+			continue;
 		}
 		GenerateBody(Asset, Mesh, i);
 	}
