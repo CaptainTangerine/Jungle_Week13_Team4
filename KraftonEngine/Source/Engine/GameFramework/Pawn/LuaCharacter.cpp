@@ -4,6 +4,8 @@
 #include "Component/Shape/CapsuleComponent.h"
 #include "Component/Script/LuaScriptComponent.h"
 #include "Component/Camera/SpringArmComponent.h"
+#include "Component/Input/InputComponent.h"
+#include "Component/Primitive/SkeletalMeshComponent.h"
 void ALuaCharacter::InitDefaultComponents(const FString& SkeletalMeshFileName, const FString& ScriptFile)
 {
 	Super::InitDefaultComponents(SkeletalMeshFileName);
@@ -36,6 +38,24 @@ void ALuaCharacter::InitDefaultComponents(const FString& SkeletalMeshFileName, c
 	{
 		LuaScriptComponent->SetScriptFile(ScriptFile);
 	}
+}
+
+void ALuaCharacter::SetupInputComponent()
+{
+	// WASD/Jump 등 기본 바인딩 먼저 등록.
+	Super::SetupInputComponent();
+	if (!InputComponent) return;
+
+	// [임시 디버그] R 키 = 래그돌 토글. 켜면 물리 시뮬레이션, 끄면 키네마틱으로
+	// 복귀해 다음 틱부터 anim 포즈를 다시 추종한다. ('R' == VK code)
+	InputComponent->AddActionMapping("ToggleRagdoll", 'R');
+	InputComponent->BindAction("ToggleRagdoll", EInputEvent::Pressed, [this]()
+	{
+		if (USkeletalMeshComponent* MeshComp = GetMesh())
+		{
+			MeshComp->SetSimulatePhysics(!MeshComp->IsSimulatingPhysics());
+		}
+	});
 }
 
 void ALuaCharacter::PostDuplicate()

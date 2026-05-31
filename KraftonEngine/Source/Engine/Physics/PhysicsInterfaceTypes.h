@@ -4,6 +4,9 @@
 #include "Math/Transform.h"
 #include "Math/Vector.h"
 #include "Physics/Asset/PhysicsAssetTypes.h"
+#include "Physics/PhysicsHandles.h"
+
+struct FConstraintSetup;
 
 struct FActorCreationParams
 {
@@ -24,5 +27,16 @@ struct FGeometryAddParams
 	FTransform LocalTransform;
 	FTransform WorldTransform;
 	const FKAggregateGeom* Geometry = nullptr;
+	void* UserData = nullptr;
+};
+
+struct FConstraintCreationParams
+{
+	FPhysicsActorHandle Actor1;
+	FPhysicsActorHandle Actor2;
+	FTransform LocalFrame1;
+	FTransform LocalFrame2;
+	const FConstraintSetup* ConstraintSetup = nullptr;
+	const char* DebugName = nullptr;
 	void* UserData = nullptr;
 };

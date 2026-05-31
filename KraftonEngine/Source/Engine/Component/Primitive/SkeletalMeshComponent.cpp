@@ -1,4 +1,4 @@
-#include "SkeletalMeshComponent.h"
+﻿#include "SkeletalMeshComponent.h"
 #include "Render/Proxy/SkeletalMeshSceneProxy.h"
 
 #include "Animation/AnimationManager.h"
@@ -10,6 +10,7 @@
 #include "Asset/AssetRegistry.h"
 #include "Core/Logging/Log.h"
 #include "GameFramework/AActor.h"
+#include "GameFramework/World.h"
 #include "Math/Quat.h"
 #include "Math/Vector.h"
 #include "Mesh/Skeletal/SkeletalMesh.h"
@@ -17,15 +18,109 @@
 #include "Object/Object.h"
 #include "Object/Reflection/ObjectFactory.h"
 #include "Object/Reflection/UClass.h"
+#include "Physics/Asset/BodySetup.h"
+#include "Physics/Asset/PhysicsAsset.h"
+#include "Physics/BodyInstance.h"
+#include "Physics/ConstraintInstance.h"
+#include "Physics/IPhysicsScene.h"
 #include "Render/Proxy/SkeletalMeshSceneProxy.h"
 #include "Serialization/Archive.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
+
+namespace
+{
+    // 스케일이 섞인 affine 행렬에서 rigid FTransform(스케일 1)을 추출한다.
+    // FQuat::FromMatrix 는 스케일을 나눠내지 않고 raw 원소로 쿼터니언을 뽑은 뒤 마지막에
+    // Normalize 만 하므로, 비단위 스케일이 섞이면 회전 자체가 왜곡된다
+    // (예: uniform 2배 스케일에서 90도 회전이 ~106도로 추출됨).
+    // 물리<->본 변환은 컴포넌트 월드 스케일(S)의 역수(1/S)를 행렬에 싣게 되므로,
+    // 회전 추출 전에 각 축을 정규화해 스케일을 제거해야 한다. 래그돌 본은 rigid 이므로
+    // 스케일은 1로 고정.
+    FTransform MakeRigidTransform(const FMatrix& Mat)
+    {
+        const FVector Scale = Mat.GetScale();
+        const float SX = Scale.X > 1e-6f ? Scale.X : 1.0f;
+        const float SY = Scale.Y > 1e-6f ? Scale.Y : 1.0f;
+        const float SZ = Scale.Z > 1e-6f ? Scale.Z : 1.0f;
+
+        FMatrix Rot = Mat;
+        Rot.M[0][0] /= SX; Rot.M[0][1] /= SX; Rot.M[0][2] /= SX;
+        Rot.M[1][0] /= SY; Rot.M[1][1] /= SY; Rot.M[1][2] /= SY;
+        Rot.M[2][0] /= SZ; Rot.M[2][1] /= SZ; Rot.M[2][2] /= SZ;
+        Rot.M[3][0] = 0.0f; Rot.M[3][1] = 0.0f; Rot.M[3][2] = 0.0f;
+
+        return FTransform(Mat.GetLocation(), Rot.ToQuat(), FVector(1.0f, 1.0f, 1.0f));
+    }
+
+    // 두 스케일-1 컴포넌트-글로벌(Anim, Phys)을 Weight 로 블렌드한 rigid 행렬을 반환한다.
+    // 위치는 선형 보간, 회전은 구면 보간(slerp). Weight 0=Anim, 1=Phys.
+    FMatrix BlendComponentGlobal(const FMatrix& Anim, const FMatrix& Phys, float Weight)
+    {
+        const FVector PA = Anim.GetLocation();
+        const FVector PP = Phys.GetLocation();
+        const FVector P(
+            PA.X + (PP.X - PA.X) * Weight,
+            PA.Y + (PP.Y - PA.Y) * Weight,
+            PA.Z + (PP.Z - PA.Z) * Weight);
+
+        // 스케일 1 행렬이라 ToQuat 안전.
+        const FQuat Q = FQuat::Slerp(Anim.ToQuat(), Phys.ToQuat(), Weight);
+        return FTransform(P, Q, FVector(1.0f, 1.0f, 1.0f)).ToMatrix();
+    }
+}
 
 USkeletalMeshComponent::~USkeletalMeshComponent()
 {
+    DestroyPhysicsState();
     ClearAnimInstance();
+}
+
+void USkeletalMeshComponent::OnCreatePhysicsState()
+{
+    if (InstantiatePhysicsAssetRefPose())
+    {
+        // 래그돌 트리거 전까지는 모든 바디가 키네마틱으로 anim 포즈를 추종한다.
+        // (저작된 PhysicsType 이 Simulated 라도 시작 시 떨어지지 않도록 강제.)
+        UWorld* World = GetWorld();
+        IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+        if (PhysicsScene)
+        {
+            for (FBodyInstance* Body : Bodies)
+            {
+                if (Body && Body->IsValidBodyInstance())
+                {
+                    Body->SetInstanceSimulatePhysics(PhysicsScene, false);
+                }
+            }
+        }
+        bBodiesSimulating = false;
+
+        UActorComponent::OnCreatePhysicsState();
+    }
+}
+
+void USkeletalMeshComponent::OnDestroyPhysicsState()
+{
+    TermArticulated();
+    UActorComponent::OnDestroyPhysicsState();
+}
+
+bool USkeletalMeshComponent::ShouldCreatePhysicsState() const
+{
+    // physics asset 이 연결돼 있으면 충돌-쿼리 enable 여부와 무관하게 바디를 생성한다.
+    // (IsCollisionEnabled 는 scene query 등록을 게이트할 뿐 articulated body 존재와 별개.
+    //  바디가 스폰 시 만들어져야 키네마틱으로 anim 을 추종하다가 자연스럽게 래그돌로 전환됨.)
+    // World/PhysicsScene 존재는 상위 UActorComponent::RecreatePhysicsState 가 이미 검사.
+    UPhysicsAsset* PhysAsset = GetPhysicsAsset();
+    return GetSkeletalMesh() != nullptr && PhysAsset && !PhysAsset->BodySetups.empty();
+}
+
+bool USkeletalMeshComponent::HasValidPhysicsState() const
+{
+    return IsPhysicsStateCreated() && !Bodies.empty();
 }
 
 FPrimitiveSceneProxy* USkeletalMeshComponent::CreateSceneProxy()
@@ -35,10 +130,93 @@ FPrimitiveSceneProxy* USkeletalMeshComponent::CreateSceneProxy()
 
 void USkeletalMeshComponent::SetSkeletalMesh(USkeletalMesh* InMesh)
 {
+    const bool bRecreatePhysicsState = IsPhysicsStateCreated();
+    if (bRecreatePhysicsState)
+    {
+        DestroyPhysicsState();
+    }
+
     Super::SetSkeletalMesh(InMesh);
     // Mesh 가 바뀌면 이전 AnimInstance 가 가리키던 본 인덱스/카운트가 무의미해진다.
     // 새 SkeletalMesh 기준으로 AnimInstance 를 재인스턴스화한다.
     InitializeAnimation();
+
+    if (bRecreatePhysicsState)
+    {
+        CreatePhysicsState();
+    }
+}
+
+void USkeletalMeshComponent::SetPhysicsAssetOverride(UPhysicsAsset* InPhysicsAsset)
+{
+    if (PhysicsAssetOverride == InPhysicsAsset)
+    {
+        return;
+    }
+
+    const bool bRecreatePhysicsState = IsPhysicsStateCreated();
+    if (bRecreatePhysicsState)
+    {
+        DestroyPhysicsState();
+    }
+
+    PhysicsAssetOverride = InPhysicsAsset;
+
+    if (bRecreatePhysicsState)
+    {
+        CreatePhysicsState();
+    }
+}
+
+UPhysicsAsset* USkeletalMeshComponent::GetPhysicsAsset() const
+{
+    if (PhysicsAssetOverride)
+    {
+        return PhysicsAssetOverride;
+    }
+
+    USkeletalMesh* Mesh = GetSkeletalMesh();
+    return Mesh ? Mesh->GetPhysicsAsset() : nullptr;
+}
+
+FBodyInstance* USkeletalMeshComponent::GetBodyInstance(FName BoneName) const
+{
+    for (FBodyInstance* Body : Bodies)
+    {
+        UBodySetup* Setup = Body ? Body->GetBodySetup() : nullptr;
+        if (Setup && Setup->BoneName == BoneName)
+        {
+            return Body;
+        }
+    }
+
+    return nullptr;
+}
+
+FBodyInstance* USkeletalMeshComponent::GetBodyInstance(int32 BoneIndex) const
+{
+    for (FBodyInstance* Body : Bodies)
+    {
+        if (Body && Body->InstanceBoneIndex == BoneIndex)
+        {
+            return Body;
+        }
+    }
+
+    return nullptr;
+}
+
+FConstraintInstance* USkeletalMeshComponent::GetConstraintInstance(FName ChildBoneName) const
+{
+    for (FConstraintInstance* Constraint : Constraints)
+    {
+        if (Constraint && Constraint->ConstraintBone1 == ChildBoneName)
+        {
+            return Constraint;
+        }
+    }
+
+    return nullptr;
 }
 
 void USkeletalMeshComponent::PlayAnimation(UAnimSequenceBase* NewAnimToPlay, bool bLooping)
@@ -290,15 +468,363 @@ void USkeletalMeshComponent::ClearAnimInstance()
     }
 }
 
+bool USkeletalMeshComponent::InstantiatePhysicsAssetRefPose()
+{
+    USkeletalMesh* Mesh = GetSkeletalMesh();
+    UPhysicsAsset* PhysAsset = GetPhysicsAsset();
+    FSkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+    if (!PhysAsset || !Asset || Asset->Bones.empty())
+    {
+        return false;
+    }
+
+    TArray<FTransform> BoneWorldTransforms;
+    BoneWorldTransforms.resize(Asset->Bones.size());
+
+    const FMatrix& ComponentToWorld = GetWorldMatrix();
+    for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(Asset->Bones.size()); ++BoneIndex)
+    {
+        // 스케일-안전 추출: ComponentToWorld 의 스케일이 FTransform 분해 시 회전을
+        // 왜곡하지 않도록 rigid 변환으로 만든다. (바디 actor 는 스케일을 갖지 않음.)
+        const FMatrix BoneWorldMatrix = Asset->Bones[BoneIndex].GetReferenceGlobalPose() * ComponentToWorld;
+        BoneWorldTransforms[BoneIndex] = MakeRigidTransform(BoneWorldMatrix);
+    }
+
+    return InstantiatePhysicsAsset_Internal(PhysAsset, BoneWorldTransforms);
+}
+
+bool USkeletalMeshComponent::InstantiatePhysicsAsset_Internal(
+    UPhysicsAsset* InPhysicsAsset,
+    const TArray<FTransform>& BoneWorldTransforms)
+{
+    TermArticulated();
+
+    UWorld* World = GetWorld();
+    IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+    USkeletalMesh* Mesh = GetSkeletalMesh();
+    FSkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+    if (!InPhysicsAsset || !PhysicsScene || !Asset || BoneWorldTransforms.empty())
+    {
+        return false;
+    }
+
+    // 랙돌 바디들이 서로(및 자기 캐릭터 캡슐과) 충돌하지 않도록 같은 self-collision 그룹
+    // (owner UUID)으로 묶는다. 조인트로 연결된 인접 쌍만 막던 기존 방식으론 비인접 바디끼리
+    // (특히 WorldScale 로 부푼 캡슐들이) 겹쳐 다이내믹 전환 시 폭발한다.
+    AActor* OwnerActor = GetOwner();
+    const uint32 SelfCollisionGroup = OwnerActor ? OwnerActor->GetUUID() : GetUUID();
+
+    const FVector WorldScale = GetWorldScale();
+    for (UBodySetup* BodySetup : InPhysicsAsset->BodySetups)
+    {
+        if (!BodySetup)
+        {
+            continue;
+        }
+
+        const int32 BoneIndex = FindBoneIndex(BodySetup->BoneName.ToString());
+        if (BoneIndex < 0 || BoneIndex >= static_cast<int32>(BoneWorldTransforms.size()))
+        {
+            UE_LOG("PhysicsAsset body skipped: bone not found. Mesh=%s Bone=%s",
+                Mesh->GetName().c_str(),
+                BodySetup->BoneName.ToString().c_str());
+            continue;
+        }
+
+        FBodyInstance* BodyInstance = new FBodyInstance();
+        BodyInstance->Scale3D = WorldScale;
+
+        if (BodyInstance->InitBody(BodySetup, BoneWorldTransforms[BoneIndex], PhysicsScene, BoneIndex))
+        {
+            PhysicsScene->SetActorSelfCollisionGroup(BodyInstance->GetPhysicsActorHandle(), SelfCollisionGroup);
+            Bodies.push_back(BodyInstance);
+        }
+        else
+        {
+            delete BodyInstance;
+            UE_LOG("PhysicsAsset body creation failed. Mesh=%s Bone=%s",
+                Mesh->GetName().c_str(),
+                BodySetup->BoneName.ToString().c_str());
+        }
+    }
+
+    for (const FConstraintSetup& ConstraintSetup : InPhysicsAsset->ConstraintSetups)
+    {
+        FBodyInstance* ChildBody = GetBodyInstance(ConstraintSetup.ChildBone);
+        FBodyInstance* ParentBody = GetBodyInstance(ConstraintSetup.ParentBone);
+        if (!ChildBody || !ParentBody)
+        {
+            UE_LOG("PhysicsAsset constraint skipped: body not found. Mesh=%s Parent=%s Child=%s",
+                Mesh->GetName().c_str(),
+                ConstraintSetup.ParentBone.ToString().c_str(),
+                ConstraintSetup.ChildBone.ToString().c_str());
+            continue;
+        }
+
+        FConstraintInstance* ConstraintInstance = new FConstraintInstance();
+        if (ConstraintInstance->InitConstraint(PhysicsScene, ChildBody, ParentBody, &ConstraintSetup, WorldScale))
+        {
+            Constraints.push_back(ConstraintInstance);
+        }
+        else
+        {
+            delete ConstraintInstance;
+            UE_LOG("PhysicsAsset constraint creation failed. Mesh=%s Parent=%s Child=%s",
+                Mesh->GetName().c_str(),
+                ConstraintSetup.ParentBone.ToString().c_str(),
+                ConstraintSetup.ChildBone.ToString().c_str());
+        }
+    }
+
+    return !Bodies.empty();
+}
+
+void USkeletalMeshComponent::TermArticulated()
+{
+    UWorld* World = GetWorld();
+    IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+
+    for (FConstraintInstance* Constraint : Constraints)
+    {
+        if (Constraint)
+        {
+            Constraint->TermConstraint(PhysicsScene);
+            delete Constraint;
+        }
+    }
+    Constraints.clear();
+
+    for (FBodyInstance* Body : Bodies)
+    {
+        if (Body)
+        {
+            Body->TermBody(PhysicsScene);
+            delete Body;
+        }
+    }
+    Bodies.clear();
+}
+
+void USkeletalMeshComponent::SetSimulatePhysics(bool bSimulate)
+{
+    Super::SetSimulatePhysics(bSimulate);
+    // 단축 API: 켜면 가중치 1(순수 랙돌), 끄면 0(순수 anim) 으로 보간 전환.
+    SetPhysicsBlendWeight(bSimulate ? 1.0f : 0.0f);
+}
+
+void USkeletalMeshComponent::SetPhysicsBlendWeight(float Weight, bool bInterpolate)
+{
+    Weight = std::clamp(Weight, 0.0f, 1.0f);
+
+    // 물리가 켜질 예정인데 바디가 없으면 (PhysicsState 미생성) RefPose 로 인스턴스화.
+    if (Weight > 0.0f && Bodies.empty())
+    {
+        InstantiatePhysicsAssetRefPose();
+    }
+
+    PhysicsBlendTarget = Weight;
+    if (!bInterpolate || PhysicsBlendInterpSpeed <= 0.0f)
+    {
+        PhysicsBlendWeight = Weight;
+    }
+
+    // 가중치/목표가 활성(>0)이면 바디를 다이내믹으로 즉시 전환(보간 시작 프레임부터 시뮬).
+    UpdateBodySimulationState();
+}
+
+void USkeletalMeshComponent::UpdateBodySimulationState()
+{
+    // weight 또는 target 중 하나라도 0보다 크면 바디는 시뮬레이션되어야 한다.
+    // (target 0 로 내려가는 보간 중에도 weight 가 0 에 닿기 전까진 다이내믹 유지.)
+    const bool bShouldSimulate = (PhysicsBlendWeight > 0.0f || PhysicsBlendTarget > 0.0f) && !Bodies.empty();
+    if (bShouldSimulate == bBodiesSimulating)
+    {
+        return;
+    }
+
+    UWorld* World = GetWorld();
+    IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+    if (!PhysicsScene)
+    {
+        return;
+    }
+
+    for (FBodyInstance* Body : Bodies)
+    {
+        if (Body && Body->IsValidBodyInstance())
+        {
+            Body->SetInstanceSimulatePhysics(PhysicsScene, bShouldSimulate);
+        }
+    }
+    bBodiesSimulating = bShouldSimulate;
+}
+
+void USkeletalMeshComponent::BuildReferencePoseGlobals(TArray<FMatrix>& OutGlobals) const
+{
+    OutGlobals.clear();
+    USkeletalMesh* Mesh = GetSkeletalMesh();
+    FSkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+    if (!Asset) return;
+
+    const int32 BoneCount = static_cast<int32>(Asset->Bones.size());
+    OutGlobals.resize(BoneCount);
+    for (int32 i = 0; i < BoneCount; ++i)
+    {
+        const int32 ParentIndex = Asset->Bones[i].ParentIndex;
+        const FMatrix Local = Asset->Bones[i].GetReferenceLocalPose();
+        OutGlobals[i] = (ParentIndex >= 0) ? Local * OutGlobals[ParentIndex] : Local;
+    }
+}
+
+void USkeletalMeshComponent::ApplyPhysicsBlendedPose(const TArray<FMatrix>& AnimGlobals, float Weight)
+{
+    UWorld* World = GetWorld();
+    IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+    USkeletalMesh* Mesh = GetSkeletalMesh();
+    FSkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+    if (!PhysicsScene || !Asset || Asset->Bones.empty() || Bodies.empty())
+    {
+        return;
+    }
+
+    const int32 BoneCount = static_cast<int32>(Asset->Bones.size());
+    if (static_cast<int32>(AnimGlobals.size()) != BoneCount)
+    {
+        return;
+    }
+
+    // 바디 actor 변환은 월드 공간이므로 컴포넌트 공간으로 끌어내린다(스케일 1 정규화).
+    const FMatrix WorldToComponent = GetWorldMatrix().GetInverse();
+
+    TArray<FMatrix> BlendedGlobal;   // 본별 블렌드 컴포넌트-공간 글로벌 (parent-first 누적)
+    BlendedGlobal.resize(BoneCount);
+    TArray<FTransform> LocalPose;
+    LocalPose.resize(BoneCount);
+
+    for (int32 i = 0; i < BoneCount; ++i)
+    {
+        const int32 ParentIndex = Asset->Bones[i].ParentIndex;
+
+        FBodyInstance* Body = GetBodyInstance(i);
+        if (Body && Body->IsValidBodyInstance())
+        {
+            // 시뮬 바디의 컴포넌트-공간 글로벌(스케일 1) 과 anim 글로벌을 Weight 로 블렌드.
+            const FTransform BodyWorld = Body->GetUnrealWorldTransform(PhysicsScene);
+            const FMatrix PhysG = MakeRigidTransform(BodyWorld.ToMatrix() * WorldToComponent).ToMatrix();
+            BlendedGlobal[i] = BlendComponentGlobal(AnimGlobals[i], PhysG, Weight);
+        }
+        else
+        {
+            // 바디 없는 본: anim 로컬을 블렌드된 부모 글로벌에 누적해 anim 을 따른다.
+            const FMatrix AnimLocal = (ParentIndex >= 0)
+                ? AnimGlobals[i] * AnimGlobals[ParentIndex].GetInverse()
+                : AnimGlobals[i];
+            BlendedGlobal[i] = (ParentIndex >= 0) ? AnimLocal * BlendedGlobal[ParentIndex] : AnimLocal;
+        }
+
+        // 블렌드 글로벌(스케일 1)에서 부모 기준 로컬로 환산 → 분해 안전.
+        const FMatrix LocalMatrix = (ParentIndex >= 0)
+            ? BlendedGlobal[i] * BlendedGlobal[ParentIndex].GetInverse()
+            : BlendedGlobal[i];
+        LocalPose[i] = FTransform(LocalMatrix);
+    }
+
+    SetBoneLocalTransforms(LocalPose);
+}
+
+void USkeletalMeshComponent::SyncBodiesFromComponentPose()
+{
+    UWorld* World = GetWorld();
+    IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+    USkeletalMesh* Mesh = GetSkeletalMesh();
+    FSkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+    if (!PhysicsScene || !Asset || Bodies.empty())
+    {
+        return;
+    }
+
+    // 현재(애니메이션으로 갱신된) 본 포즈의 컴포넌트-공간 글로벌 행렬.
+    TArray<FMatrix> CompGlobal;
+    BuildBoneEditGlobalMatrices(CompGlobal);
+    if (CompGlobal.empty())
+    {
+        return;
+    }
+
+    const FMatrix& ComponentToWorld = GetWorldMatrix();
+    for (FBodyInstance* Body : Bodies)
+    {
+        if (!Body || !Body->IsValidBodyInstance())
+        {
+            continue;
+        }
+
+        const int32 BoneIndex = Body->InstanceBoneIndex;
+        if (BoneIndex < 0 || BoneIndex >= static_cast<int32>(CompGlobal.size()))
+        {
+            continue;
+        }
+
+        // BoneWorldMatrix 에는 컴포넌트 월드 스케일이 실려 있어 단순 FTransform 분해 시
+        // 키네마틱 타깃 회전이 깨진다. 스케일-안전 rigid 변환으로 추출.
+        const FMatrix BoneWorldMatrix = CompGlobal[BoneIndex] * ComponentToWorld;
+        Body->SetKinematicTarget(PhysicsScene, MakeRigidTransform(BoneWorldMatrix));
+    }
+}
+
 void USkeletalMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
 {
-    if (EvaluateAnimInstance(DeltaTime))
+    // 1) 블렌드 가중치를 목표로 보간(부드러운 쓰러짐/일어남) 후 바디 시뮬 상태 갱신.
+    if (PhysicsBlendWeight != PhysicsBlendTarget)
     {
+        const float Step = PhysicsBlendInterpSpeed * DeltaTime;
+        if (PhysicsBlendInterpSpeed <= 0.0f || std::abs(PhysicsBlendTarget - PhysicsBlendWeight) <= Step)
+        {
+            PhysicsBlendWeight = PhysicsBlendTarget;
+        }
+        else
+        {
+            PhysicsBlendWeight += (PhysicsBlendTarget > PhysicsBlendWeight ? Step : -Step);
+        }
+    }
+    UpdateBodySimulationState();
+
+    // 2) anim 평가 — 블렌드의 기준 포즈. 평가 결과는 BoneEditLocalMatrices 에 반영된다.
+    const bool bAnim = EvaluateAnimInstance(DeltaTime);
+
+    // 3) 물리 블렌드 활성: anim 포즈와 시뮬 포즈를 가중치로 섞어 푸시.
+    if (PhysicsBlendWeight > 0.0f && !Bodies.empty())
+    {
+        TArray<FMatrix> AnimGlobals;
+        if (bAnim)
+        {
+            // 방금 평가된 anim 포즈의 컴포넌트-글로벌.
+            BuildBoneEditGlobalMatrices(AnimGlobals);
+        }
+        else
+        {
+            // anim 인스턴스가 없으면 ref 포즈를 anim 기준으로 사용(블렌드 출력 피드백 방지).
+            BuildReferencePoseGlobals(AnimGlobals);
+        }
+        ApplyPhysicsBlendedPose(AnimGlobals, PhysicsBlendWeight);
         UMeshComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
         return;
     }
 
-    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    // 4) weight==0: 순수 anim. 바디는 키네마틱으로 anim 을 추종해 다음 전환에 대비.
+    if (bAnim)
+    {
+        UMeshComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    }
+    else
+    {
+        Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    }
+
+    if (!Bodies.empty())
+    {
+        SyncBodiesFromComponentPose();
+    }
 }
 
 // ──────────────────────────────────────────────

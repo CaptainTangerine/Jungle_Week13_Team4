@@ -23,6 +23,7 @@
 #include "Animation/Skeleton/Skeleton.h"
 #include "Animation/Skeleton/SkeletonManager.h"
 #include "Animation/Skeleton/SkeletonTypes.h"
+#include "Physics/Asset/PhysicsAssetManager.h"
 
 TMap<FString, UStaticMesh*> FMeshManager::StaticMeshCache;
 TMap<FString, USkeletalMesh*> FMeshManager::SkeletalMeshCache;
@@ -290,6 +291,7 @@ static bool LoadSkeletalMeshBinary(USkeletalMesh* SkeletalMesh, const FString& B
 
 		FAssetImportMetadata Metadata;
 		Reader << Metadata;
+		Reader.SetPackageVersion(Header.Version);
 
 		SkeletalMesh->Serialize(Reader);
 	}
@@ -426,6 +428,7 @@ static bool SaveSkeletalMeshBinary(USkeletalMesh* SkeletalMesh, const FString& B
 
 		FAssetImportMetadata Metadata = MakeImportMetadata(SourcePath);
 		Writer << Metadata;
+		Writer.SetPackageVersion(Header.Version);
 
 		SkeletalMesh->Serialize(Writer);
 	}
@@ -436,6 +439,68 @@ static bool SaveSkeletalMeshBinary(USkeletalMesh* SkeletalMesh, const FString& B
 	}
 
 	return Writer.IsValid();
+}
+
+bool FMeshManager::SaveSkeletalMesh(USkeletalMesh* SkeletalMesh)
+{
+	if (!SkeletalMesh)
+	{
+		return false;
+	}
+
+	const FString PackagePath = NormalizeProjectPath(SkeletalMesh->GetAssetPathFileName());
+	if (PackagePath.empty() || PackagePath == "None")
+	{
+		UE_LOG("SkeletalMesh save failed: mesh has no package path. Mesh=%s", SkeletalMesh->GetName().c_str());
+		return false;
+	}
+
+	FString SourcePath;
+	FAssetImportMetadata Metadata;
+	if (FAssetPackage::ReadMetadata(PackagePath, EAssetPackageType::SkeletalMesh, Metadata))
+	{
+		SourcePath = Metadata.SourcePath;
+	}
+
+	if (SourcePath.empty() || SourcePath == "None")
+	{
+		if (const FSkeletalMesh* MeshAsset = SkeletalMesh->GetSkeletalMeshAsset())
+		{
+			SourcePath = MeshAsset->PathFileName;
+		}
+	}
+
+	if (!SaveSkeletalMeshBinary(SkeletalMesh, PackagePath, SourcePath))
+	{
+		return false;
+	}
+
+	SkeletalMesh->SetAssetPathFileName(PackagePath);
+	SkeletalMeshCache[PackagePath] = SkeletalMesh;
+	ScanMeshAssets();
+	return true;
+}
+
+static void LoadPhysicsAssetForSkeletalMesh(USkeletalMesh* SkeletalMesh)
+{
+	if (!SkeletalMesh) return;
+
+	const FString& PhysicsAssetPath = SkeletalMesh->GetPhysicsAssetPath();
+	if (PhysicsAssetPath.empty() || PhysicsAssetPath == "None")
+	{
+		return;
+	}
+
+	UPhysicsAsset* PhysicsAsset = FPhysicsAssetManager::Get().Load(PhysicsAssetPath);
+	if (!PhysicsAsset)
+	{
+		UE_LOG("SkeletalMesh physics asset load failed. Mesh=%s PhysicsAsset=%s",
+			SkeletalMesh->GetName().c_str(),
+			PhysicsAssetPath.c_str());
+		return;
+	}
+
+	SkeletalMesh->SetPhysicsAsset(PhysicsAsset);
 }
 
 FString FMeshManager::GetStaticMeshBinaryFilePath(const FString& SourcePath)
@@ -926,6 +991,7 @@ USkeletalMesh* FMeshManager::LoadSkeletalMesh(const FString& PathFileName, ID3D1
 				USkeleton* Skeleton = FSkeletonManager::Get().LoadSkeleton(Binding.SkeletonPath);
 				SkeletalMesh->SetSkeleton(Skeleton);
 			}
+			LoadPhysicsAssetForSkeletalMesh(SkeletalMesh);
 
 			SkeletalMesh->InitResources(InDevice);
 			SkeletalMesh->SetAssetPathFileName(CacheKey);
