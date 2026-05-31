@@ -651,7 +651,8 @@ void USkeletalMeshComponent::UpdateBodySimulationState()
 
     for (FBodyInstance* Body : Bodies)
     {
-        if (Body && Body->IsValidBodyInstance())
+        // 외부 구동 바디(차량 chassis 등)는 컴포넌트의 sim/kinematic 전환에서 제외.
+        if (Body && Body->IsValidBodyInstance() && !Body->bExternallyControlled)
         {
             Body->SetInstanceSimulatePhysics(PhysicsScene, bShouldSimulate);
         }
@@ -755,6 +756,12 @@ void USkeletalMeshComponent::SyncBodiesFromComponentPose()
     for (FBodyInstance* Body : Bodies)
     {
         if (!Body || !Body->IsValidBodyInstance())
+        {
+            continue;
+        }
+
+        // 외부 구동 바디(차량 chassis 등)는 컴포넌트가 키네마틱 타깃을 밀지 않는다.
+        if (Body->bExternallyControlled)
         {
             continue;
         }
