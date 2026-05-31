@@ -6,9 +6,7 @@
 #include "Component/Primitive/SkeletalMeshComponent.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
-#include "Physics/Asset/PhysicsAsset.h"
-#include "Physics/Asset/BodySetup.h"
-#include "Physics/Asset/PhysicsAssetManager.h"
+#include "Physics/BodyInstance.h"        // FBodyInstance (chassis hijack)
 #include "Core/Types/CollisionTypes.h"   // ECollisionChannel, ObjectTypeBit
 #include "Core/Logging/Log.h"
 #include "Math/Quat.h"
@@ -187,43 +185,18 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 		return false;
 	}
 
-	// --- Chassis 물리 청사진: PhysicsAsset (있으면 driving blueprint, 없으면 parametric fallback) ---
-	// 차량 asset 은 보통 단일 chassis body — 첫 BodySetup 을 chassis 로 쓴다.
-	UPhysicsAsset* ChassisAsset = nullptr;
-	UBodySetup*    ChassisBody  = nullptr;
-	{
-		const FString AssetPath = ChassisPhysicsAssetPath.ToString();
-		if (!AssetPath.empty() && AssetPath != "None")
-		{
-			ChassisAsset = FPhysicsAssetManager::Get().Load(AssetPath);
-		}
-		if (ChassisAsset && !ChassisAsset->BodySetups.empty())
-		{
-			ChassisBody = ChassisAsset->BodySetups[0];
-		}
-	}
-
-	// AddShapesToRigidActor 는 IPhysicsScene 경유 — 없으면 asset 경로 불가, parametric 으로 강등.
-	IPhysicsScene* PhysicsScene = nullptr;
-	if (AActor* Owner = GetOwner())
-	{
-		if (UWorld* World = Owner->GetWorld())
-		{
-			PhysicsScene = World->GetPhysicsScene();
-		}
-	}
-	const bool bUseAsset = (ChassisBody != nullptr) && (PhysicsScene != nullptr);
-
 	using WO = PxVehicleDrive4WWheelOrder;
 	const PxU32 NW = static_cast<PxU32>(NumWheels);
 
-	// --- 치수 / 휠 배치. +X=forward, Y=side, +Z=up ---
+	// --- 차체 컴포넌트 + wheel bone 위치. +X=forward, Y=side, +Z=up ---
+	SkeletalBody = Cast<USkeletalMeshComponent>(GetUpdatedComponent());
+
 	const float HalfX  = ChassisLength * 0.5f;
 	const float HalfY  = ChassisWidth  * 0.5f;
 	const float HalfZ  = ChassisHeight * 0.5f;
 
 	// Wheel 위치는 skeletal mesh 의 wheel bone(component-space) 에서 가져온다 (UE WheelSetup 패턴).
-	// 아래는 rigged mesh/본이 없을 때의 parametric fallback (차체 4코너).
+	// 본이 없으면 parametric 4코너 fallback.
 	const float FrontX = HalfX - WheelRadius;
 	const float TrackY = HalfY;
 	const float WheelZ = -HalfZ;
@@ -234,9 +207,6 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	WheelCenters[WO::eREAR_LEFT]   = PxVec3(-FrontX,  TrackY, WheelZ);
 	WheelCenters[WO::eREAR_RIGHT]  = PxVec3(-FrontX, -TrackY, WheelZ);
 
-	// UpdatedComponent 가 skeletal mesh 면 wheel bone 의 component-space 위치로 override + 본 인덱스 캐시.
-	// (component-space == 차체 actor 원점 기준 == wheel centre offset 의 기준계.)
-	SkeletalBody = Cast<USkeletalMeshComponent>(GetUpdatedComponent());
 	for (int32 i = 0; i < NumWheels; ++i) WheelBoneIndices[i] = -1;
 	if (SkeletalBody)
 	{
@@ -257,39 +227,146 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 
 	const PxVec3 ChassisCM(0.0f, 0.0f, CenterOfMassOffsetZ);
 
-	// 박스 관성 (CoM 기준).
-	const PxVec3 D(ChassisLength, ChassisWidth, ChassisHeight);
-	const PxVec3 ChassisMOI(
-		(D.y * D.y + D.z * D.z) * ChassisMass / 12.0f,
-		(D.x * D.x + D.z * D.z) * ChassisMass / 12.0f,
-		(D.x * D.x + D.y * D.y) * ChassisMass / 12.0f);
-
-	// --- convex 쿠킹 --- (wheel 은 항상 procedural; chassis 는 asset 없을 때만 cook)
-	PxConvexMesh* WheelMesh   = CreateWheelConvex(Cooking, Physics, WheelRadius, WheelWidth);
-	PxConvexMesh* ChassisMesh = bUseAsset ? nullptr : CreateChassisConvex(Cooking, Physics, HalfX, HalfY, HalfZ);
-	if (!WheelMesh || (!bUseAsset && !ChassisMesh))
+	// --- chassis 소스 결정 ---
+	// mesh 가 PhysicsAsset 으로 chassis FBodyInstance 를 인스턴스화했으면 그 body 를 hijack
+	// (UE 패턴: vehicle actor = mesh 의 root body). 없으면 parametric box 를 직접 만든다.
+	FBodyInstance* ChassisBI = nullptr;
+	if (SkeletalBody && !SkeletalBody->GetBodies().empty())
 	{
-		UE_LOG("[WheeledVehicleMC] CreateVehicle: convex cooking failed.");
-		if (ChassisMesh) ChassisMesh->release();
-		if (WheelMesh)   WheelMesh->release();
+		FBodyInstance* Candidate = SkeletalBody->GetBodies()[0];
+		if (Candidate && Candidate->IsValidBodyInstance())
+		{
+			ChassisBI = Candidate;
+		}
+	}
+	const bool bHijack = (ChassisBI != nullptr);
+
+	IPhysicsScene* EngineScene = nullptr;
+	if (AActor* Owner = GetOwner())
+	{
+		if (UWorld* World = Owner->GetWorld())
+		{
+			EngineScene = World->GetPhysicsScene();
+		}
+	}
+	if (bHijack && !EngineScene)
+	{
+		UE_LOG("[WheeledVehicleMC] CreateVehicle: physics scene unavailable for chassis hijack.");
 		return false;
 	}
 
 	const PxU32 OwnerUUID = GetOwner() ? GetOwner()->GetUUID() : 0;
-	const float WheelMOI    = 0.5f * WheelMass * WheelRadius * WheelRadius;
-	const float MaxSteerRad = MaxSteerAngle * (PxPi / 180.0f);
 
-	// suspension-raycast 가 자기 차량을 무시할 수 있도록 word3=ownerUUID (미래 prefilter 용).
-	// word0=WorldDynamic 으로 표준 필터 레이아웃 (word0=ObjectType, word3=ownerUUID) 을 따른다.
+	// --- 필터 ---
+	// suspension-raycast prefilter 와 same-owner 충돌 억제 모두 word3=ownerUUID 에 의존.
 	PxFilterData VehicleQryFilter;
 	VehicleQryFilter.word0 = static_cast<PxU32>(ECollisionChannel::WorldDynamic);
 	VehicleQryFilter.word3 = OwnerUUID;
+
+	// 휠은 sim 충돌 OFF — 서스펜션 raycast 가 지면 접촉을 담당.
+	PxFilterData WheelSimFilter;
+	WheelSimFilter.word0 = static_cast<PxU32>(ECollisionChannel::WorldDynamic);
+	WheelSimFilter.word3 = OwnerUUID;
+
+	// 차체는 WorldStatic/WorldDynamic 과 충돌.
+	PxFilterData ChassisSimFilter;
+	ChassisSimFilter.word0 = static_cast<PxU32>(ECollisionChannel::WorldDynamic);
+	ChassisSimFilter.word1 = ObjectTypeBit(ECollisionChannel::WorldStatic) | ObjectTypeBit(ECollisionChannel::WorldDynamic);
+	ChassisSimFilter.word3 = OwnerUUID;
+
+	// --- 휠 convex 는 항상 cook (mutation 전에 먼저 — 실패 시 깨끗이 abort) ---
+	PxConvexMesh* WheelMesh   = CreateWheelConvex(Cooking, Physics, WheelRadius, WheelWidth);
+	PxConvexMesh* ChassisMesh = bHijack ? nullptr : CreateChassisConvex(Cooking, Physics, HalfX, HalfY, HalfZ);
+	if (!WheelMesh || (!bHijack && !ChassisMesh))
+	{
+		UE_LOG("[WheeledVehicleMC] CreateVehicle: convex cooking failed.");
+		if (WheelMesh)   WheelMesh->release();
+		if (ChassisMesh) ChassisMesh->release();
+		return false;
+	}
+
+	// --- chassis actor + chassis shapes ---
+	PxRigidDynamic* Actor = nullptr;
+	if (bHijack)
+	{
+		// mesh 의 root FBodyInstance 를 차량 body 로 hijack: 외부 구동 표시 + dynamic 전환.
+		Actor = static_cast<PxRigidDynamic*>(ChassisBI->GetPhysicsActorHandle().Internal);
+		if (!Actor)
+		{
+			UE_LOG("[WheeledVehicleMC] CreateVehicle: chassis FBodyInstance has no PhysX actor.");
+			WheelMesh->release();
+			return false;
+		}
+		ChassisBI->bExternallyControlled = true;
+		ChassisBI->SetInstanceSimulatePhysics(EngineScene, true);
+
+		// InitBody 가 찍은 raw-body 필터를 차량 필터로 교체 (이미 붙어있는 chassis shapes 전체).
+		const PxU32 ChassisShapeCount = Actor->getNbShapes();
+		if (ChassisShapeCount > 0)
+		{
+			TArray<PxShape*> Shapes;
+			Shapes.resize(ChassisShapeCount);
+			Actor->getShapes(Shapes.data(), ChassisShapeCount);
+			for (PxU32 s = 0; s < ChassisShapeCount; ++s)
+			{
+				Shapes[s]->setSimulationFilterData(ChassisSimFilter);
+				Shapes[s]->setQueryFilterData(VehicleQryFilter);
+			}
+		}
+		// 위치는 InitBody 가 chassis bone 월드 포즈로 이미 배치했다 — setGlobalPose 불필요.
+	}
+	else
+	{
+		// parametric: 우리가 actor 를 만들고 소유한다.
+		Actor = Physics->createRigidDynamic(PxTransform(PxIdentity));
+		PxShape* ChassisShape = PxRigidActorExt::createExclusiveShape(*Actor, PxConvexMeshGeometry(ChassisMesh), *Material);
+		ChassisShape->setSimulationFilterData(ChassisSimFilter);
+		ChassisShape->setQueryFilterData(VehicleQryFilter);
+		ChassisShape->setLocalPose(PxTransform(PxIdentity));
+
+		// 스폰 위치 — UpdatedComponent 월드 트랜스폼.
+		if (USceneComponent* Updated = GetUpdatedComponent())
+		{
+			const FVector P = Updated->GetWorldLocation();
+			const FQuat   Q = FQuat::FromMatrix(Updated->GetWorldMatrix());
+			Actor->setGlobalPose(PxTransform(PxVec3(P.X, P.Y, P.Z), PxQuat(Q.X, Q.Y, Q.Z, Q.W)));
+		}
+	}
+
+	// --- wheel shapes: 항상 procedural, chassis shapes 다음 인덱스에 추가 ---
+	const PxU32 WheelShapeBase = Actor->getNbShapes();
+	for (PxU32 i = 0; i < NW; ++i)
+	{
+		PxShape* WheelShape = PxRigidActorExt::createExclusiveShape(*Actor, PxConvexMeshGeometry(WheelMesh), *Material);
+		WheelShape->setFlag(PxShapeFlag::eSIMULATION_SHAPE, false);   // 서스펜션이 지면 접촉 담당
+		WheelShape->setSimulationFilterData(WheelSimFilter);
+		WheelShape->setQueryFilterData(VehicleQryFilter);
+		WheelShape->setLocalPose(PxTransform(PxIdentity));            // PxVehicleUpdates 가 매 프레임 갱신
+	}
+
+	// shape 들이 mesh ref 를 잡았으므로 로컬 생성 ref 해제 (cook 한 것만).
+	WheelMesh->release();
+	if (ChassisMesh) ChassisMesh->release();
+
+	// --- mass/inertia: hijack 은 asset(InitBody) 질량, parametric 은 ChassisMass.
+	//     관성 텐서는 chassis(sim) shape 들로 계산하고 CoM 은 의도한 낮춤 값 유지.
+	//     (wheels 는 eSIMULATION_SHAPE=false → 관성 계산에서 자동 제외.) ---
+	float Mass = bHijack ? Actor->getMass() : ChassisMass;
+	if (Mass <= 1.0f)
+	{
+		if (bHijack) UE_LOG("[WheeledVehicleMC] CreateVehicle: chassis body mass=%.2f looks unset; using ChassisMass=%.1f.", Mass, ChassisMass);
+		Mass = ChassisMass;
+	}
+	PxRigidBodyExt::setMassAndUpdateInertia(*Actor, Mass, &ChassisCM);
 
 	// --- wheels sim data ---
 	PxVehicleWheelsSimData* WheelsSimData = PxVehicleWheelsSimData::allocate(NW);
 
 	float SprungMasses[4];
-	PxVehicleComputeSprungMasses(NW, WheelCenters, ChassisCM, ChassisMass, /*gravityDir=Z*/2, SprungMasses);
+	PxVehicleComputeSprungMasses(NW, WheelCenters, ChassisCM, Mass, /*gravityDir=Z*/2, SprungMasses);
+
+	const float WheelMOI    = 0.5f * WheelMass * WheelRadius * WheelRadius;
+	const float MaxSteerRad = MaxSteerAngle * (PxPi / 180.0f);
 
 	for (PxU32 i = 0; i < NW; ++i)
 	{
@@ -324,7 +401,8 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 		WheelsSimData->setSuspForceAppPointOffset(i, PxVec3(CMOffset.x, CMOffset.y, -0.3f));
 		WheelsSimData->setTireForceAppPointOffset(i, PxVec3(CMOffset.x, CMOffset.y, -0.3f));
 		WheelsSimData->setSceneQueryFilterData(i, VehicleQryFilter);
-		WheelsSimData->setWheelShapeMapping(i, PxI32(i));
+		// wheel shape 는 chassis shape 다음(WheelShapeBase)부터 — hijack 시 chassis 가 0..N-1.
+		WheelsSimData->setWheelShapeMapping(i, PxI32(WheelShapeBase + i));
 	}
 
 	// --- drive sim data ---
@@ -354,90 +432,6 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	Ackermann.mRearWidth      = PxAbs(WheelCenters[WO::eREAR_LEFT].y  - WheelCenters[WO::eREAR_RIGHT].y);
 	DriveSimData.setAckermannGeometryData(Ackermann);
 
-	// --- chassis PxRigidDynamic + shapes (wheels 0..3, chassis 4) ---
-	PxRigidDynamic* Actor = Physics->createRigidDynamic(PxTransform(PxIdentity));
-
-	// 휠은 sim 충돌 OFF — 서스펜션 raycast 가 지면 접촉을 담당. word3=ownerUUID 로 같은 actor 자동 비충돌.
-	PxFilterData WheelSimFilter;
-	WheelSimFilter.word0 = static_cast<PxU32>(ECollisionChannel::WorldDynamic);
-	WheelSimFilter.word3 = OwnerUUID;
-
-	// 차체는 WorldStatic/WorldDynamic 과 충돌 (충돌/긁힘).
-	PxFilterData ChassisSimFilter;
-	ChassisSimFilter.word0 = static_cast<PxU32>(ECollisionChannel::WorldDynamic);
-	ChassisSimFilter.word1 = ObjectTypeBit(ECollisionChannel::WorldStatic) | ObjectTypeBit(ECollisionChannel::WorldDynamic);
-	ChassisSimFilter.word3 = OwnerUUID;
-
-	for (PxU32 i = 0; i < NW; ++i)
-	{
-		PxShape* WheelShape = PxRigidActorExt::createExclusiveShape(*Actor, PxConvexMeshGeometry(WheelMesh), *Material);
-		WheelShape->setFlag(PxShapeFlag::eSIMULATION_SHAPE, false);   // 서스펜션이 담당 — 휠 자체는 sim 비충돌
-		WheelShape->setSimulationFilterData(WheelSimFilter);
-		WheelShape->setQueryFilterData(VehicleQryFilter);
-		WheelShape->setLocalPose(PxTransform(PxIdentity));            // PxVehicleUpdates 가 매 프레임 갱신
-	}
-
-	if (bUseAsset)
-	{
-		// PhysicsAsset 의 chassis body geometry 를 actor 에 부착 (wheels 다음 인덱스 4..N).
-		const PxU32 BeforeShapes = Actor->getNbShapes();
-		ChassisBody->AddShapesToRigidActor(PhysicsScene, FPhysicsActorHandle{ Actor });
-		const PxU32 AfterShapes = Actor->getNbShapes();
-
-		// AddGeometry 는 generic raw-body 필터를 찍으므로, 새로 추가된 chassis shape 들에
-		// 차량 필터를 재적용: sim=ChassisSimFilter, query=VehicleQryFilter(word3=ownerUUID).
-		// query word3 가 없으면 suspension raycast prefilter 가 자기 chassis 를 지면으로 오인한다.
-		if (AfterShapes > BeforeShapes)
-		{
-			TArray<PxShape*> Shapes;
-			Shapes.resize(AfterShapes);
-			Actor->getShapes(Shapes.data(), AfterShapes);
-			for (PxU32 s = BeforeShapes; s < AfterShapes; ++s)
-			{
-				Shapes[s]->setSimulationFilterData(ChassisSimFilter);
-				Shapes[s]->setQueryFilterData(VehicleQryFilter);
-			}
-		}
-	}
-	else
-	{
-		PxShape* ChassisShape = PxRigidActorExt::createExclusiveShape(*Actor, PxConvexMeshGeometry(ChassisMesh), *Material);
-		ChassisShape->setSimulationFilterData(ChassisSimFilter);
-		ChassisShape->setQueryFilterData(VehicleQryFilter);
-		ChassisShape->setLocalPose(PxTransform(PxIdentity));
-	}
-
-	// shape 가 mesh ref 를 잡았으므로 로컬 생성 ref 해제 (cook 한 것만).
-	WheelMesh->release();
-	if (ChassisMesh) ChassisMesh->release();
-
-	if (bUseAsset)
-	{
-		// 질량은 asset 에서, 관성 텐서는 chassis(sim) shape 들로 계산, CoM 은 의도한 낮춤 값 유지.
-		// (wheels 는 eSIMULATION_SHAPE=false → 관성 계산에서 자동 제외.)
-		float Mass = ChassisBody->DefaultMass;
-		if (Mass <= 1.0f)
-		{
-			UE_LOG("[WheeledVehicleMC] CreateVehicle: chassis BodySetup DefaultMass=%.2f looks unset; using ChassisMass=%.1f.", Mass, ChassisMass);
-			Mass = ChassisMass;
-		}
-		PxRigidBodyExt::setMassAndUpdateInertia(*Actor, Mass, &ChassisCM);
-	}
-	else
-	{
-		Actor->setMass(ChassisMass);
-		Actor->setMassSpaceInertiaTensor(ChassisMOI);
-		Actor->setCMassLocalPose(PxTransform(ChassisCM, PxQuat(PxIdentity)));
-	}
-
-	// 스폰 위치 — UpdatedComponent(보통 차체 RootComponent) 의 월드 트랜스폼.
-	if (USceneComponent* Updated = GetUpdatedComponent())
-	{
-		const FVector P = Updated->GetWorldLocation();
-		const FQuat   Q = FQuat::FromMatrix(Updated->GetWorldMatrix());
-		Actor->setGlobalPose(PxTransform(PxVec3(P.X, P.Y, P.Z), PxQuat(Q.X, Q.Y, Q.Z, Q.W)));
-	}
-
 	// --- PxVehicleDrive4W ---
 	PxVehicleDrive4W* Vehicle = PxVehicleDrive4W::allocate(NW);
 	Vehicle->setup(Physics, Actor, *WheelsSimData, DriveSimData, /*nbNonDrivenWheels*/0);
@@ -447,13 +441,19 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	Vehicle->mDriveDynData.forceGearChange(PxVehicleGearsData::eFIRST);
 	Vehicle->mDriveDynData.setUseAutoGears(true);
 
-	// 차체 actor 는 BodyMappings 밖 — scene post-sync 가 transform 을 건드리지 않게 (actor 가 유일 writer).
-	PScene->addActor(*Actor);
+	// parametric 은 actor 를 scene 에 추가 (hijack 은 InitBody 가 이미 추가).
+	// 어느 경우든 actor 는 BodyMappings 밖 — scene post-sync 가 transform 을 안 건드린다.
+	if (!bHijack)
+	{
+		PScene->addActor(*Actor);
+	}
 
 	PVehicle      = Vehicle;
 	PVehicleActor = Actor;
+	HijackedBody  = ChassisBI;   // null 이면 parametric (우리가 actor 소유)
 
-	UE_LOG("[WheeledVehicleMC] CreateVehicle: PxVehicleDrive4W created (mass=%.1f kg).", ChassisMass);
+	UE_LOG("[WheeledVehicleMC] CreateVehicle: PxVehicleDrive4W created (%s chassis, mass=%.1f kg).",
+		bHijack ? "asset" : "parametric", Mass);
 	return true;
 }
 
@@ -464,11 +464,16 @@ void UWheeledVehicleMovementComponent::DestroyVehicle()
 		PVehicle->free();
 		PVehicle = nullptr;
 	}
-	if (PVehicleActor)
+
+	// parametric 모드(HijackedBody==null)만 우리가 actor 를 소유 → release.
+	// hijack 모드는 mesh 의 FBodyInstance/component 가 actor 를 소유/해제한다 — 건드리지 않는다
+	// (teardown 순서상 이미 해제됐을 수 있으므로 HijackedBody 를 deref 하지도 않는다).
+	if (PVehicleActor && !HijackedBody)
 	{
 		PVehicleActor->release();
-		PVehicleActor = nullptr;
 	}
+	PVehicleActor = nullptr;
+	HijackedBody  = nullptr;
 }
 
 // ============================================================

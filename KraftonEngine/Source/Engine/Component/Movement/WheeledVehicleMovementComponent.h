@@ -1,7 +1,6 @@
 ﻿#pragma once
 #include "PawnMovementComponent.h"
 #include "Math/Transform.h"
-#include "Object/Ptr/SoftObjectPtr.h"
 
 #include "Source/Engine/Component/Movement/WheeledVehicleMovementComponent.generated.h"
 
@@ -15,6 +14,7 @@ namespace physx
 
 class FPhysXVehicleManager;
 class USkeletalMeshComponent;
+struct FBodyInstance;
 
 // ============================================================
 // UWheeledVehicleMovementComponent — PxVehicleDrive4W 기반 4륜 차량 이동 컴포넌트.
@@ -88,8 +88,11 @@ protected:
 
 	// --- PhysX 핸들 (비-reflected) ---
 	physx::PxVehicleDrive4W* PVehicle      = nullptr;
-	physx::PxRigidDynamic*   PVehicleActor = nullptr;
+	physx::PxRigidDynamic*   PVehicleActor = nullptr;   // GetChassisWorldTransform 가 읽음
 	FPhysXVehicleManager*    VehicleManager = nullptr;
+	// non-null 이면 chassis 를 mesh 의 FBodyInstance 에서 hijack 했다는 뜻 (actor 소유는 mesh).
+	// null 이면 parametric — PVehicleActor 를 우리가 소유/해제한다.
+	FBodyInstance*           HijackedBody  = nullptr;
 
 	// --- 현재 입력 상태 (manager PreTick 이 읽음) ---
 	float ThrottleInput   = 0.0f;
@@ -108,12 +111,6 @@ protected:
 	FString WheelBoneRL = "Wheel_RL";
 	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Bone RR")
 	FString WheelBoneRR = "Wheel_RR";
-
-	// Chassis 물리 청사진 — 지정 시 chassis collision/mass/inertia 의 driving blueprint.
-	// 비우면 parametric box(ChassisLength/Width/Height + ChassisMass) fallback.
-	// (mesh 자체의 PhysicsAsset 슬롯은 비워둬야 한다 — 채우면 ragdoll auto-instantiation 과 충돌.)
-	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Physics Asset", AssetType="PhysicsAsset")
-	FSoftObjectPtr ChassisPhysicsAssetPath = "None";
 
 	// CreateVehicle 가 해석/캐시 (비-reflected). SkeletalBody = UpdatedComponent cast.
 	USkeletalMeshComponent* SkeletalBody = nullptr;

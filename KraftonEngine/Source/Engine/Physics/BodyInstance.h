@@ -17,6 +17,11 @@ struct FBodyInstance : public FBodyInstanceCore
 
 	float MassInKgOverride = 0.0f;
 
+	// true 면 이 바디는 외부 시스템(예: 차량 PxVehicleDrive4W)이 소유·구동한다.
+	// USkeletalMeshComponent 의 per-frame 키네마틱/시뮬 관리에서 제외된다
+	// (SyncBodiesFromComponentPose / UpdateBodySimulationState 가 skip). actor 소유/해제는 여전히 component.
+	bool bExternallyControlled = false;
+
 	bool InitBody(UBodySetup* Setup, const FTransform& Transform, IPhysicsScene* InRBScene, int32 BoneIndex = -1);
 	void TermBody(IPhysicsScene* InRBScene);
 
