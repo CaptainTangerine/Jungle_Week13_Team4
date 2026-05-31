@@ -41,6 +41,9 @@ public:
 	UCameraComponent*    GetCamera()             const { return Camera; }
 
 protected:
+	// [임시 디버그] R 키로 래그돌 토글 바인딩 추가 — Super(WASD/Jump) 후 등록.
+	void SetupInputComponent() override;
+
 	ULuaScriptComponent* LuaScriptComponent = nullptr;
 	USpringArmComponent* SpringArm          = nullptr;
 	UCameraComponent*    Camera             = nullptr;

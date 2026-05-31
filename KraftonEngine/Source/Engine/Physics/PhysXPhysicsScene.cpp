@@ -8,6 +8,7 @@
 #include "GameFramework/AActor.h"
 #include "Math/Quat.h"
 #include "Object/Object.h"  // IsAliveObject
+#include "Physics/Asset/ConstraintSetup.h"
 #include "Core/Logging/Log.h"
 
 // PhysX headers
@@ -497,6 +498,15 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 
 void FPhysXPhysicsScene::Shutdown()
 {
+	for (PxD6Joint* Joint : RawConstraints)
+	{
+		if (Joint)
+		{
+			Joint->release();
+		}
+	}
+	RawConstraints.clear();
+
 	// Body 정리
 	for (auto& Mapping : BodyMappings)
 	{
@@ -853,6 +863,112 @@ void FPhysXPhysicsScene::SetActorMass(FPhysicsActorHandle Actor, float Mass)
 	}
 
 	PxRigidBodyExt::setMassAndUpdateInertia(*Dynamic, std::max(Mass, 0.001f));
+}
+
+void FPhysXPhysicsScene::SetActorSelfCollisionGroup(FPhysicsActorHandle Actor, uint32 GroupId)
+{
+	PxRigidActor* RigidActor = static_cast<PxRigidActor*>(Actor.Internal);
+	if (!RigidActor)
+	{
+		return;
+	}
+
+	const PxU32 ShapeCount = RigidActor->getNbShapes();
+	if (ShapeCount == 0)
+	{
+		return;
+	}
+
+	std::vector<PxShape*> Shapes(ShapeCount);
+	RigidActor->getShapes(Shapes.data(), ShapeCount);
+	for (PxShape* Shape : Shapes)
+	{
+		if (!Shape) continue;
+		// 같은 GroupId(=owner UUID) 끼리는 KraftonFilterShader 가 충돌 무시.
+		// (word3 비교는 simulation filter data 만 사용하므로 sim filter 만 갱신.)
+		PxFilterData Filter = Shape->getSimulationFilterData();
+		Filter.word3 = static_cast<PxU32>(GroupId);
+		Shape->setSimulationFilterData(Filter);
+	}
+}
+
+FPhysicsConstraintHandle FPhysXPhysicsScene::CreateConstraint(const FConstraintCreationParams& Params)
+{
+	PxRigidActor* Actor1 = static_cast<PxRigidActor*>(Params.Actor1.Internal);
+	PxRigidActor* Actor2 = static_cast<PxRigidActor*>(Params.Actor2.Internal);
+	const FConstraintSetup* Setup = Params.ConstraintSetup;
+	if (!Physics || !Actor1 || !Actor2 || !Setup)
+	{
+		return {};
+	}
+
+	PxD6Joint* Joint = PxD6JointCreate(
+		*Physics,
+		Actor1,
+		ToPxTransform(Params.LocalFrame1),
+		Actor2,
+		ToPxTransform(Params.LocalFrame2));
+	if (!Joint)
+	{
+		return {};
+	}
+
+	constexpr float MinAngularLimit = 0.0001f;
+	const auto ClampAngularLimit = [](float Value)
+	{
+		return std::max(0.0f, std::min(Value, PxPi));
+	};
+
+	Joint->setMotion(PxD6Axis::eX, PxD6Motion::eLOCKED);
+	Joint->setMotion(PxD6Axis::eY, PxD6Motion::eLOCKED);
+	Joint->setMotion(PxD6Axis::eZ, PxD6Motion::eLOCKED);
+
+	const float TwistLimit = ClampAngularLimit(Setup->TwistLimit);
+	const float Swing1Limit = ClampAngularLimit(Setup->Swing1Limit);
+	const float Swing2Limit = ClampAngularLimit(Setup->Swing2Limit);
+
+	Joint->setMotion(PxD6Axis::eTWIST, TwistLimit > MinAngularLimit ? PxD6Motion::eLIMITED : PxD6Motion::eLOCKED);
+	Joint->setMotion(PxD6Axis::eSWING1, Swing1Limit > MinAngularLimit ? PxD6Motion::eLIMITED : PxD6Motion::eLOCKED);
+	Joint->setMotion(PxD6Axis::eSWING2, Swing2Limit > MinAngularLimit ? PxD6Motion::eLIMITED : PxD6Motion::eLOCKED);
+
+	if (TwistLimit > MinAngularLimit)
+	{
+		Joint->setTwistLimit(PxJointAngularLimitPair(-TwistLimit, TwistLimit));
+	}
+	if (Swing1Limit > MinAngularLimit || Swing2Limit > MinAngularLimit)
+	{
+		Joint->setSwingLimit(PxJointLimitCone(
+			std::max(Swing1Limit, MinAngularLimit),
+			std::max(Swing2Limit, MinAngularLimit)));
+	}
+
+	if (Setup->DriveStiffness > 0.0f || Setup->DriveDamping > 0.0f)
+	{
+		Joint->setDrive(
+			PxD6Drive::eSLERP,
+			PxD6JointDrive(Setup->DriveStiffness, Setup->DriveDamping, PX_MAX_F32, true));
+		Joint->setDrivePosition(PxTransform(PxIdentity));
+	}
+
+	Joint->setConstraintFlag(PxConstraintFlag::eCOLLISION_ENABLED, false);
+	Joint->userData = Params.UserData;
+	RawConstraints.push_back(Joint);
+
+	return FPhysicsConstraintHandle{ Joint };
+}
+
+void FPhysXPhysicsScene::ReleaseConstraint(FPhysicsConstraintHandle Constraint)
+{
+	PxD6Joint* Joint = static_cast<PxD6Joint*>(Constraint.Internal);
+	if (!Joint)
+	{
+		return;
+	}
+
+	RawConstraints.erase(
+		std::remove(RawConstraints.begin(), RawConstraints.end(), Joint),
+		RawConstraints.end());
+	Joint->release();
 }
 
 // ============================================================

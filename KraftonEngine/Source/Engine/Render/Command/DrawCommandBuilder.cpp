@@ -9,6 +9,7 @@
 #include "Render/Proxy/DecalSceneProxy.h"
 #include "Render/Proxy/ShapeSceneProxy.h"
 #include "Render/Proxy/BoneDebugSceneProxy.h"
+#include "Render/Proxy/PhysicsAssetDebugSceneProxy.h"
 #include "Render/Proxy/ParticleSystemSceneProxy.h"
 #include "Render/Proxy/SkeletalMeshSceneProxy.h"
 #include "Render/Scene/FScene.h"
@@ -471,6 +472,22 @@ void FDrawCommandBuilder::BuildProxyCommands(const FFrameContext& Frame, FScene&
 			for (const FWireLine& Line : BoneProxy->GetCachedParentBoneLines())
 			{
 				DebugBoneLines.AddLine(Line.Start, Line.End, BoneProxy->GetParentBoneColor());
+			}
+		}
+		else if (Proxy->HasProxyFlag(EPrimitiveProxyFlags::PhysicsAssetDebug))
+		{
+			// 기존 Collision 토글(에디터 bCollision / 게임 bShowCollisionShape)로 On/Off.
+			if (bShowCollision)
+			{
+				const FPhysicsAssetDebugSceneProxy* PhysProxy = static_cast<const FPhysicsAssetDebugSceneProxy*>(Proxy);
+				for (const FWireLine& Line : PhysProxy->GetCachedLines())
+				{
+					EditorLines.AddLine(Line.Start, Line.End, PhysProxy->GetBodyColor());
+				}
+				for (const FWireLine& Line : PhysProxy->GetCachedSelectedLines())
+				{
+					EditorLines.AddLine(Line.Start, Line.End, PhysProxy->GetSelectedColor());
+				}
 			}
 		}
 		else if (Proxy->HasProxyFlag(EPrimitiveProxyFlags::WireShape))

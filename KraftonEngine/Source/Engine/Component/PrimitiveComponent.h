@@ -92,6 +92,10 @@ public:
 	// --- 렌더 상태 관리 ---
 	void CreateRenderState() override;
 	void DestroyRenderState() override;
+	void OnCreatePhysicsState() override;
+	void OnDestroyPhysicsState() override;
+	bool ShouldCreatePhysicsState() const override;
+	bool HasValidPhysicsState() const override;
 
 	// 프록시 전체 재생성 (메시 교체 등 큰 변경 시 사용)
 	void MarkRenderStateDirty();
@@ -145,7 +149,7 @@ public:
 
 	// --- Overlap / Hit ---
 
-	void SetSimulatePhysics(bool bInSimulate);
+	virtual void SetSimulatePhysics(bool bInSimulate);
 	bool GetSimulatePhysics() const { return bSimulatePhysics; }
 
 	// --- Physics Force/Velocity API ---

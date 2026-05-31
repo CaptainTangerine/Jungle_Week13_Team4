@@ -3,8 +3,10 @@
 #include "Object/Object.h"
 #include "Mesh/Skeletal/SkeletalMeshAsset.h"
 #include "Animation/Skeleton/SkeletonTypes.h"
+#include "Object/Ptr/SoftObjectPtr.h"
 
 class USkeleton;
+class UPhysicsAsset;
 
 
 #include "Source/Engine/Mesh/Skeletal/SkeletalMesh.generated.h"
@@ -42,6 +44,11 @@ public:
     void SetSkeletonBinding(const FSkeletonBinding& InBinding);
     const FSkeletonBinding& GetSkeletonBinding() const { return SkeletonBinding; }
 
+    void SetPhysicsAsset(UPhysicsAsset* InPhysicsAsset);
+    void SetPhysicsAssetPath(const FString& InPath);
+    UPhysicsAsset* GetPhysicsAsset() const;
+    const FString& GetPhysicsAssetPath() const { return PhysicsAssetPath.ToString(); }
+
 private:
     void CacheSectionMaterialIndices();
     void SyncSkeletonBindingToAsset();
@@ -55,4 +62,8 @@ private:
 
     FSkeletonBinding SkeletonBinding;
     USkeleton*       Skeleton = nullptr;
+    // GetPhysicsAsset() 에서 경로로 lazy 해석해 채우므로 const 게터에서 갱신 가능하도록 mutable.
+    mutable UPhysicsAsset* PhysicsAsset = nullptr;
+    UPROPERTY(Edit, Save, Category="Physics", DisplayName="Physics Asset", AssetType="PhysicsAsset")
+    FSoftObjectPtr   PhysicsAssetPath = "None";
 };
