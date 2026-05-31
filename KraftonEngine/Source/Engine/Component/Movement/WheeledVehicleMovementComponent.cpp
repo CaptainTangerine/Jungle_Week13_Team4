@@ -300,6 +300,29 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 		ChassisBI->bExternallyControlled = true;
 		ChassisBI->SetInstanceSimulatePhysics(EngineScene, true);
 
+		// 가정 검증(로그): hijack 시 actor 프레임 == chassis bone 프레임. wheel offset(컴포넌트 공간)과
+		// output(component = actor pose)이 일관하려면 chassis bone 이 컴포넌트 원점(=identity)에 있어야 한다.
+		// 어긋나면 wheel 배치/차체 위치가 skew 되므로 경고만 남긴다 (frame 변환은 follow-up).
+		if (SkeletalBody)
+		{
+			const int32 ChassisBoneIdx = ChassisBI->InstanceBoneIndex;
+			TArray<FTransform> BoneGlobals;
+			SkeletalBody->GetCurrentBoneGlobalTransforms(BoneGlobals);
+			if (ChassisBoneIdx >= 0 && ChassisBoneIdx < static_cast<int32>(BoneGlobals.size()))
+			{
+				const FTransform& T = BoneGlobals[ChassisBoneIdx];
+				const float DistFromOrigin = T.Location.Length();
+				const float RotIdentity    = PxAbs(T.Rotation.W);
+				if (DistFromOrigin > 0.01f || RotIdentity < 0.999f)
+				{
+					UE_LOG("[WheeledVehicleMC] CreateVehicle: chassis bone (idx %d) is not at the component origin "
+						"(offset %.3f m, |rot.W|=%.3f) — wheel offsets & chassis output assume it sits at the pivot; "
+						"expect skew. Place the chassis/root bone at the component origin.",
+						ChassisBoneIdx, DistFromOrigin, RotIdentity);
+				}
+			}
+		}
+
 		// InitBody 가 찍은 raw-body 필터를 차량 필터로 교체 (이미 붙어있는 chassis shapes 전체).
 		const PxU32 ChassisShapeCount = Actor->getNbShapes();
 		if (ChassisShapeCount > 0)
