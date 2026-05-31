@@ -10,10 +10,12 @@ using namespace physx;
 
 namespace 
 {
-	static const PxVehicleKeySmoothingData gKeySmoothingData =
+	// 아날로그 입력 smoothing (rise/fall rate). 컴포넌트가 throttle/brake/steer 를
+	// 아날로그([0,1] / [-1,1])로 보관하므로 digital 이 아니라 analog smoothing 을 쓴다.
+	static const PxVehiclePadSmoothingData gPadSmoothingData =
 	{	// ACCEL, BRAKE, HANDBRAKE, STEER_LEFT, STEER_RIGHT
 		{  6.f,   6.f,   12.f,      2.5f,       2.5f },     // Rise rates
-		{ 10.f,   10.f,  12.f,      5.f,        5.f},       // Fall rates
+		{ 10.f,   10.f,  12.f,      5.f,        5.f },      // Fall rates
 	};
 
 	// Scales down the maximum allowable steering angle as the vehicle's forward velocity increases
@@ -52,7 +54,12 @@ struct FPhysXVehicleManager::FVehicleSceneQueryData
 	// 총 바퀴 수가 바뀌면 (재)할당. BatchQuery 는 Scene 에서 생성.
 	void Ensure(PxScene* Scene, uint32 NumVehicles, uint32 TotalWheels)
 	{
-		if (WheelResults.size() == TotalWheels && BatchQuery) return;
+		// Num. Wheel comparison
+		bool bWheelComp = (WheelResults.size() == TotalWheels);
+		// Num. Vehicle comparison
+		bool bVehicleComp = (VehicleResults.size() == NumVehicles);
+		if (bWheelComp && bVehicleComp && BatchQuery) return;
+
 		Release();
 
 		RaycastResults.resize(TotalWheels);
@@ -109,32 +116,41 @@ void FPhysXVehicleManager::Init(PxPhysics* InPhysics, PxScene* InScene, PxCookin
 
 void FPhysXVehicleManager::PreTick(float DeltaTime)
 {
-	// TODO(vehicle part 2): 등록된 각 차량의 입력(Throttle/Steer/Brake/Handbrake)을 읽어
-	//   PxVehicleDrive4WRawInputData 로 smoothing → setAnalogInputs.
-	//   이후 Tick 의 PxVehicleSuspensionRaycasts + PxVehicleUpdates 가 소비.
-
-	for (uint16 Idx = 0; Idx < Vehicles.size(); Idx++)
+	// 등록된 각 차량의 아날로그 입력을 PxVehicleDrive4WRawInputData 로 옮겨 smoothing → setAnalogInputs.
+	// 이후 Tick 의 PxVehicleSuspensionRaycasts + PxVehicleUpdates 가 소비.
+	for (size_t Idx = 0; Idx < Vehicles.size(); ++Idx)
 	{
-		UWheeledVehicleMovementComponent* MC = Vehicles[Idx]; if (!MC) continue;
-		
-		const float RawThrottle = MC->GetThrottleInput();
-		const float RawSteer	= MC->GetSteeringInput();
-		const float RawBrake	= MC->GetBrakeInput();
-		const float RawHandbrake  = MC->GetHandbrakeInput();
-
-		PxVehicleDrive4WRawInputData RawInputData;
-		RawInputData.setDigitalAccel(RawThrottle > 0.f);
-		RawInputData.setDigitalSteerLeft(RawSteer < 0.f);
-		RawInputData.setDigitalSteerRight(RawSteer > 0.f);
-		RawInputData.setDigitalBrake(RawBrake > 0.f);
-		RawInputData.setDigitalHandbrake(RawHandbrake > 0.f);
+		UWheeledVehicleMovementComponent* MC = Vehicles[Idx];
+		if (!MC) continue;
 
 		PxVehicleDrive4W* Vehicle = MC->GetPxVehicle();
 		if (!Vehicle) continue;
 
-		//PxFixedSizeLookupTable<8> 
-		
-		PxVehicleDrive4WSmoothDigitalRawInputsAndSetAnalogInputs(gKeySmoothingData, gSteerVsForwardSpeedTable, RawInputData, DeltaTime, false, *Vehicle);
+		// 아날로그 그대로 — accel/brake/handbrake ∈ [0,1], steer ∈ [-1,1] (컴포넌트가 이미 clamp).
+		// handbrake 만 본질적으로 boolean → 1/0 으로 변환.
+		PxVehicleDrive4WRawInputData RawInputData;
+		RawInputData.setAnalogAccel(MC->GetThrottleInput());
+		RawInputData.setAnalogBrake(MC->GetBrakeInput());
+		RawInputData.setAnalogSteer(MC->GetSteeringInput());
+		RawInputData.setAnalogHandbrake(MC->GetHandbrakeInput() ? 1.0f : 0.0f);
+
+		// in-air 여부는 직전 프레임 wheel query 결과에서 — 공중이면 steer 보정/smoothing 이 달라진다.
+		// 버퍼는 다음 Tick 까지 유효. 첫 프레임엔 결과가 없어 false. (ActiveVehicles[i] ↔ VehicleResults[i])
+		bool bInAir = false;
+		if (SqData)
+		{
+			for (size_t i = 0; i < SqData->ActiveVehicles.size(); ++i)
+			{
+				if (SqData->ActiveVehicles[i] == MC && SqData->VehicleResults[i].wheelQueryResults)
+				{
+					bInAir = PxVehicleIsInAir(SqData->VehicleResults[i]);
+					break;
+				}
+			}
+		}
+
+		PxVehicleDrive4WSmoothAnalogRawInputsAndSetAnalogInputs(
+			gPadSmoothingData, gSteerVsForwardSpeedTable, RawInputData, DeltaTime, bInAir, *Vehicle);
 	}
 }
 
@@ -177,14 +193,14 @@ void FPhysXVehicleManager::Tick(float DeltaTime)
 
 	// 3. 서스펜션 레이캐스트
 	PxVehicleSuspensionRaycasts(
-		SqData->BatchQuery, PxVehicles.size(), PxVehicles.data(),
-		SqData->RaycastResults.size(), SqData->RaycastResults.data());
+		SqData->BatchQuery, static_cast<PxU32>(PxVehicles.size()), PxVehicles.data(),
+		static_cast<PxU32>(SqData->RaycastResults.size()), SqData->RaycastResults.data());
 
 	// 4. 차량 물리 업데이트
 	const PxVec3 Gravity = Scene->getGravity();
 	PxVehicleUpdates(
 		DeltaTime, Gravity, *GetFrictionPairs(),
-		PxVehicles.size(), PxVehicles.data(),
+		static_cast<PxU32>(PxVehicles.size()), PxVehicles.data(),
 		SqData->VehicleResults.data());
 }
 
