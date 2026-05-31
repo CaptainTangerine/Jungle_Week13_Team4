@@ -5,6 +5,8 @@
 
 class USkeletalMeshComponent;
 class UWheeledVehicleMovementComponent;
+class USpringArmComponent;
+class UCameraComponent;
 
 // ============================================================
 // AWheeledVehicle — PxVehicleDrive4W 기반 차량 Pawn (Unreal-style).
@@ -46,4 +48,6 @@ protected:
 
 	USkeletalMeshComponent*           VehicleBody = nullptr;   // 차체 = Root (바퀴 = 본)
 	UWheeledVehicleMovementComponent* VehicleMC   = nullptr;
+	USpringArmComponent*              SpringArm   = nullptr;   // 3인칭 chase 카메라 암 (차체에 부착)
+	UCameraComponent*                 Camera      = nullptr;   // PossessedBy 가 활성화
 };

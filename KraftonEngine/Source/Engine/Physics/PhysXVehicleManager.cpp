@@ -1,6 +1,7 @@
 ﻿#include "PhysXVehicleManager.h"
 
 #include "Component/Movement/WheeledVehicleMovementComponent.h"
+#include "Core/Types/CollisionTypes.h"   // ECollisionChannel (drivable surface gate)
 
 // PhysX 헤더는 .cpp 에서만 (엔진 표면 PhysX-free).
 #include <PxPhysicsAPI.h>
@@ -28,16 +29,19 @@ namespace
 	};
 	static const PxFixedSizeLookupTable<8> gSteerVsForwardSpeedTable(gSteerVsForwardSpeedData, 4);
 
-	// 서스펜션 raycast prefilter. word3=owner UUID 규약(PhysXPhysicsScene 의 filterData 레이아웃)을 따른다.
-	// 자기 차량(같은 owner UUID)의 chassis/wheel shape 는 무시 — KraftonFilterShader 의 same-owner 가드와 동일 의미.
-	// 그 외 모든 shape 는 지면 후보로 BLOCK.
+	// 서스펜션 raycast prefilter. PhysXPhysicsScene 의 filterData 레이아웃을 따른다
+	// (word0=ObjectType, word3=owner UUID).
+	//   1) 자기 차량(같은 owner UUID)의 chassis/wheel shape 는 무시.
+	//   2) WorldStatic ObjectType 만 drivable 지면으로 인정 — 동적 객체/폰 위는 지면이 아니다.
 	PxQueryHitType::Enum WheelRaycastPreFilter(
 		PxFilterData queryFilterData, PxFilterData objectFilterData,
 		const void*, PxU32, PxHitFlags&)
 	{
 		if (queryFilterData.word3 != 0 && queryFilterData.word3 == objectFilterData.word3)
 			return PxQueryHitType::eNONE;
-		return PxQueryHitType::eBLOCK;
+		if (objectFilterData.word0 == static_cast<PxU32>(ECollisionChannel::WorldStatic))
+			return PxQueryHitType::eBLOCK;
+		return PxQueryHitType::eNONE;
 	}
 
 } // anonymous namespce

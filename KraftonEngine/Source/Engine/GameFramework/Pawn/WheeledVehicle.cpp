@@ -3,6 +3,8 @@
 #include "Component/Primitive/SkeletalMeshComponent.h"
 #include "Component/Movement/WheeledVehicleMovementComponent.h"
 #include "Component/Input/InputComponent.h"
+#include "Component/Camera/SpringArmComponent.h"
+#include "Component/Camera/CameraComponent.h"
 #include "Math/Transform.h"
 
 void AWheeledVehicle::BeginPlay()
@@ -43,6 +45,27 @@ void AWheeledVehicle::EnsureComponents()
 		VehicleMC = AddComponent<UWheeledVehicleMovementComponent>();
 	}
 	VehicleMC->SetUpdatedComponent(VehicleBody);
+
+	// 3) 3인칭 chase 카메라 — VehicleBody → SpringArm → Camera. APawn::PossessedBy 가 Camera 를 활성화.
+	//    uniquely-typed 라 재획득은 GetComponentByClass 로 충분.
+	SpringArm = GetComponentByClass<USpringArmComponent>();
+	if (!SpringArm)
+	{
+		SpringArm = AddComponent<USpringArmComponent>();
+		SpringArm->AttachToComponent(VehicleBody);
+		SpringArm->TargetArmLength          = 8.0f;                       // m — 차체 뒤 거리
+		SpringArm->SocketOffset             = FVector(0.0f, 0.0f, 3.0f);  // 차체 위로
+		SpringArm->bEnableCameraLag         = true;
+		SpringArm->bEnableCameraRotationLag = true;
+		SpringArm->bUsePawnControlRotation  = false;                      // 차량 heading 을 따라가는 chase cam
+	}
+
+	Camera = GetComponentByClass<UCameraComponent>();
+	if (!Camera)
+	{
+		Camera = AddComponent<UCameraComponent>();
+		Camera->AttachToComponent(SpringArm);
+	}
 }
 
 void AWheeledVehicle::Tick(float DeltaTime)
