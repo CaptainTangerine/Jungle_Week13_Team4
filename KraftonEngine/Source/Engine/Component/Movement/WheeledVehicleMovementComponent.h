@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "PawnMovementComponent.h"
 #include "Math/Transform.h"
 
@@ -109,6 +109,7 @@ protected:
 	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Peak Engine Torque", Min=1.0f, Max=2000.0f, Speed=1.0f)
 	float EnginePeakTorque = 500.0f;    // Nm
 
+	// The absolute maximum angular velocity the engine is allowed to reach
 	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Max Engine Omega", Min=100.0f, Max=20000.0f, Speed=10.0f)
 	float EngineMaxOmega = 600.0f;      // rad/s
 
