@@ -26,12 +26,16 @@ namespace
 	};
 	static const PxFixedSizeLookupTable<8> gSteerVsForwardSpeedTable(gSteerVsForwardSpeedData, 4);
 
+	// 서스펜션 raycast prefilter. word3=owner UUID 규약(PhysXPhysicsScene 의 filterData 레이아웃)을 따른다.
+	// 자기 차량(같은 owner UUID)의 chassis/wheel shape 는 무시 — KraftonFilterShader 의 same-owner 가드와 동일 의미.
+	// 그 외 모든 shape 는 지면 후보로 BLOCK.
 	PxQueryHitType::Enum WheelRaycastPreFilter(
-		PxFilterData, PxFilterData object,
+		PxFilterData queryFilterData, PxFilterData objectFilterData,
 		const void*, PxU32, PxHitFlags&)
 	{
-		return (object.word3 & DRIVABLE_SURFACE_FLAG)
-			? PxQueryHitType::eBLOCK : PxQueryHitType::eNONE;
+		if (queryFilterData.word3 != 0 && queryFilterData.word3 == objectFilterData.word3)
+			return PxQueryHitType::eNONE;
+		return PxQueryHitType::eBLOCK;
 	}
 
 } // anonymous namespce
