@@ -6,6 +6,9 @@
 #include "Component/Primitive/SkeletalMeshComponent.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
+#include "Physics/Asset/PhysicsAsset.h"
+#include "Physics/Asset/BodySetup.h"
+#include "Physics/Asset/PhysicsAssetManager.h"
 #include "Core/Types/CollisionTypes.h"   // ECollisionChannel, ObjectTypeBit
 #include "Core/Logging/Log.h"
 #include "Math/Quat.h"
@@ -184,6 +187,33 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 		return false;
 	}
 
+	// --- Chassis 물리 청사진: PhysicsAsset (있으면 driving blueprint, 없으면 parametric fallback) ---
+	// 차량 asset 은 보통 단일 chassis body — 첫 BodySetup 을 chassis 로 쓴다.
+	UPhysicsAsset* ChassisAsset = nullptr;
+	UBodySetup*    ChassisBody  = nullptr;
+	{
+		const FString AssetPath = ChassisPhysicsAssetPath.ToString();
+		if (!AssetPath.empty() && AssetPath != "None")
+		{
+			ChassisAsset = FPhysicsAssetManager::Get().Load(AssetPath);
+		}
+		if (ChassisAsset && !ChassisAsset->BodySetups.empty())
+		{
+			ChassisBody = ChassisAsset->BodySetups[0];
+		}
+	}
+
+	// AddShapesToRigidActor 는 IPhysicsScene 경유 — 없으면 asset 경로 불가, parametric 으로 강등.
+	IPhysicsScene* PhysicsScene = nullptr;
+	if (AActor* Owner = GetOwner())
+	{
+		if (UWorld* World = Owner->GetWorld())
+		{
+			PhysicsScene = World->GetPhysicsScene();
+		}
+	}
+	const bool bUseAsset = (ChassisBody != nullptr) && (PhysicsScene != nullptr);
+
 	using WO = PxVehicleDrive4WWheelOrder;
 	const PxU32 NW = static_cast<PxU32>(NumWheels);
 
@@ -234,10 +264,10 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 		(D.x * D.x + D.z * D.z) * ChassisMass / 12.0f,
 		(D.x * D.x + D.y * D.y) * ChassisMass / 12.0f);
 
-	// --- convex 쿠킹 ---
-	PxConvexMesh* ChassisMesh = CreateChassisConvex(Cooking, Physics, HalfX, HalfY, HalfZ);
+	// --- convex 쿠킹 --- (wheel 은 항상 procedural; chassis 는 asset 없을 때만 cook)
 	PxConvexMesh* WheelMesh   = CreateWheelConvex(Cooking, Physics, WheelRadius, WheelWidth);
-	if (!ChassisMesh || !WheelMesh)
+	PxConvexMesh* ChassisMesh = bUseAsset ? nullptr : CreateChassisConvex(Cooking, Physics, HalfX, HalfY, HalfZ);
+	if (!WheelMesh || (!bUseAsset && !ChassisMesh))
 	{
 		UE_LOG("[WheeledVehicleMC] CreateVehicle: convex cooking failed.");
 		if (ChassisMesh) ChassisMesh->release();
@@ -347,18 +377,58 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 		WheelShape->setLocalPose(PxTransform(PxIdentity));            // PxVehicleUpdates 가 매 프레임 갱신
 	}
 
-	PxShape* ChassisShape = PxRigidActorExt::createExclusiveShape(*Actor, PxConvexMeshGeometry(ChassisMesh), *Material);
-	ChassisShape->setSimulationFilterData(ChassisSimFilter);
-	ChassisShape->setQueryFilterData(VehicleQryFilter);
-	ChassisShape->setLocalPose(PxTransform(PxIdentity));
+	if (bUseAsset)
+	{
+		// PhysicsAsset 의 chassis body geometry 를 actor 에 부착 (wheels 다음 인덱스 4..N).
+		const PxU32 BeforeShapes = Actor->getNbShapes();
+		ChassisBody->AddShapesToRigidActor(PhysicsScene, FPhysicsActorHandle{ Actor });
+		const PxU32 AfterShapes = Actor->getNbShapes();
 
-	// shape 가 mesh ref 를 잡았으므로 로컬 생성 ref 해제.
+		// AddGeometry 는 generic raw-body 필터를 찍으므로, 새로 추가된 chassis shape 들에
+		// 차량 필터를 재적용: sim=ChassisSimFilter, query=VehicleQryFilter(word3=ownerUUID).
+		// query word3 가 없으면 suspension raycast prefilter 가 자기 chassis 를 지면으로 오인한다.
+		if (AfterShapes > BeforeShapes)
+		{
+			TArray<PxShape*> Shapes;
+			Shapes.resize(AfterShapes);
+			Actor->getShapes(Shapes.data(), AfterShapes);
+			for (PxU32 s = BeforeShapes; s < AfterShapes; ++s)
+			{
+				Shapes[s]->setSimulationFilterData(ChassisSimFilter);
+				Shapes[s]->setQueryFilterData(VehicleQryFilter);
+			}
+		}
+	}
+	else
+	{
+		PxShape* ChassisShape = PxRigidActorExt::createExclusiveShape(*Actor, PxConvexMeshGeometry(ChassisMesh), *Material);
+		ChassisShape->setSimulationFilterData(ChassisSimFilter);
+		ChassisShape->setQueryFilterData(VehicleQryFilter);
+		ChassisShape->setLocalPose(PxTransform(PxIdentity));
+	}
+
+	// shape 가 mesh ref 를 잡았으므로 로컬 생성 ref 해제 (cook 한 것만).
 	WheelMesh->release();
-	ChassisMesh->release();
+	if (ChassisMesh) ChassisMesh->release();
 
-	Actor->setMass(ChassisMass);
-	Actor->setMassSpaceInertiaTensor(ChassisMOI);
-	Actor->setCMassLocalPose(PxTransform(ChassisCM, PxQuat(PxIdentity)));
+	if (bUseAsset)
+	{
+		// 질량은 asset 에서, 관성 텐서는 chassis(sim) shape 들로 계산, CoM 은 의도한 낮춤 값 유지.
+		// (wheels 는 eSIMULATION_SHAPE=false → 관성 계산에서 자동 제외.)
+		float Mass = ChassisBody->DefaultMass;
+		if (Mass <= 1.0f)
+		{
+			UE_LOG("[WheeledVehicleMC] CreateVehicle: chassis BodySetup DefaultMass=%.2f looks unset; using ChassisMass=%.1f.", Mass, ChassisMass);
+			Mass = ChassisMass;
+		}
+		PxRigidBodyExt::setMassAndUpdateInertia(*Actor, Mass, &ChassisCM);
+	}
+	else
+	{
+		Actor->setMass(ChassisMass);
+		Actor->setMassSpaceInertiaTensor(ChassisMOI);
+		Actor->setCMassLocalPose(PxTransform(ChassisCM, PxQuat(PxIdentity)));
+	}
 
 	// 스폰 위치 — UpdatedComponent(보통 차체 RootComponent) 의 월드 트랜스폼.
 	if (USceneComponent* Updated = GetUpdatedComponent())

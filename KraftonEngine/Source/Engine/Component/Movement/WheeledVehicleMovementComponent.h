@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "PawnMovementComponent.h"
 #include "Math/Transform.h"
+#include "Object/Ptr/SoftObjectPtr.h"
 
 #include "Source/Engine/Component/Movement/WheeledVehicleMovementComponent.generated.h"
 
@@ -107,6 +108,12 @@ protected:
 	FString WheelBoneRL = "Wheel_RL";
 	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Bone RR")
 	FString WheelBoneRR = "Wheel_RR";
+
+	// Chassis 물리 청사진 — 지정 시 chassis collision/mass/inertia 의 driving blueprint.
+	// 비우면 parametric box(ChassisLength/Width/Height + ChassisMass) fallback.
+	// (mesh 자체의 PhysicsAsset 슬롯은 비워둬야 한다 — 채우면 ragdoll auto-instantiation 과 충돌.)
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Physics Asset", AssetType="PhysicsAsset")
+	FSoftObjectPtr ChassisPhysicsAssetPath = "None";
 
 	// CreateVehicle 가 해석/캐시 (비-reflected). SkeletalBody = UpdatedComponent cast.
 	USkeletalMeshComponent* SkeletalBody = nullptr;
