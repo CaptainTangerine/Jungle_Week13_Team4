@@ -220,11 +220,9 @@ int32 FBodyConstraintGenerator::GenerateConstraint(UPhysicsAsset* Asset, const F
 	// 조인트 앵커는 자식 본 원점. 추가로 조인트 프레임의 twist 축(X)을 본 세그먼트 방향
 	// (자식의 첫 자식으로 향하는 방향)에 정렬한다. 정렬이 없으면 본 로컬 X(스켈레톤에 따라
 	// 옆방향)가 twist 축이 되어 Swing 콘이 본을 따라가지 않고 옆으로 뻗는다.
-	//   ChildFrame  = (원점, FrameRot)               — 자식 본 로컬
-	//   ParentFrame = (자식 로컬 위치, 자식로컬회전 * FrameRot) — rest 에서 두 프레임 일치
+	//   ChildFrame  = (원점, FrameRot)  — 자식 본 로컬
+	//   ParentFrame = ChildFrameMat * 자식 로컬 포즈 (행렬 합성, 아래) — rest 에서 두 프레임 일치
 	const FBone& ChildBone = Mesh->Bones[ChildBoneIndex];
-	const FVector ChildLocalPos = MatrixTranslation(ChildBone.ReferenceLocalPose);
-	const FQuat   ChildLocalRot = FQuat::FromMatrix(ChildBone.ReferenceLocalPose);
 
 	// 세그먼트 방향(자식 → 그 첫 자식) — child 본 로컬.
 	FVector SegLocal(0.0f, 0.0f, 0.0f);
@@ -265,8 +263,18 @@ int32 FBodyConstraintGenerator::GenerateConstraint(UPhysicsAsset* Asset, const F
 		FrameRot = RotationXToDir(SegLocal);
 	}
 
+	// ChildFrame = (자식 본 원점, FrameRot). ParentFrame 은 엔진 규약(row-vector child*parent)으로
+	// 행렬 합성해 bind 포즈에서 ChildFrame 과 정확히 일치시킨다(쿼터니언 합성은 column 규약이라
+	// 순서가 어긋나 머리/쇄골 등에서 90° 스냅을 유발했음):
+	//   jointWorld = ChildFrameMat * childGlobal = ParentFrameMat * parentGlobal
+	//   childGlobal = childLocalPose * parentGlobal  →  ParentFrameMat = ChildFrameMat * childLocalPose
 	Constraint.ChildFrame  = FTransform(FVector(0.0f, 0.0f, 0.0f), FrameRot, FVector(1.0f, 1.0f, 1.0f));
-	Constraint.ParentFrame = FTransform(ChildLocalPos, ChildLocalRot * FrameRot, FVector(1.0f, 1.0f, 1.0f));
+
+	const FMatrix ChildFrameMat  = FrameRot.ToMatrix();
+	const FMatrix ParentFrameMat = ChildFrameMat * ChildBone.ReferenceLocalPose;
+	FTransform ParentFrame(ParentFrameMat);
+	ParentFrame.Scale = FVector(1.0f, 1.0f, 1.0f);   // 본 로컬 포즈 스케일 누수 방지
+	Constraint.ParentFrame = ParentFrame;
 
 	Asset->ConstraintSetups.push_back(Constraint);
 	return static_cast<int32>(Asset->ConstraintSetups.size()) - 1;
