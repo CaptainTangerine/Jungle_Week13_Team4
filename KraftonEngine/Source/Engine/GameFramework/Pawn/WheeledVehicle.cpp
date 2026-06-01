@@ -64,8 +64,11 @@ void AWheeledVehicle::EnsureComponents()
 		SpringArm->SocketOffset             = FVector(0.0f, 0.0f, 3.0f);  // 차체 위로
 		SpringArm->bEnableCameraLag         = true;
 		SpringArm->bEnableCameraRotationLag = true;
-		SpringArm->bUsePawnControlRotation  = false;                      // 차량 heading 을 따라가는 chase cam
 	}
+	// bUsePawnControlRotation 은 UPROPERTY 가 아니라 직렬화되지 않는다 → 로드 후 default(true)로
+	// 되돌아간다(그러면 ControlRotation 을 쓰는데 차량은 갱신 안 해 카메라가 스폰 방향에 고정).
+	// 매번 명시적으로 false 로 둬서 SpringArm 이 차체(VehicleBody) heading 을 따라가게 한다.
+	if (SpringArm) SpringArm->bUsePawnControlRotation = false;
 
 	Camera = GetComponentByClass<UCameraComponent>();
 	if (!Camera)
