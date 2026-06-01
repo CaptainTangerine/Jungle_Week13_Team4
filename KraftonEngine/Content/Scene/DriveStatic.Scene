@@ -1,0 +1,208 @@
+{
+  "Actors" : [{
+      "ClassName" : "AStaticMeshActor",
+      "Name" : "FloorVisual",
+      "NonSceneComponents" : [],
+      "ObjectId" : 2,
+      "Properties" : {
+        "PendingActorLocation" : [0.000000, 0.000000, 0.000000],
+        "PendingActorRotation" : [0.000000, 0.000000, 0.000000],
+        "PendingActorScale" : [60.000000, 60.000000, 1.000000],
+        "PendingActorVisible" : true,
+        "bNeedsTick" : true
+      },
+      "RootComponent" : {
+        "Children" : [],
+        "ClassName" : "UStaticMeshComponent",
+        "ObjectId" : 3,
+        "Properties" : {
+          "CollisionEnabled" : 0,
+          "MaterialSlots" : ["Content/Material/Auto/material_1.mat"],
+          "ObjectType" : 0,
+          "RelativeTransform.Location" : [0.000000, 0.000000, 0.000000],
+          "RelativeTransform.Scale" : [60.000000, 60.000000, 1.000000],
+          "StaticMeshPath" : "Content/Data/BasicShape/Cube_StaticMesh.uasset",
+          "bCastShadow" : true,
+          "bIsVisible" : true,
+          "bSimulatePhysics" : false
+        }
+      }
+    }, {
+      "ClassName" : "ABoxActor",
+      "Name" : "FloorCollider",
+      "NonSceneComponents" : [],
+      "ObjectId" : 4,
+      "Properties" : {
+        "PendingActorLocation" : [0.000000, 0.000000, 0.000000],
+        "PendingActorRotation" : [0.000000, 0.000000, 0.000000],
+        "PendingActorScale" : [60.000000, 60.000000, 1.000000],
+        "PendingActorVisible" : true,
+        "bNeedsTick" : true
+      },
+      "RootComponent" : {
+        "Children" : [],
+        "ClassName" : "UBoxComponent",
+        "ObjectId" : 5,
+        "Properties" : {
+          "BoxExtent" : [1.000000, 1.000000, 1.000000],
+          "CollisionEnabled" : 3,
+          "ObjectType" : 0,
+          "RelativeTransform.Location" : [0.000000, 0.000000, 0.000000],
+          "RelativeTransform.Scale" : [60.000000, 60.000000, 1.000000],
+          "ResponseContainer" : {
+            "Responses[0]" : 2,
+            "Responses[1]" : 2,
+            "Responses[2]" : 2,
+            "Responses[3]" : 2,
+            "Responses[4]" : 2
+          },
+          "ShapeColor" : [0.000000, 1.000000, 0.000000, 1.000000],
+          "bIsVisible" : true,
+          "bSimulatePhysics" : false
+        }
+      }
+    }, {
+      "ClassName" : "AWheeledVehicle",
+      "Name" : "AWheeledVehicle_0",
+      "NonSceneComponents" : [{
+          "ClassName" : "UWheeledVehicleMovementComponent",
+          "ObjectId" : 14,
+          "Properties" : {
+            "UpdatedComponent" : {
+              "ObjectId" : 7
+            },
+            "bAutoActivate" : true,
+            "bAutoRegisterUpdatedComponent" : true,
+            "bIsActive" : true,
+            "bTickEnable" : true
+          }
+        }],
+      "ObjectId" : 6,
+      "Properties" : {
+        "PendingActorLocation" : [0.000000, 0.000000, 2.000000],
+        "PendingActorRotation" : [0.000000, 0.000000, 0.000000],
+        "PendingActorScale" : [1.000000, 1.000000, 1.000000],
+        "PendingActorVisible" : true,
+        "bAutoPossessPlayer" : true,
+        "bNeedsTick" : true
+      },
+      "RootComponent" : {
+        "Children" : [{
+            "Children" : [],
+            "ClassName" : "UStaticMeshComponent",
+            "ObjectId" : 8,
+            "Properties" : {
+              "CollisionEnabled" : 0,
+              "MaterialSlots" : ["Content/Material/Auto/M_CubeGrid.mat"],
+              "ObjectType" : 0,
+              "RelativeTransform.Location" : [1.650000, 1.000000, -0.500000],
+              "RelativeTransform.Scale" : [0.350000, 0.125000, 0.350000],
+              "StaticMeshPath" : "Content/Data/BasicShape/Cube_StaticMesh.uasset",
+              "bCastShadow" : true,
+              "bIsVisible" : true,
+              "bSimulatePhysics" : false
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UStaticMeshComponent",
+            "ObjectId" : 9,
+            "Properties" : {
+              "CollisionEnabled" : 0,
+              "MaterialSlots" : ["Content/Material/Auto/M_CubeGrid.mat"],
+              "ObjectType" : 0,
+              "RelativeTransform.Location" : [1.650000, -1.000000, -0.500000],
+              "RelativeTransform.Scale" : [0.350000, 0.125000, 0.350000],
+              "StaticMeshPath" : "Content/Data/BasicShape/Cube_StaticMesh.uasset",
+              "bCastShadow" : true,
+              "bIsVisible" : true,
+              "bSimulatePhysics" : false
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UStaticMeshComponent",
+            "ObjectId" : 10,
+            "Properties" : {
+              "CollisionEnabled" : 0,
+              "MaterialSlots" : ["Content/Material/Auto/M_CubeGrid.mat"],
+              "ObjectType" : 0,
+              "RelativeTransform.Location" : [-1.650000, 1.000000, -0.500000],
+              "RelativeTransform.Scale" : [0.350000, 0.125000, 0.350000],
+              "StaticMeshPath" : "Content/Data/BasicShape/Cube_StaticMesh.uasset",
+              "bCastShadow" : true,
+              "bIsVisible" : true,
+              "bSimulatePhysics" : false
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UStaticMeshComponent",
+            "ObjectId" : 11,
+            "Properties" : {
+              "CollisionEnabled" : 0,
+              "MaterialSlots" : ["Content/Material/Auto/M_CubeGrid.mat"],
+              "ObjectType" : 0,
+              "RelativeTransform.Location" : [-1.650000, -1.000000, -0.500000],
+              "RelativeTransform.Scale" : [0.350000, 0.125000, 0.350000],
+              "StaticMeshPath" : "Content/Data/BasicShape/Cube_StaticMesh.uasset",
+              "bCastShadow" : true,
+              "bIsVisible" : true,
+              "bSimulatePhysics" : false
+            }
+          }, {
+            "Children" : [{
+                "Children" : [],
+                "ClassName" : "UCameraComponent",
+                "ObjectId" : 13,
+                "Properties" : {
+                  "CameraState.FOV" : 1.047198,
+                  "CameraState.FarZ" : 1000.000000,
+                  "CameraState.NearZ" : 0.100000,
+                  "RelativeTransform.Location" : [0.000000, 0.000000, 0.000000],
+                  "RelativeTransform.Scale" : [1.000000, 1.000000, 1.000000]
+                }
+              }],
+            "ClassName" : "USpringArmComponent",
+            "ObjectId" : 12,
+            "Properties" : {
+              "CameraLagSpeed" : 10.000000,
+              "CameraRotationLagSpeed" : 10.000000,
+              "RelativeTransform.Location" : [0.000000, 0.000000, 0.000000],
+              "RelativeTransform.Scale" : [1.000000, 1.000000, 1.000000],
+              "SocketOffset" : [0.000000, 0.000000, 3.000000],
+              "TargetArmLength" : 8.000000,
+              "bEnableCameraLag" : true,
+              "bEnableCameraRotationLag" : true
+            }
+          }],
+        "ClassName" : "UStaticMeshComponent",
+        "ObjectId" : 7,
+        "Properties" : {
+          "CollisionEnabled" : 0,
+          "MaterialSlots" : ["Content/Material/Auto/BasicShapeMaterial.mat"],
+          "ObjectType" : 0,
+          "RelativeTransform.Location" : [0.000000, 0.000000, 2.000000],
+          "RelativeTransform.Scale" : [1.000000, 1.000000, 1.000000],
+          "StaticMeshPath" : "Content/Data/BasicShape/Cube_StaticMesh.uasset",
+          "bCastShadow" : true,
+          "bIsVisible" : true,
+          "bSimulatePhysics" : false
+        }
+      }
+    }],
+  "ClassName" : "UWorld",
+  "ContextHandle" : "NewScene",
+  "ContextName" : "New Scene",
+  "Name" : "DriveStatic",
+  "ObjectId" : 1,
+  "PerspectiveCamera" : {
+    "FOV" : 1.047198,
+    "FarClip" : 1000.000000,
+    "Location" : [-12.000000, -12.000000, 7.000000],
+    "NearClip" : 0.100000,
+    "Rotation" : [0.000000, 20.000000, 45.000000]
+  },
+  "Version" : 2,
+  "WorldSettings" : {
+    "GameMode" : ""
+  },
+  "WorldType" : "Editor"
+}
