@@ -5,6 +5,7 @@
 #include "Object/Object.h"   // UObjectManager
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 
 namespace
@@ -51,6 +52,31 @@ namespace
 		const float AxisLen = std::sqrt(Axis.X * Axis.X + Axis.Y * Axis.Y + Axis.Z * Axis.Z);
 		Axis = FVector(Axis.X / AxisLen, Axis.Y / AxisLen, Axis.Z / AxisLen);
 		return FQuat::FromAxisAngle(Axis, std::acos(Dot));
+	}
+
+	float VLen(const FVector& V) { return std::sqrt(V.X * V.X + V.Y * V.Y + V.Z * V.Z); }
+	FVector VCross(const FVector& A, const FVector& B)
+	{
+		return FVector(A.Y * B.Z - A.Z * B.Y, A.Z * B.X - A.X * B.Z, A.X * B.Y - A.Y * B.X);
+	}
+	FVector VNorm(const FVector& V)
+	{
+		const float L = VLen(V);
+		return (L > 1e-6f) ? FVector(V.X / L, V.Y / L, V.Z / L) : FVector(1.0f, 0.0f, 0.0f);
+	}
+
+	// 경첩(1축) 관절로 다룰 본 이름인지 — 무릎/팔꿈치류. 이름 기반 휴리스틱(스켈레톤 의존).
+	bool IsHingeBoneName(const FString& Name)
+	{
+		FString L = Name;
+		std::transform(L.begin(), L.end(), L.begin(),
+			[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+		static const char* Keys[] = { "calf", "shin", "lowerleg", "knee", "forearm", "lowerarm", "elbow" };
+		for (const char* K : Keys)
+		{
+			if (L.find(K) != FString::npos) { return true; }
+		}
+		return false;
 	}
 
 	// 본의 첫 자식 방향/거리로 캡슐(본-로컬)을 피팅. 자식 없으면(=leaf) 작은 기본값.
@@ -200,16 +226,43 @@ int32 FBodyConstraintGenerator::GenerateConstraint(UPhysicsAsset* Asset, const F
 	const FVector ChildLocalPos = MatrixTranslation(ChildBone.ReferenceLocalPose);
 	const FQuat   ChildLocalRot = FQuat::FromMatrix(ChildBone.ReferenceLocalPose);
 
-	FQuat FrameRot;   // identity 기본(세그먼트 방향을 못 구하는 leaf 등)
+	// 세그먼트 방향(자식 → 그 첫 자식) — child 본 로컬.
+	FVector SegLocal(0.0f, 0.0f, 0.0f);
+	bool bHasSeg = false;
 	const int32 GrandChild = FindFirstChildBone(Mesh, ChildBoneIndex);
 	if (GrandChild != -1)
 	{
 		const FVector Seg = MatrixTranslation(Mesh->Bones[GrandChild].ReferenceLocalPose);
-		const float SegLen = std::sqrt(Seg.X * Seg.X + Seg.Y * Seg.Y + Seg.Z * Seg.Z);
-		if (SegLen > 1e-4f)
+		if (VLen(Seg) > 1e-4f) { SegLocal = VNorm(Seg); bHasSeg = true; }
+	}
+
+	FQuat FrameRot;   // 조인트 프레임 회전(child 본 로컬). identity = 본 로컬 축 그대로(leaf 폴백).
+	if (bHasSeg && IsHingeBoneName(ChildName.ToString()))
+	{
+		// 경첩(무릎/팔꿈치): twist 축을 "경첩 회전축"에 맞춘다. rest 포즈가 펴진 상태라
+		// 두 세그먼트의 외적으론 축을 못 구하므로, 세그먼트와 월드축의 외적으로 측면 축을 추정한다.
+		// twist 만 넓게 Limited, 두 swing 은 Locked → 1축 힌지(UE 무릎의 Twist=60, Swing≈0 형태).
+		const FQuat ChildGlobalRot = FQuat::FromMatrix(ChildBone.GetReferenceGlobalPose());
+		const FVector SegComp = ChildGlobalRot.RotateVector(SegLocal);
+		const FVector Refs[3] = { FVector(0.0f, 0.0f, 1.0f), FVector(0.0f, 1.0f, 0.0f), FVector(1.0f, 0.0f, 0.0f) };
+		FVector HingeComp(1.0f, 0.0f, 0.0f);
+		for (const FVector& Ref : Refs)
 		{
-			FrameRot = RotationXToDir(FVector(Seg.X / SegLen, Seg.Y / SegLen, Seg.Z / SegLen));
+			const FVector C = VCross(SegComp, Ref);
+			if (VLen(C) > 0.3f) { HingeComp = C; break; }   // 세그먼트와 충분히 수직인 첫 축
 		}
+		const FVector HingeLocal = ChildGlobalRot.Inverse().RotateVector(VNorm(HingeComp));
+		FrameRot = RotationXToDir(VNorm(HingeLocal));
+
+		Constraint.TwistMotion  = ACM_Limited;
+		Constraint.TwistLimit   = 80.0f;   // 도. 넓은 대칭 굽힘 범위(방향/비대칭은 수동 튜닝).
+		Constraint.Swing1Motion = ACM_Locked;
+		Constraint.Swing2Motion = ACM_Locked;
+	}
+	else if (bHasSeg)
+	{
+		// 일반(볼/콘) 조인트: twist 축 = 본 길이축. 모션은 struct 기본값(전 축 Limited 콘) 유지.
+		FrameRot = RotationXToDir(SegLocal);
 	}
 
 	Constraint.ChildFrame  = FTransform(FVector(0.0f, 0.0f, 0.0f), FrameRot, FVector(1.0f, 1.0f, 1.0f));

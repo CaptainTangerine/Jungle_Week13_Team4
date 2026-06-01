@@ -1146,9 +1146,11 @@ FPhysicsConstraintHandle FPhysXPhysicsScene::CreateConstraint(const FConstraintC
 	}
 
 	constexpr float MinAngularLimit = 0.0001f;
-	const auto ClampAngularLimit = [](float Value)
+	// 저작 한계는 도(degree). 라디안으로 변환 후 [eps, Pi] 로 클램프.
+	const auto ClampAngularLimit = [](float Degrees)
 	{
-		return std::max(MinAngularLimit, std::min(Value, PxPi));
+		const float Rad = Degrees * (PxPi / 180.0f);
+		return std::max(MinAngularLimit, std::min(Rad, PxPi));
 	};
 
 	// 축별 모션 enum → PxD6Motion 매핑.

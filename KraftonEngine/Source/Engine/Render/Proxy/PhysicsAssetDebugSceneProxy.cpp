@@ -121,12 +121,13 @@ namespace
 		return -1;
 	}
 
-	// 모션 타입 → 시각화 각도. Locked=0(콘 없음), Limited=한계, Free=90°(콘) / Pi(twist) 근사.
-	float AngularVizAngle(EAngularConstraintMotion Motion, float Limit, float FreeAngle)
+	// 모션 타입 → 시각화 각도(라디안). Locked=0(콘 없음), Limited=한계(도→라디안), Free=FreeAngle.
+	float AngularVizAngle(EAngularConstraintMotion Motion, float LimitDeg, float FreeAngleRad)
 	{
 		if (Motion == ACM_Locked) return 0.0f;
-		if (Motion == ACM_Free)   return FreeAngle;
-		return std::max(0.0f, std::min(Limit, FMath::Pi));
+		if (Motion == ACM_Free)   return FreeAngleRad;
+		const float Rad = LimitDeg * (FMath::Pi / 180.0f);
+		return std::max(0.0f, std::min(Rad, FMath::Pi));
 	}
 
 	// 조인트 프레임(앵커 + X=twist, Y=swing1, Z=swing2 축) 기준으로 시각화 라인 생성.

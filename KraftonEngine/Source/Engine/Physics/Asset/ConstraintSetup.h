@@ -65,19 +65,20 @@ struct FConstraintSetup
 	UPROPERTY(Edit, Save, Category="Linear", DisplayName="Linear Limit", Min=0.f, Speed=0.1f)
 	float LinearLimit = 0.f;
 
-	// 각도 축 모션 + 한계(라디안). Limited 일 때만 해당 한계 적용.
+	// 각도 축 모션 + 한계(도, degree). Limited 일 때만 해당 한계 적용. CreateConstraint 와
+	// 시각화에서 라디안으로 변환해 사용한다(UE PhysAT 과 동일하게 저작은 도 단위).
 	UPROPERTY(Edit, Save, Category="Angular", DisplayName="Twist Motion", Enum=EAngularConstraintMotion)
 	EAngularConstraintMotion TwistMotion = ACM_Limited;
-	UPROPERTY(Edit, Save, Category="Angular", DisplayName="Twist Limit", Min=0.f, Max=3.1415926f, Speed=0.01f)
-	float TwistLimit  = FMath::Pi / 4.f;   // eTWIST
+	UPROPERTY(Edit, Save, Category="Angular", DisplayName="Twist Limit (deg)", Min=0.f, Max=180.f, Speed=1.f)
+	float TwistLimit  = 45.f;   // eTWIST
 	UPROPERTY(Edit, Save, Category="Angular", DisplayName="Swing1 Motion", Enum=EAngularConstraintMotion)
 	EAngularConstraintMotion Swing1Motion = ACM_Limited;
-	UPROPERTY(Edit, Save, Category="Angular", DisplayName="Swing1 Limit", Min=0.f, Max=3.1415926f, Speed=0.01f)
-	float Swing1Limit = FMath::Pi / 6.f;   // eSWING1
+	UPROPERTY(Edit, Save, Category="Angular", DisplayName="Swing1 Limit (deg)", Min=0.f, Max=180.f, Speed=1.f)
+	float Swing1Limit = 30.f;   // eSWING1
 	UPROPERTY(Edit, Save, Category="Angular", DisplayName="Swing2 Motion", Enum=EAngularConstraintMotion)
 	EAngularConstraintMotion Swing2Motion = ACM_Limited;
-	UPROPERTY(Edit, Save, Category="Angular", DisplayName="Swing2 Limit", Min=0.f, Max=3.1415926f, Speed=0.01f)
-	float Swing2Limit = FMath::Pi / 6.f;   // eSWING2
+	UPROPERTY(Edit, Save, Category="Angular", DisplayName="Swing2 Limit (deg)", Min=0.f, Max=180.f, Speed=1.f)
+	float Swing2Limit = 30.f;   // eSWING2
 
 	// 3-1 융화용 드라이브. 0 이면 순수 제한 조인트. 본 포즈 ↔ 시뮬 포즈 블렌딩 시
 	// 애니 타깃으로 끌어당기는 스프링 강성/감쇠.
