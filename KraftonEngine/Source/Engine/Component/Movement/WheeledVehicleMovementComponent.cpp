@@ -235,7 +235,11 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	if (SkeletalBody && !SkeletalBody->GetBodies().empty())
 	{
 		auto ChassisBoneIndex = SkeletalBody->FindBoneIndex(ChassisSetUp);
-		if (ChassisBoneIndex < 0) UE_LOG("Chassis Setup not found. Falling back to root"); ChassisBoneIndex = 0;
+		if (ChassisBoneIndex < 0)
+		{
+			UE_LOG("Chassis Setup not found. Falling back to root");
+			ChassisBoneIndex = 0;
+		}
 		FBodyInstance* Candidate = SkeletalBody->GetBodies()[ChassisBoneIndex];
 		if (Candidate && Candidate->IsValidBodyInstance())
 		{

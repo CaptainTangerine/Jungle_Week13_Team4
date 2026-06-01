@@ -56,6 +56,7 @@
             "ChassisHeight" : 1.000000,
             "ChassisLength" : 4.000000,
             "ChassisMass" : 1500.000000,
+            "ChassisSetUp" : "Chassis_0",
             "ChassisWidth" : 2.000000,
             "EngineMaxOmega" : 600.000000,
             "EnginePeakTorque" : 500.000000,
