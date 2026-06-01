@@ -93,6 +93,19 @@ bool FMeshEditorViewportClient::IsDrawConstraints() const
 	return PhysicsDebugComponent ? PhysicsDebugComponent->IsDrawConstraints() : false;
 }
 
+void FMeshEditorViewportClient::SetDrawBodies(bool bEnabled)
+{
+	if (PhysicsDebugComponent)
+	{
+		PhysicsDebugComponent->SetDrawBodies(bEnabled);
+	}
+}
+
+bool FMeshEditorViewportClient::IsDrawBodies() const
+{
+	return PhysicsDebugComponent ? PhysicsDebugComponent->IsDrawBodies() : true;
+}
+
 void FMeshEditorViewportClient::ResetCameraToPreviousBounds()
 {
 	if (!PreviewActor)

@@ -33,10 +33,18 @@
 #include <commdlg.h>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <string>
+#include <unordered_map>
 #include <utility>
+
+// FTransform 회전 편집용 Euler 캐시. 회전을 FQuat 로 보관하는 Transform 은 매 프레임
+// Quat→Euler 재추출 시 Pitch=±90°(짐벌 락)에서 Roll 이 0 으로 접혀 편집이 "틱 걸린다".
+// 편집 중인 Euler(도, {Roll,Pitch,Yaw})를 FTransform 포인터별로 캐시해, quat 이 외부에서
+// 바뀌지 않는 한 캐시값을 표시한다(라운드트립으로 인한 값 소실 방지).
+static std::unordered_map<const void*, FVector> GTransformEulerCache;
 
 // =====================================================================================
 // 내부 헬퍼 — 원래 EditorPropertyWidget.cpp 익명 네임스페이스에 있던 순수 로직을 이관.
@@ -868,15 +876,37 @@ bool FPropertyTable::RenderValue(TArray<FPropertyValue>& Props, int32& Index, co
 			bChanged = true;
 		}
 
-		FRotator Rot = Xf->GetRotator();
-		float RotXYZ[3] = { Rot.Roll, Rot.Pitch, Rot.Yaw };
+		// 짐벌 락 회피: 매 프레임 Quat→Euler 재추출 대신, 편집 중인 Euler 를 캐시해서
+		// quat 이 외부(기즈모 등)에서 바뀌지 않은 한 캐시값을 표시한다. Pitch=±90° 에서도
+		// Roll/Yaw 입력이 다음 프레임에 사라지지 않는다.
+		const FRotator CurRot = Xf->GetRotator();
+		FVector DispEuler(CurRot.Roll, CurRot.Pitch, CurRot.Yaw);
+		const auto CacheIt = GTransformEulerCache.find(Xf);
+		if (CacheIt != GTransformEulerCache.end())
+		{
+			FRotator Cached;
+			Cached.Roll = CacheIt->second.X; Cached.Pitch = CacheIt->second.Y; Cached.Yaw = CacheIt->second.Z;
+			const FQuat CQ = Cached.ToQuaternion();
+			const FQuat& Q = Xf->Rotation;
+			// quat 동일성(이중커버 q≡-q 고려): |dot| ≈ 1 이면 외부 변경 없음 → 캐시 Euler 유지.
+			const float Dot = CQ.X * Q.X + CQ.Y * Q.Y + CQ.Z * Q.Z + CQ.W * Q.W;
+			if (std::fabs(Dot) > 0.9999f)
+			{
+				DispEuler = CacheIt->second;
+			}
+		}
+
+		float RotXYZ[3] = { DispEuler.X, DispEuler.Y, DispEuler.Z };
 		ImGui::TextUnformatted("R"); ImGui::SameLine();
 		if (ImGui::DragFloat3("##XfRot", RotXYZ, Speed))
 		{
-			Rot.Roll = RotXYZ[0]; Rot.Pitch = RotXYZ[1]; Rot.Yaw = RotXYZ[2];
-			Xf->SetRotation(Rot);
+			FRotator NewRot;
+			NewRot.Roll = RotXYZ[0]; NewRot.Pitch = RotXYZ[1]; NewRot.Yaw = RotXYZ[2];
+			Xf->SetRotation(NewRot);
 			bChanged = true;
 		}
+		// 캐시를 현재 표시값으로 동기화(편집분 포함).
+		GTransformEulerCache[Xf] = FVector(RotXYZ[0], RotXYZ[1], RotXYZ[2]);
 
 		float Scl[3] = { Xf->Scale.X, Xf->Scale.Y, Xf->Scale.Z };
 		ImGui::TextUnformatted("S"); ImGui::SameLine();
@@ -1344,15 +1374,22 @@ namespace
 					ImGui::TableSetColumnIndex(1);
 					ImGui::SetNextItemWidth(-1);
 
-					if (FPropertyTable::RenderValue(Props, i, Ctx))
+					const bool bRowChanged = FPropertyTable::RenderValue(Props, i, Ctx);
+					ImGui::PopID();
+					if (bRowChanged)
 					{
 						bAnyChanged = true;
-						ImGui::PopID();
-						ImGui::EndTable();
-						ImGui::PopStyleColor(2);
-						return true;   // 변경 발생 — 다음 프레임에 Props 재수집
+						// 배열 +/- 등 "구조 변경"만 후속 prop 의 ContainerPtr 를 무효화할 수 있으므로
+						// 그 경우에만 즉시 빠져나와 다음 프레임에 재수집한다. 스칼라/구조체/회전/Enum 같은
+						// "값 변경"은 패널을 끝까지 마저 그린다 — 중간에 return 하면 콘텐츠가 잘려
+						// (뷰포트보다 짧아지면) ImGui 가 스크롤을 맨 위로 클램프하는 문제를 막기 위함.
+						if (Props[i].GetType() == EPropertyType::Array)
+						{
+							ImGui::EndTable();
+							ImGui::PopStyleColor(2);
+							return true;
+						}
 					}
-					ImGui::PopID();
 				}
 
 				ImGui::EndTable();

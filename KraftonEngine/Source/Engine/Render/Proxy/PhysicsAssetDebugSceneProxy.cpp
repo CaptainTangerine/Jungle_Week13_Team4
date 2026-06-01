@@ -242,6 +242,7 @@ void FPhysicsAssetDebugSceneProxy::RebuildLines()
 
 	for (const UBodySetup* Body : Asset->BodySetups)
 	{
+		if (!Comp->IsDrawBodies()) break;   // "Constraint 만 보기" 모드 — 바디 와이어 생략
 		if (!Body) continue;
 
 		const int32 BoneIndex = FindBoneIndexByName(MeshAsset, Body->BoneName);

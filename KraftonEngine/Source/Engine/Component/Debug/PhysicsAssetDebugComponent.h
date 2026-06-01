@@ -43,10 +43,15 @@ public:
 	bool IsDrawConstraints() const { return bDrawConstraints; }
 	void SetDrawConstraints(bool bEnabled) { bDrawConstraints = bEnabled; MarkRenderStateDirty(); }
 
+	// 바디(콜리전 프리미티브) 시각화 토글. off + DrawConstraints on = "Constraint 만 보기" 모드.
+	bool IsDrawBodies() const { return bDrawBodies; }
+	void SetDrawBodies(bool bEnabled) { bDrawBodies = bEnabled; MarkRenderStateDirty(); }
+
 private:
 	UPhysicsAsset*          PhysicsAsset       = nullptr;
 	USkeletalMeshComponent* TargetMeshComponent = nullptr;
 	int32                   SelectedBoneIndex  = -1;
 	bool                    bDrawEnabled       = true;
 	bool                    bDrawConstraints   = true;
+	bool                    bDrawBodies        = true;
 };
