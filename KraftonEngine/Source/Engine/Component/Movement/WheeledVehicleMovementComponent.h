@@ -134,6 +134,10 @@ protected:
 	// CreateVehicle 가 해석/캐시 (비-reflected). SkeletalBody = UpdatedComponent cast.
 	USkeletalMeshComponent* SkeletalBody = nullptr;
 	int32 WheelBoneIndices[NumWheels] = { -1, -1, -1, -1 };
+	// hijack 시 PxRigidDynamic 은 chassis bone 의 world 포즈에 놓인다. B = chassis bone 의 component-space
+	// 글로벌, 이 값은 B⁻¹ — body(actor)→component readback 과 wheel offset 의 frame 변환에 쓴다.
+	// parametric(actor=component 원점) 이면 Identity.
+	FMatrix ChassisBoneInvComponent = FMatrix::Identity;
 
 	// --- Editor-tunable setup (UE FVehicleEngineData / FWheelSetup 의 minimal subset) ---
 	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Mass", Min=1.0f, Max=10000.0f, Speed=1.0f)
