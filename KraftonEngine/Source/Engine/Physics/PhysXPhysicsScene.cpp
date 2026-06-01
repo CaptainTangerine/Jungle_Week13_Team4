@@ -936,6 +936,15 @@ FPhysicsActorHandle FPhysXPhysicsScene::CreateActor(const FActorCreationParams& 
 			NewDynamic->setRigidBodyFlag(PxRigidBodyFlag::eUSE_KINEMATIC_TARGET_FOR_SCENE_QUERIES, true);
 			NewDynamic->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, !Params.bSimulatePhysics);
 			SetDynamicCCDEnabled(NewDynamic, Params.bSimulatePhysics);
+
+			// 랙돌 안정화 (raw 다이내믹 바디 = PhysicsAsset/랙돌 경로):
+			//  - maxDepenetrationVelocity: 기본 무한대라, 스폰 시 바닥/월드와 살짝 겹친 바디를
+			//    무한 속도로 밀어내 폭발한다. 유한값으로 클램프해 부드럽게 분리(가끔 폭발 차단).
+			//  - solverIterationCounts: 기본 (4,1)은 관절 체인이 길면 수렴 부족 → 지터/발산.
+			//    (8,2)로 상향해 조인트 안정성 확보.
+			//  (값은 스케일에 따라 튜닝 여지 있음.)
+			NewDynamic->setMaxDepenetrationVelocity(10.0f);
+			NewDynamic->setSolverIterationCounts(8, 2);
 		}
 		NewActor = NewDynamic;
 	}
