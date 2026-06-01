@@ -599,6 +599,20 @@ static PxTransform GetComponentLocalPoseRelativeToRoot(UPrimitiveComponent* Comp
 	return PxTransform(ToPxVec3(LocalPos), ToPxQuat(LocalRot));
 }
 
+// ============================================================================
+//  지오메트리 빌더 레이어
+//  모든 콜라이더 생성은 아래 두 빌더로 수렴한다:
+//    - AddAggregateGeometryShapes : FKAggregateGeom(Sphere/Box/Sphyl) → shape(들)
+//    - AttachTriangleMeshShape    : 쿡된 트라이앵글 메시 → shape
+//  컴포넌트 경로(AddShapeForComponent)와 raw 경로(AddGeometry)가 둘 다 이 빌더를
+//  공유하고, 경로별 차이는 SetupShape 콜백(필터/트리거/self-collision)으로만 표현한다.
+//
+//  [PxAggregate 불변식] 빌더는 PxRigidActor* 와 PxMaterial* 만 다루며 PxScene/PxAggregate
+//  를 절대 건드리지 않는다(actor-agnostic). 따라서 actor 가 이후 Scene->addActor 로 붙든
+//  PxAggregate->addActor 로 묶이든 shape 생성 로직은 그대로다. self-collision 도 빌더가
+//  아닌 SetupShape 콜백에서 처리하므로, 향후 PxAggregate(selfCollision=false) 도입 시
+//  콜백만 비우면 되고 빌더는 손대지 않는다.
+// ============================================================================
 template<typename ShapeSetupFunc>
 static PxShape* AddAggregateGeometryShapes(
 	PxRigidActor* RigidActor,
@@ -672,6 +686,51 @@ static PxShape* AddAggregateGeometryShapes(
 	}
 
 	return FirstShape;
+}
+
+// 쿡된 트라이앵글 메시 데이터로 단일 shape 를 만들어 붙인다. 트라이앵글 메시는 정적/키네마틱
+// actor 만 백업할 수 있어 월드 정적 지오메트리(StaticMesh) 전용이다.
+// AddAggregateGeometryShapes 와 마찬가지로 actor-agnostic — 씬이나 PxAggregate 를 일절
+// 건드리지 않으므로, actor 가 이후 어떻게 씬에 추가되든(addActor vs addAggregate) 영향이 없다.
+template<typename ShapeSetupFunc>
+static PxShape* AttachTriangleMeshShape(
+	PxPhysics* Physics,
+	PxRigidActor* RigidActor,
+	PxMaterial* Material,
+	const TArray<uint8>& CookedData,
+	const FVector& Scale,
+	const PxTransform& BaseLocalPose,
+	ShapeSetupFunc SetupShape)
+{
+	if (!Physics || !RigidActor || !Material || CookedData.empty())
+	{
+		return nullptr;
+	}
+
+	PxDefaultMemoryInputData InputData(const_cast<PxU8*>(CookedData.data()), static_cast<PxU32>(CookedData.size()));
+	PxTriangleMesh* TriangleMesh = Physics->createTriangleMesh(InputData);
+	if (!TriangleMesh)
+	{
+		UE_LOG("[PhysX] Failed to create PxTriangleMesh from cooked data");
+		return nullptr;
+	}
+
+	const PxVec3 MeshScale(
+		std::abs(Scale.X) > PX_MESH_SCALE_MIN ? Scale.X : (Scale.X < 0.0f ? -PX_MESH_SCALE_MIN : PX_MESH_SCALE_MIN),
+		std::abs(Scale.Y) > PX_MESH_SCALE_MIN ? Scale.Y : (Scale.Y < 0.0f ? -PX_MESH_SCALE_MIN : PX_MESH_SCALE_MIN),
+		std::abs(Scale.Z) > PX_MESH_SCALE_MIN ? Scale.Z : (Scale.Z < 0.0f ? -PX_MESH_SCALE_MIN : PX_MESH_SCALE_MIN));
+
+	PxTriangleMeshGeometry TriGeom(TriangleMesh, PxMeshScale(MeshScale));
+	PxShape* Shape = PxRigidActorExt::createExclusiveShape(*RigidActor, TriGeom, *Material);
+	TriangleMesh->release();   // shape 가 참조를 유지하므로 여기서 release 가능
+	if (!Shape)
+	{
+		return nullptr;
+	}
+
+	Shape->setLocalPose(BaseLocalPose);
+	SetupShape(Shape);
+	return Shape;
 }
 
 static bool IsSceneCCDEnabled()
@@ -1505,31 +1564,42 @@ PxShape* FPhysXPhysicsScene::AddShapeForComponent(FBodyMapping& Mapping, UPrimit
 {
 	if (!Mapping.Actor || !DefaultMaterial || !Comp) return nullptr;
 
-	// Shape Component 타입에 따라 PxGeometry 결정
-	PxGeometryHolder Geom;
-	bool bHasGeom = false;
+	// 모든 콜라이더는 공통 빌더(AddAggregateGeometryShapes / AttachTriangleMeshShape)를 태운다.
+	//   - LocalPose: Comp 의 RootComp 대비 상대 transform (compound shape 배치 기준)
+	//   - SetupShape: 컴포넌트 경로 공통 셋업(필터/트리거/userData)
+	const PxTransform BaseLocalPose = GetComponentLocalPoseRelativeToRoot(Comp, Mapping.RootComp);
+	auto SetupShape = [&](PxShape* Shape) { SetupComponentShape(Shape, Comp); };
 
-	// Capsule은 PhysX에서 X축 기준이므로 로컬 회전 보정 필요
-	PxQuat ShapeAxisRot = PxQuat(PxIdentity);
+	// 프리미티브 콜라이더 컴포넌트(Box/Sphere/Capsule)는 단일 원소 FKAggregateGeom 으로 환산해
+	// BodySetup 기반 경로와 같은 빌더를 공유한다. 컴포넌트 extent 는 이미 월드 스케일이 반영돼
+	// 있으므로 Scale=(1,1,1) 로 넘긴다(이중 스케일 방지). 캡슐의 X축 보정은 빌더가 SphylElem 에
+	// 적용하므로 여기서 따로 처리할 필요가 없다.
+	FKAggregateGeom PrimitiveGeom;
+	bool bHasPrimitive = false;
 
 	if (auto* Box = Cast<UBoxComponent>(Comp))
 	{
-		FVector Ext = Box->GetScaledBoxExtent();
-		Geom = PxBoxGeometry(Ext.X, Ext.Y, Ext.Z);
-		bHasGeom = true;
+		FKBoxElem Elem;
+		Elem.HalfExtent = Box->GetScaledBoxExtent();
+		PrimitiveGeom.BoxElems.push_back(Elem);
+		bHasPrimitive = true;
 	}
 	else if (auto* Sphere = Cast<USphereComponent>(Comp))
 	{
-		Geom = PxSphereGeometry(Sphere->GetScaledSphereRadius());
-		bHasGeom = true;
+		FKSphereElem Elem;
+		Elem.Radius = Sphere->GetScaledSphereRadius();
+		PrimitiveGeom.SphereElems.push_back(Elem);
+		bHasPrimitive = true;
 	}
 	else if (auto* Capsule = Cast<UCapsuleComponent>(Comp))
 	{
-		float Radius = Capsule->GetScaledCapsuleRadius();
-		float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
-		Geom = PxCapsuleGeometry(Radius, HalfHeight - Radius);
-		ShapeAxisRot = PxQuat(PxHalfPi, PxVec3(0.0f, 0.0f, 1.0f));
-		bHasGeom = true;
+		const float Radius = Capsule->GetScaledCapsuleRadius();
+		const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+		FKSphylElem Elem;
+		Elem.Radius = Radius;
+		Elem.Length = 2.0f * std::max(HalfHeight - Radius, 0.0f);  // 원통부 길이(반구 제외)
+		PrimitiveGeom.SphylElems.push_back(Elem);
+		bHasPrimitive = true;
 	}
 	else if (auto* StaticMeshComp = Cast<UStaticMeshComponent>(Comp))
 	{
@@ -1544,31 +1614,12 @@ PxShape* FPhysXPhysicsScene::AddShapeForComponent(FBodyMapping& Mapping, UPrimit
 			&& StaticMeshComp->GetCollisionEnabled() == ECollisionEnabled::QueryAndPhysics
 			&& Mapping.Actor->is<PxRigidStatic>())
 		{
-			TArray<uint8> CookedData = BodySetup->TriMesh.CookedData;
-			PxDefaultMemoryInputData InputData(CookedData.data(), static_cast<PxU32>(CookedData.size()));
-			PxTriangleMesh* TriangleMesh = Physics->createTriangleMesh(InputData);
-			if (!TriangleMesh)
-			{
-				UE_LOG("[PhysX] Failed to create PxTriangleMesh from StaticMesh BodySetup cooked data");
-				return nullptr;
-			}
-
-			const FVector Scale = StaticMeshComp->GetWorldScale();
-			const PxVec3 MeshScale(
-				std::abs(Scale.X) > PX_MESH_SCALE_MIN ? Scale.X : (Scale.X < 0.0f ? -PX_MESH_SCALE_MIN : PX_MESH_SCALE_MIN),
-				std::abs(Scale.Y) > PX_MESH_SCALE_MIN ? Scale.Y : (Scale.Y < 0.0f ? -PX_MESH_SCALE_MIN : PX_MESH_SCALE_MIN),
-				std::abs(Scale.Z) > PX_MESH_SCALE_MIN ? Scale.Z : (Scale.Z < 0.0f ? -PX_MESH_SCALE_MIN : PX_MESH_SCALE_MIN));
-			PxTriangleMeshGeometry TriGeom(TriangleMesh, PxMeshScale(MeshScale));
-			PxShape* Shape = PxRigidActorExt::createExclusiveShape(*Mapping.Actor, TriGeom, *DefaultMaterial);
-			TriangleMesh->release();
-			if (!Shape)
-			{
-				return nullptr;
-			}
-
-			Shape->setLocalPose(GetComponentLocalPoseRelativeToRoot(Comp, Mapping.RootComp));
-			SetupComponentShape(Shape, Comp);
-			return Shape;
+			return AttachTriangleMeshShape(
+				Physics, Mapping.Actor, DefaultMaterial,
+				BodySetup->TriMesh.CookedData,
+				StaticMeshComp->GetWorldScale(),
+				BaseLocalPose,
+				SetupShape);
 		}
 
 		if (BodySetup->AggGeom.GetElementCount() <= 0)
@@ -1577,33 +1628,21 @@ PxShape* FPhysXPhysicsScene::AddShapeForComponent(FBodyMapping& Mapping, UPrimit
 		}
 
 		return AddAggregateGeometryShapes(
-			Mapping.Actor,
-			DefaultMaterial,
+			Mapping.Actor, DefaultMaterial,
 			BodySetup->AggGeom,
 			StaticMeshComp->GetWorldScale(),
-			GetComponentLocalPoseRelativeToRoot(Comp, Mapping.RootComp),
-			[&](PxShape* Shape)
-			{
-				SetupComponentShape(Shape, Comp);
-			});
+			BaseLocalPose,
+			SetupShape);
 	}
 
-	if (!bHasGeom) return nullptr;
+	if (!bHasPrimitive) return nullptr;
 
-	PxShape* Shape = PxRigidActorExt::createExclusiveShape(*Mapping.Actor, Geom.any(), *DefaultMaterial);
-	if (!Shape) return nullptr;
-
-	// Local pose: Comp의 RootComp 대비 상대 transform.
-	// Compound shape에서 자식 컴포넌트가 부모(=PxActor 기준)에 정확히 박혀있도록.
-	PxTransform LocalPose = GetComponentLocalPoseRelativeToRoot(Comp, Mapping.RootComp);
-
-	// Capsule 등 축 보정을 LocalPose의 회전 부분에 합성
-	LocalPose.q = LocalPose.q * ShapeAxisRot;
-	Shape->setLocalPose(LocalPose);
-
-	SetupComponentShape(Shape, Comp);
-
-	return Shape;
+	return AddAggregateGeometryShapes(
+		Mapping.Actor, DefaultMaterial,
+		PrimitiveGeom,
+		FVector(1.0f, 1.0f, 1.0f),
+		BaseLocalPose,
+		SetupShape);
 }
 
 void FPhysXPhysicsScene::DetachShapeForComponent(FBodyMapping& Mapping, UPrimitiveComponent* Comp)
