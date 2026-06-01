@@ -1,4 +1,4 @@
-#include "GameFramework/Pawn/LuaCharacter.h"
+﻿#include "GameFramework/Pawn/LuaCharacter.h"
 
 #include "Component/Camera/CameraComponent.h"
 #include "Component/Shape/CapsuleComponent.h"
@@ -46,7 +46,7 @@ void ALuaCharacter::SetupInputComponent()
 	Super::SetupInputComponent();
 	if (!InputComponent) return;
 
-	// [임시 디버그] R 키 = 래그돌 토글. 켜면 물리 시뮬레이션, 끄면 키네마틱으로
+	// [임시 디버그] R 키 = 전신 래그돌 토글. 켜면 물리 시뮬레이션, 끄면 키네마틱으로
 	// 복귀해 다음 틱부터 anim 포즈를 다시 추종한다. ('R' == VK code)
 	InputComponent->AddActionMapping("ToggleRagdoll", 'R');
 	InputComponent->BindAction("ToggleRagdoll", EInputEvent::Pressed, [this]()
@@ -54,6 +54,18 @@ void ALuaCharacter::SetupInputComponent()
 		if (USkeletalMeshComponent* MeshComp = GetMesh())
 		{
 			MeshComp->SetSimulatePhysics(!MeshComp->IsSimulatingPhysics());
+		}
+	});
+
+	// [임시 디버그] T 키 = 부분 래그돌 토글. 오른팔(UpperArm 이하)만 물리로 풀고
+	// 나머지 몸통/다리는 anim 을 계속 재생한다(히트 리액션 데모). 캡처한 bOn 으로 토글.
+	InputComponent->AddActionMapping("TogglePartialRagdoll", 'T');
+	InputComponent->BindAction("TogglePartialRagdoll", EInputEvent::Pressed, [this, bOn = false]() mutable
+	{
+		bOn = !bOn;
+		if (USkeletalMeshComponent* MeshComp = GetMesh())
+		{
+			MeshComp->SetBodyPhysicsBlendWeight("Bip001 R UpperArm", bOn ? 1.0f : 0.0f, true);
 		}
 	});
 }
