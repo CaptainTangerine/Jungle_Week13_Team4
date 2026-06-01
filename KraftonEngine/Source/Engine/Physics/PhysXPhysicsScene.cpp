@@ -3,10 +3,13 @@
 #include "Component/Shape/BoxComponent.h"
 #include "Component/Shape/SphereComponent.h"
 #include "Component/Shape/CapsuleComponent.h"
+#include "Component/Primitive/StaticMeshComponent.h"
 #include "GameFramework/World.h"
 #include "GameFramework/AActor.h"
 #include "Math/Quat.h"
 #include "Object/Object.h"  // IsAliveObject
+#include "Mesh/Static/StaticMesh.h"
+#include "Physics/Asset/BodySetup.h"
 #include "Physics/Asset/ConstraintSetup.h"
 #include "Core/ProjectSettings.h"
 #include "Core/Logging/Log.h"
@@ -368,6 +371,140 @@ static void SetupDefaultRawBodyFilterData(PxShape* Shape)
 	Shape->setQueryFilterData(Filter);
 }
 
+static bool ShouldUseTriggerShape(UPrimitiveComponent* Comp)
+{
+	if (!Comp)
+	{
+		return false;
+	}
+
+	if (Comp->GetGenerateOverlapEvents())
+	{
+		return true;
+	}
+
+	for (int32 Ch = 0; Ch < static_cast<int32>(ECollisionChannel::ActiveCount); ++Ch)
+	{
+		if (Comp->GetCollisionResponseToChannel(static_cast<ECollisionChannel>(Ch)) == ECollisionResponse::Block)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+static void SetupComponentShape(PxShape* Shape, UPrimitiveComponent* Comp)
+{
+	if (!Shape || !Comp)
+	{
+		return;
+	}
+
+	SetupFilterData(Shape, Comp);
+
+	if (ShouldUseTriggerShape(Comp))
+	{
+		Shape->setFlag(PxShapeFlag::eSIMULATION_SHAPE, false);
+		Shape->setFlag(PxShapeFlag::eTRIGGER_SHAPE, true);
+	}
+
+	Shape->userData = Comp;
+}
+
+static PxTransform GetComponentLocalPoseRelativeToRoot(UPrimitiveComponent* Comp, UPrimitiveComponent* RootComp)
+{
+	if (!Comp || Comp == RootComp || !RootComp)
+	{
+		return PxTransform(PxIdentity);
+	}
+
+	const FVector RootPos = RootComp->GetWorldLocation();
+	const FQuat RootRot = RootComp->GetWorldMatrix().ToQuat();
+	const FVector CompPos = Comp->GetWorldLocation();
+	const FQuat CompRot = Comp->GetWorldMatrix().ToQuat();
+
+	const FQuat InvRootRot = RootRot.Inverse();
+	const FVector LocalPos = InvRootRot.RotateVector(CompPos - RootPos);
+	const FQuat LocalRot = InvRootRot * CompRot;
+
+	return PxTransform(ToPxVec3(LocalPos), ToPxQuat(LocalRot));
+}
+
+template<typename ShapeSetupFunc>
+static PxShape* AddAggregateGeometryShapes(
+	PxRigidActor* RigidActor,
+	PxMaterial* Material,
+	const FKAggregateGeom& GeometryData,
+	const FVector& Scale,
+	const PxTransform& BaseLocalPose,
+	ShapeSetupFunc SetupShape)
+{
+	if (!RigidActor || !Material || GeometryData.GetElementCount() <= 0)
+	{
+		return nullptr;
+	}
+
+	const float AbsScaleX = std::max(std::abs(Scale.X), 0.001f);
+	const float AbsScaleY = std::max(std::abs(Scale.Y), 0.001f);
+	const float AbsScaleZ = std::max(std::abs(Scale.Z), 0.001f);
+	PxShape* FirstShape = nullptr;
+
+	auto ScalePosition = [&](const FVector& P)
+	{
+		return FVector(P.X * Scale.X, P.Y * Scale.Y, P.Z * Scale.Z);
+	};
+
+	auto AttachShape = [&](const PxGeometry& Geometry, const PxTransform& LocalPose)
+	{
+		PxShape* Shape = PxRigidActorExt::createExclusiveShape(*RigidActor, Geometry, *Material);
+		if (!Shape)
+		{
+			return;
+		}
+
+		Shape->setLocalPose(BaseLocalPose * LocalPose);
+		SetupShape(Shape);
+
+		if (!FirstShape)
+		{
+			FirstShape = Shape;
+		}
+	};
+
+	for (const FKSphereElem& Sphere : GeometryData.SphereElems)
+	{
+		const float RadiusScale = std::max({ AbsScaleX, AbsScaleY, AbsScaleZ });
+		const float Radius = std::max(Sphere.Radius * RadiusScale, 0.001f);
+		const PxTransform LocalPose(ToPxVec3(ScalePosition(Sphere.Center)), PxQuat(PxIdentity));
+		AttachShape(PxSphereGeometry(Radius), LocalPose);
+	}
+
+	for (const FKBoxElem& Box : GeometryData.BoxElems)
+	{
+		const float HalfX = std::max(Box.HalfExtent.X * AbsScaleX, 0.001f);
+		const float HalfY = std::max(Box.HalfExtent.Y * AbsScaleY, 0.001f);
+		const float HalfZ = std::max(Box.HalfExtent.Z * AbsScaleZ, 0.001f);
+		const PxTransform LocalPose(
+			ToPxVec3(ScalePosition(Box.Center)),
+			ToPxQuat(Box.Rotation.ToQuaternion()));
+		AttachShape(PxBoxGeometry(HalfX, HalfY, HalfZ), LocalPose);
+	}
+
+	for (const FKSphylElem& Sphyl : GeometryData.SphylElems)
+	{
+		const float RadiusScale = std::max(AbsScaleY, AbsScaleZ);
+		const float Radius = std::max(Sphyl.Radius * RadiusScale, 0.001f);
+		const float HalfHeight = std::max((Sphyl.Length * 0.5f) * AbsScaleX, 0.001f);
+		PxTransform LocalPose(
+			ToPxVec3(ScalePosition(Sphyl.Center)),
+			ToPxQuat(Sphyl.Rotation.ToQuaternion()));
+		LocalPose.q = LocalPose.q * PxQuat(PxHalfPi, PxVec3(0.0f, 0.0f, 1.0f));
+		AttachShape(PxCapsuleGeometry(Radius, HalfHeight), LocalPose);
+	}
+
+	return FirstShape;
+}
+
 static bool IsSceneCCDEnabled()
 {
 	return FProjectSettings::Get().Physics.bEnableCCD;
@@ -567,6 +704,7 @@ void FPhysXPhysicsScene::RegisterComponent(UPrimitiveComponent* Comp)
 	if (!OwnerActor) return;
 
 	FBodyMapping* Mapping = FindMappingByActor(OwnerActor);
+	bool bCreatedMapping = false;
 
 	if (!Mapping)
 	{
@@ -595,11 +733,24 @@ void FPhysXPhysicsScene::RegisterComponent(UPrimitiveComponent* Comp)
 		NewMapping.RootComp = RootPrim;
 		BodyMappings.push_back(NewMapping);
 		Mapping = &BodyMappings.back();
+		bCreatedMapping = true;
 	}
 
 	// shape 추가
 	PxShape* Shape = AddShapeForComponent(*Mapping, Comp);
-	if (!Shape) return;
+	if (!Shape)
+	{
+		if (bCreatedMapping && Mapping->Components.empty())
+		{
+			if (Mapping->Actor)
+			{
+				Scene->removeActor(*Mapping->Actor);
+				Mapping->Actor->release();
+			}
+			BodyMappings.pop_back();
+		}
+		return;
+	}
 	Mapping->Components.push_back(Comp);
 
 	// Dynamic이면 RootComp의 Mass / CenterOfMass로 갱신 (shape 추가될 때마다 inertia 재계산).
@@ -760,63 +911,20 @@ bool FPhysXPhysicsScene::AddGeometry(FPhysicsActorHandle Actor, const FGeometryA
 		return false;
 	}
 
-	const float AbsScaleX = std::max(std::abs(Params.Scale.X), 0.001f);
-	const float AbsScaleY = std::max(std::abs(Params.Scale.Y), 0.001f);
-	const float AbsScaleZ = std::max(std::abs(Params.Scale.Z), 0.001f);
 	const PxTransform BaseLocalPose = ToPxTransform(Params.LocalTransform);
-	int32 NumCreatedShapes = 0;
-
-	auto ScalePosition = [&](const FVector& P)
-	{
-		return FVector(P.X * Params.Scale.X, P.Y * Params.Scale.Y, P.Z * Params.Scale.Z);
-	};
-
-	auto AttachShape = [&](const PxGeometry& Geometry, const PxTransform& LocalPose)
-	{
-		PxShape* Shape = PxRigidActorExt::createExclusiveShape(*RigidActor, Geometry, *DefaultMaterial);
-		if (!Shape)
+	PxShape* FirstShape = AddAggregateGeometryShapes(
+		RigidActor,
+		DefaultMaterial,
+		*Params.Geometry,
+		Params.Scale,
+		BaseLocalPose,
+		[&](PxShape* Shape)
 		{
-			return;
-		}
+			Shape->userData = Params.UserData;
+			SetupDefaultRawBodyFilterData(Shape);
+		});
 
-		Shape->setLocalPose(BaseLocalPose * LocalPose);
-		Shape->userData = Params.UserData;
-		SetupDefaultRawBodyFilterData(Shape);
-		++NumCreatedShapes;
-	};
-
-	for (const FKSphereElem& Sphere : Params.Geometry->SphereElems)
-	{
-		const float RadiusScale = std::max({ AbsScaleX, AbsScaleY, AbsScaleZ });
-		const float Radius = std::max(Sphere.Radius * RadiusScale, 0.001f);
-		const PxTransform LocalPose(ToPxVec3(ScalePosition(Sphere.Center)), PxQuat(PxIdentity));
-		AttachShape(PxSphereGeometry(Radius), LocalPose);
-	}
-
-	for (const FKBoxElem& Box : Params.Geometry->BoxElems)
-	{
-		const float HalfX = std::max(Box.HalfExtent.X * AbsScaleX, 0.001f);
-		const float HalfY = std::max(Box.HalfExtent.Y * AbsScaleY, 0.001f);
-		const float HalfZ = std::max(Box.HalfExtent.Z * AbsScaleZ, 0.001f);
-		const PxTransform LocalPose(
-			ToPxVec3(ScalePosition(Box.Center)),
-			ToPxQuat(Box.Rotation.ToQuaternion()));
-		AttachShape(PxBoxGeometry(HalfX, HalfY, HalfZ), LocalPose);
-	}
-
-	for (const FKSphylElem& Sphyl : Params.Geometry->SphylElems)
-	{
-		const float RadiusScale = std::max(AbsScaleY, AbsScaleZ);
-		const float Radius = std::max(Sphyl.Radius * RadiusScale, 0.001f);
-		const float HalfHeight = std::max((Sphyl.Length * 0.5f) * AbsScaleX, 0.001f);
-		PxTransform LocalPose(
-			ToPxVec3(ScalePosition(Sphyl.Center)),
-			ToPxQuat(Sphyl.Rotation.ToQuaternion()));
-		LocalPose.q = LocalPose.q * PxQuat(PxHalfPi, PxVec3(0.0f, 0.0f, 1.0f));
-		AttachShape(PxCapsuleGeometry(Radius, HalfHeight), LocalPose);
-	}
-
-	if (NumCreatedShapes > 0)
+	if (FirstShape)
 	{
 		if (PxRigidDynamic* Dynamic = RigidActor->is<PxRigidDynamic>())
 		{
@@ -824,7 +932,7 @@ bool FPhysXPhysicsScene::AddGeometry(FPhysicsActorHandle Actor, const FGeometryA
 		}
 	}
 
-	return NumCreatedShapes > 0;
+	return FirstShape != nullptr;
 }
 
 void FPhysXPhysicsScene::SetActorGlobalPose(FPhysicsActorHandle Actor, const FTransform& WorldPose)
@@ -1138,6 +1246,26 @@ PxShape* FPhysXPhysicsScene::AddShapeForComponent(FBodyMapping& Mapping, UPrimit
 		ShapeAxisRot = PxQuat(PxHalfPi, PxVec3(0.0f, 0.0f, 1.0f));
 		bHasGeom = true;
 	}
+	else if (auto* StaticMeshComp = Cast<UStaticMeshComponent>(Comp))
+	{
+		UStaticMesh* StaticMesh = StaticMeshComp->GetStaticMesh();
+		const UBodySetup* BodySetup = StaticMesh ? StaticMesh->GetBodySetup() : nullptr;
+		if (!BodySetup || BodySetup->AggGeom.GetElementCount() <= 0)
+		{
+			return nullptr;
+		}
+
+		return AddAggregateGeometryShapes(
+			Mapping.Actor,
+			DefaultMaterial,
+			BodySetup->AggGeom,
+			StaticMeshComp->GetWorldScale(),
+			GetComponentLocalPoseRelativeToRoot(Comp, Mapping.RootComp),
+			[&](PxShape* Shape)
+			{
+				SetupComponentShape(Shape, Comp);
+			});
+	}
 
 	if (!bHasGeom) return nullptr;
 
@@ -1146,60 +1274,13 @@ PxShape* FPhysXPhysicsScene::AddShapeForComponent(FBodyMapping& Mapping, UPrimit
 
 	// Local pose: Comp의 RootComp 대비 상대 transform.
 	// Compound shape에서 자식 컴포넌트가 부모(=PxActor 기준)에 정확히 박혀있도록.
-	PxTransform LocalPose = PxTransform(PxIdentity);
-	if (Comp != Mapping.RootComp && Mapping.RootComp)
-	{
-		FVector RootPos = Mapping.RootComp->GetWorldLocation();
-		FQuat RootRot = Mapping.RootComp->GetWorldMatrix().ToQuat();
-		FVector CompPos = Comp->GetWorldLocation();
-		FQuat CompRot = Comp->GetWorldMatrix().ToQuat();
-
-		FQuat InvRootRot = RootRot.Inverse();
-		FVector LocalPos = InvRootRot.RotateVector(CompPos - RootPos);
-		FQuat LocalRot = InvRootRot * CompRot;
-
-		LocalPose = PxTransform(ToPxVec3(LocalPos), ToPxQuat(LocalRot));
-	}
+	PxTransform LocalPose = GetComponentLocalPoseRelativeToRoot(Comp, Mapping.RootComp);
 
 	// Capsule 등 축 보정을 LocalPose의 회전 부분에 합성
 	LocalPose.q = LocalPose.q * ShapeAxisRot;
 	Shape->setLocalPose(LocalPose);
 
-	SetupFilterData(Shape, Comp);
-
-	// Trigger flag 결정:
-	//   1) GenerateOverlapEvents=true (명시적 trigger 의도)  OR
-	//   2) 어떤 active 채널에도 Block 응답이 없음 (= simulation 의미 없음, overlap 이벤트만 의도)
-	//
-	// (2)가 핵심 — FilterShader의 PairFlag만으로는 simulation shape pair에서 contact resolve를
-	// 막지 못하는 경우가 있어, 응답이 모두 Overlap/Ignore이면 PhysX shape 자체를 trigger로
-	// 등록해 contact resolve 자체가 발생하지 않도록 한다.
-	//
-	// 같은 PxActor 안에 simulation shape와 trigger shape가 섞이면 PhysX가 거부하므로
-	// 같은 액터의 모든 컴포넌트가 같은 종류여야 안전 (현재 ATriggerVolumeBase는 BoxComponent 1개라 OK).
-	bool bShouldBeTrigger = Comp->GetGenerateOverlapEvents();
-	if (!bShouldBeTrigger)
-	{
-		bool bHasAnyBlockResponse = false;
-		for (int32 Ch = 0; Ch < static_cast<int32>(ECollisionChannel::ActiveCount); ++Ch)
-		{
-			if (Comp->GetCollisionResponseToChannel(static_cast<ECollisionChannel>(Ch)) == ECollisionResponse::Block)
-			{
-				bHasAnyBlockResponse = true;
-				break;
-			}
-		}
-		bShouldBeTrigger = !bHasAnyBlockResponse;
-	}
-
-	if (bShouldBeTrigger)
-	{
-		Shape->setFlag(PxShapeFlag::eSIMULATION_SHAPE, false);
-		Shape->setFlag(PxShapeFlag::eTRIGGER_SHAPE, true);
-	}
-
-	// userData: shape 단위로 PrimitiveComponent 매핑 — 콜백에서 역참조용
-	Shape->userData = Comp;
+	SetupComponentShape(Shape, Comp);
 
 	return Shape;
 }
@@ -1219,7 +1300,6 @@ void FPhysXPhysicsScene::DetachShapeForComponent(FBodyMapping& Mapping, UPrimiti
 		if (Shape && Shape->userData == Comp)
 		{
 			Mapping.Actor->detachShape(*Shape);
-			break;
 		}
 	}
 }

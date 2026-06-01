@@ -50,6 +50,7 @@ void UStaticMeshComponent::SetStaticMesh(UStaticMesh* InMesh)
 	CacheLocalBounds();
 	MarkRenderStateDirty();
 	MarkWorldBoundsDirty();
+	NotifyPhysicsBodyDirty();
 }
 
 void UStaticMeshComponent::CacheLocalBounds()

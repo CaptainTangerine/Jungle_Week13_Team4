@@ -9,6 +9,7 @@
 #include <memory>
 
 struct ID3D11Device;
+class UBodySetup;
 
 // LOD 단계별 GPU 리소스
 struct FLODMeshData
@@ -37,6 +38,9 @@ public:
 	FStaticMesh* GetStaticMeshAsset() const;
 	void SetStaticMaterials(TArray<FStaticMaterial>&& InMaterials);
 	const TArray<FStaticMaterial>& GetStaticMaterials() const;
+	UBodySetup* GetBodySetup() const;
+	UBodySetup* GetOrCreateBodySetup();
+	void BuildDefaultBodySetup();
 
 	void InitResources(ID3D11Device* InDevice);
 
@@ -54,6 +58,7 @@ private:
 
 	FStaticMesh* StaticMeshAsset = nullptr;
 	TArray<FStaticMaterial> StaticMaterials; // 슬롯 이름과 머티리얼 인터페이스를 묶어서 저장하는 배열
+	UBodySetup* BodySetup = nullptr;
 	mutable FMeshTriangleBVH MeshTrianglePickingBVH; // 빠른 picking을 위해 메시 내부에 트리 형태로 만들어지는 자료구조
 
 	// LOD1 (70%), LOD2 (50%), LOD3 (25%) — LOD0 is the original StaticMeshAsset

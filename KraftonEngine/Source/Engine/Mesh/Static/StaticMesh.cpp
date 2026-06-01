@@ -6,6 +6,7 @@
 #include "Texture/Texture2D.h"
 #include "Engine/Profiling/Stats/MemoryStats.h"
 #include "Mesh/MeshSimplifier.h"
+#include "Physics/Asset/BodySetup.h"
 
 UStaticMesh::~UStaticMesh()
 {
@@ -48,6 +49,7 @@ void UStaticMesh::Serialize(FArchive& Ar)
 				}
 			}
 		}
+		BuildDefaultBodySetup();
 	}
 }
 
@@ -135,6 +137,7 @@ void UStaticMesh::SetStaticMeshAsset(FStaticMesh* InMesh)
 		}
 		EnsureMeshTrianglePickingBVHBuilt();
 	}
+	BuildDefaultBodySetup();
 }
 
 FStaticMesh* UStaticMesh::GetStaticMeshAsset() const
@@ -150,6 +153,48 @@ void UStaticMesh::SetStaticMaterials(TArray<FStaticMaterial>&& InMaterials)
 const TArray<FStaticMaterial>& UStaticMesh::GetStaticMaterials() const
 {
 	return StaticMaterials;
+}
+
+UBodySetup* UStaticMesh::GetBodySetup() const
+{
+	return BodySetup;
+}
+
+UBodySetup* UStaticMesh::GetOrCreateBodySetup()
+{
+	if (!BodySetup)
+	{
+		BodySetup = UObjectManager::Get().CreateObject<UBodySetup>(this);
+	}
+	return BodySetup;
+}
+
+void UStaticMesh::BuildDefaultBodySetup()
+{
+	UBodySetup* Setup = GetOrCreateBodySetup();
+	if (!Setup)
+	{
+		return;
+	}
+
+	Setup->AggGeom.SphereElems.clear();
+	Setup->AggGeom.BoxElems.clear();
+	Setup->AggGeom.SphylElems.clear();
+
+	if (!StaticMeshAsset || StaticMeshAsset->Vertices.empty())
+	{
+		return;
+	}
+
+	if (!StaticMeshAsset->bBoundsValid)
+	{
+		StaticMeshAsset->CacheBounds();
+	}
+
+	FKBoxElem BoundsBox;
+	BoundsBox.Center = StaticMeshAsset->BoundsCenter;
+	BoundsBox.HalfExtent = StaticMeshAsset->BoundsExtent;
+	Setup->AggGeom.BoxElems.push_back(BoundsBox);
 }
 
 void UStaticMesh::EnsureMeshTrianglePickingBVHBuilt() const
