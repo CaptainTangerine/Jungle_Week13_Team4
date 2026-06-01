@@ -22,6 +22,13 @@ void AWheeledVehicle::PostDuplicate()
 	EnsureComponents();
 }
 
+void AWheeledVehicle::InitDefaultComponents()
+{
+	// Editor 배치 시 호출 — 컴포넌트를 만들어 두면 details 패널 설정 + 씬 저장이 된다.
+	// 런타임엔 BeginPlay 의 EnsureComponents 가 동일 경로로 재획득하므로 idempotent.
+	EnsureComponents();
+}
+
 void AWheeledVehicle::EnsureComponents()
 {
 	// 1) 차체 skeletal mesh = Root. 최초엔 생성, 이후엔 재획득 (uniquely-typed → GetComponentByClass 로 충분).

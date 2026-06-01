@@ -37,6 +37,10 @@ public:
 	void Tick(float DeltaTime) override;
 	void PostDuplicate() override;
 
+	// Editor "Place Actor" 진입점 — 배치 시점에 컴포넌트를 만들어 details 패널에서 mesh/WheelSetups
+	// 를 설정·저장할 수 있게 한다 (다른 placeable 액터의 InitDefaultComponents 패턴).
+	void InitDefaultComponents();
+
 	USkeletalMeshComponent*           GetVehicleBody()     const { return VehicleBody; }
 	UWheeledVehicleMovementComponent* GetVehicleMovement() const { return VehicleMC; }
 
