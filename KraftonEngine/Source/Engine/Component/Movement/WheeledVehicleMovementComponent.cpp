@@ -210,12 +210,13 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	for (int32 i = 0; i < NumWheels; ++i) WheelBoneIndices[i] = -1;
 	if (SkeletalBody)
 	{
-		const FString WheelBoneNames[4] = { WheelBoneFL, WheelBoneFR, WheelBoneRL, WheelBoneRR };
 		TArray<FTransform> BoneGlobals;
 		SkeletalBody->GetCurrentBoneGlobalTransforms(BoneGlobals);
-		for (int32 i = 0; i < NumWheels; ++i)
+		for (int32 i = 0; i < NumWheels && i < static_cast<int32>(WheelSetups.size()); ++i)
 		{
-			const int32 BoneIdx = SkeletalBody->FindBoneIndex(WheelBoneNames[i]);
+			const FString& BoneName = WheelSetups[i].BoneName;
+			if (BoneName.empty()) continue;
+			const int32 BoneIdx = SkeletalBody->FindBoneIndex(BoneName);
 			WheelBoneIndices[i] = BoneIdx;
 			if (BoneIdx >= 0 && BoneIdx < static_cast<int32>(BoneGlobals.size()))
 			{
@@ -392,7 +393,10 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 
 	for (PxU32 i = 0; i < NW; ++i)
 	{
-		const bool bFront = (i == WO::eFRONT_LEFT || i == WO::eFRONT_RIGHT);
+		// steer/handbrake 적용은 WheelSetups 플래그로 (설정 부족 시 index 기본: 앞=steer, 뒤=handbrake).
+		const bool bHasSetup = (static_cast<int32>(i) < static_cast<int32>(WheelSetups.size()));
+		const bool bSteer = bHasSetup ? WheelSetups[i].bAffectedBySteering  : (i == WO::eFRONT_LEFT || i == WO::eFRONT_RIGHT);
+		const bool bHand  = bHasSetup ? WheelSetups[i].bAffectedByHandbrake : (i == WO::eREAR_LEFT  || i == WO::eREAR_RIGHT);
 
 		PxVehicleWheelData Wheel;
 		Wheel.mMass               = WheelMass;
@@ -400,8 +404,8 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 		Wheel.mRadius             = WheelRadius;
 		Wheel.mWidth              = WheelWidth;
 		Wheel.mMaxBrakeTorque     = 1500.0f;
-		Wheel.mMaxSteer           = bFront ? MaxSteerRad : 0.0f;
-		Wheel.mMaxHandBrakeTorque = bFront ? 0.0f : 4000.0f;
+		Wheel.mMaxSteer           = bSteer ? MaxSteerRad : 0.0f;
+		Wheel.mMaxHandBrakeTorque = bHand  ? 4000.0f : 0.0f;
 
 		PxVehicleTireData Tire;
 		Tire.mType = 0;   // FrictionPairs 의 tire 타입 0
@@ -526,3 +530,14 @@ void UWheeledVehicleMovementComponent::ApplyWheelPose(int32 WheelIndex, const FT
 	// 중간 본/offset 이 있는 일반 계층에서는 parent component-space 로의 변환이 필요 (follow-up).
 	SkeletalBody->SetBoneLocalTransformByIndex(BoneIdx, LocalPose);
 }
+
+//void UWheeledVehicleMovementComponent::EnsureWheelSetUp(TArray<FBodyInstance*>& InBI)
+//{
+//	for (uint32 i = 0; i < InBI.size(); i++)
+//	{
+//		auto* BI = InBI[i];
+//		if (!BI) continue;
+//
+//		auto& Handle = BI->ActorHandle;
+//	}
+//}
