@@ -502,9 +502,20 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 		PScene->addActor(*Actor);
 	}
 
+	auto T = Actor->getGlobalPose();
+	const FMatrix BodyWorld = FTransform(
+		FVector(T.p.x, T.p.y, T.p.z),
+		FQuat(T.q.x, T.q.y, T.q.z, T.q.w),
+		FVector(1.0f, 1.0f, 1.0f)).ToMatrix();
+	const auto Pos = BodyWorld.GetLocation();
+
 	PVehicle      = Vehicle;
 	PVehicleActor = Actor;
 	HijackedBody  = ChassisBI;   // null 이면 parametric (우리가 actor 소유)
+
+	FTransform Second;
+	GetChassisWorldTransform(Second);
+	const auto Pos2 = Second.ToMatrix().GetLocation();
 
 	UE_LOG("[WheeledVehicleMC] CreateVehicle: PxVehicleDrive4W created (%s chassis, mass=%.1f kg).",
 		bHijack ? "asset" : "parametric", Mass);
