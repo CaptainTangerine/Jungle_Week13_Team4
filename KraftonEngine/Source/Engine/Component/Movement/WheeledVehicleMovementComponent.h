@@ -16,6 +16,20 @@ class FPhysXVehicleManager;
 class USkeletalMeshComponent;
 struct FBodyInstance;
 
+// 휠 1개의 setup — 매핑되는 skeletal mesh bone + 스티어/핸드브레이크 적용 여부 (UE FWheelSetup 패턴).
+USTRUCT()
+struct FWheelSetup
+{
+	GENERATED_BODY()
+
+	UPROPERTY(Edit, Save, Category="Wheel", DisplayName="Bone Name")
+	FString BoneName;
+	UPROPERTY(Edit, Save, Category="Wheel", DisplayName="Affected By Steering")
+	bool bAffectedBySteering = false;
+	UPROPERTY(Edit, Save, Category="Wheel", DisplayName="Affected By Handbrake")
+	bool bAffectedByHandbrake = false;
+};
+
 // ============================================================
 // UWheeledVehicleMovementComponent — PxVehicleDrive4W 기반 4륜 차량 이동 컴포넌트.
 // UE4 pre-Chaos UWheeledVehicleMovementComponent 대응.
@@ -81,6 +95,9 @@ protected:
 	// PxVehicle 해제 + 핸들 정리.
 	void DestroyVehicle();
 
+	// Functional hijack. Ensure kinematic body for wheels
+	//void EnsureWheelSetUp(TArray<FBodyInstance*>& InBI);
+
 	// Scene 이 소유한 vehicle manager 를 찾아 자신을 register/unregister 한다 (핸드셰이크).
 	void RegisterWithManager();
 	void UnregisterFromManager();
@@ -100,17 +117,16 @@ protected:
 	float SteeringInput   = 0.0f;
 	bool  bHandbrakeInput = false;
 
-	// wheel → skeletal-mesh bone 매핑 (UE WheelSetup.BoneName 패턴). CreateVehicle 가 wheel 위치를
-	// 이 본들의 component-space 위치에서 가져오고, 출력 시 같은 본에 pose 를 쓴다.
-	// 순서: FrontLeft / FrontRight / RearLeft / RearRight (PxVehicleDrive4WWheelOrder).
-	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Bone FL")
-	FString WheelBoneFL = "Wheel_FL";
-	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Bone FR")
-	FString WheelBoneFR = "Wheel_FR";
-	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Bone RL")
-	FString WheelBoneRL = "Wheel_RL";
-	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Bone RR")
-	FString WheelBoneRR = "Wheel_RR";
+	// wheel → bone 매핑 + per-wheel 속성 (UE WheelSetups 패턴). 순서 = PxVehicleDrive4WWheelOrder
+	// (0=FL, 1=FR, 2=RL, 3=RR), 정확히 NumWheels(4) 개. CreateVehicle 가 이 본들의 component-space
+	// 위치에서 wheel 위치를 읽고 출력 시 같은 본에 pose 를 쓴다.
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Setups")
+	TArray<FWheelSetup> WheelSetups = {
+		FWheelSetup{ "Wheel_FL", true,  false },
+		FWheelSetup{ "Wheel_FR", true,  false },
+		FWheelSetup{ "Wheel_RL", false, true  },
+		FWheelSetup{ "Wheel_RR", false, true  },
+	};
 
 	// CreateVehicle 가 해석/캐시 (비-reflected). SkeletalBody = UpdatedComponent cast.
 	USkeletalMeshComponent* SkeletalBody = nullptr;
