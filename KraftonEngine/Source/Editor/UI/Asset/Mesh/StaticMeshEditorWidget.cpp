@@ -293,6 +293,7 @@ void FStaticMeshEditorWidget::RenderMeshStatsOverlay(ImDrawList* DrawList, const
 
 void FStaticMeshEditorWidget::RenderDetailsPanel(UStaticMesh* StaticMesh)
 {
+	static FString LastTriMeshCookError;
 	FStaticMesh* Asset = StaticMesh ? StaticMesh->GetStaticMeshAsset() : nullptr;
 	if (!Asset)
 	{
@@ -315,10 +316,36 @@ void FStaticMeshEditorWidget::RenderDetailsPanel(UStaticMesh* StaticMesh)
 		ImGui::Text("Boxes: %s", FormatStaticMeshStatCount(BodySetup->AggGeom.BoxElems.size()).c_str());
 		ImGui::Text("Spheres: %s", FormatStaticMeshStatCount(BodySetup->AggGeom.SphereElems.size()).c_str());
 		ImGui::Text("Capsules: %s", FormatStaticMeshStatCount(BodySetup->AggGeom.SphylElems.size()).c_str());
+		ImGui::Text("TriMesh Triangles: %s", FormatStaticMeshStatCount(BodySetup->TriMesh.Indices.size() / 3).c_str());
+		ImGui::Text("TriMesh Cooked: %s bytes", FormatStaticMeshStatCount(BodySetup->TriMesh.CookedData.size()).c_str());
 	}
 	else
 	{
 		ImGui::TextDisabled("BodySetup: Missing");
+	}
+
+	if (ImGui::Button("Generate TriMesh From Render Mesh") && StaticMesh)
+	{
+		FString Error;
+		if (StaticMesh->BuildTriMeshBodySetup(&Error))
+		{
+			LastTriMeshCookError.clear();
+			if (UStaticMeshComponent* PreviewComp = ViewportClient.GetPreviewMeshComponent())
+			{
+				PreviewComp->MarkProxyDirty(EDirtyFlag::Mesh);
+			}
+			MarkDirty();
+		}
+		else
+		{
+			LastTriMeshCookError = Error.empty() ? "Unknown TriMesh cooking error." : Error;
+			ImGui::OpenPopup("TriMeshCookFailed");
+		}
+	}
+	if (ImGui::BeginPopup("TriMeshCookFailed"))
+	{
+		ImGui::TextWrapped("%s", LastTriMeshCookError.c_str());
+		ImGui::EndPopup();
 	}
 
 	if (ImGui::Button("Reset To Bounds Box") && StaticMesh)

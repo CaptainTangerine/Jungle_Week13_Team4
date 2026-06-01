@@ -18,6 +18,12 @@ namespace
 			|| Version == 0
 			|| Version >= FAssetPackageHeader::VersionStaticMeshBodySetup;
 	}
+
+	bool ShouldSerializeStaticMeshTriMeshData(const FArchive& Ar)
+	{
+		return Ar.IsSaving()
+			|| Ar.GetPackageVersion() >= FAssetPackageHeader::VersionStaticMeshTriMeshBodySetup;
+	}
 }
 
 UStaticMesh::~UStaticMesh()
@@ -54,6 +60,15 @@ void UStaticMesh::Serialize(FArchive& Ar)
 	if (ShouldSerializeStaticMeshBodySetup(Ar))
 	{
 		SerializeProperties(Ar, PF_Save);
+	}
+
+	if (ShouldSerializeStaticMeshTriMeshData(Ar))
+	{
+		UBodySetup* Setup = Ar.IsSaving() ? BodySetup : GetOrCreateBodySetup();
+		if (Setup)
+		{
+			Ar << Setup->TriMesh;
+		}
 	}
 
 	// 3. 로딩 시 Section → MaterialIndex 매핑 캐싱 (매 프레임 문자열 비교 방지)
@@ -208,6 +223,7 @@ void UStaticMesh::BuildDefaultBodySetup()
 	Setup->AggGeom.SphereElems.clear();
 	Setup->AggGeom.BoxElems.clear();
 	Setup->AggGeom.SphylElems.clear();
+	Setup->TriMesh.Clear();
 
 	if (!StaticMeshAsset || StaticMeshAsset->Vertices.empty())
 	{
@@ -223,6 +239,21 @@ void UStaticMesh::BuildDefaultBodySetup()
 	BoundsBox.Center = StaticMeshAsset->BoundsCenter;
 	BoundsBox.HalfExtent = StaticMeshAsset->BoundsExtent;
 	Setup->AggGeom.BoxElems.push_back(BoundsBox);
+}
+
+bool UStaticMesh::BuildTriMeshBodySetup(FString* OutError)
+{
+	if (!StaticMeshAsset)
+	{
+		if (OutError)
+		{
+			*OutError = "StaticMesh asset data is missing.";
+		}
+		return false;
+	}
+
+	UBodySetup* Setup = GetOrCreateBodySetup();
+	return Setup ? Setup->BuildTriMeshFromStaticMesh(*StaticMeshAsset, OutError) : false;
 }
 
 void UStaticMesh::EnsureMeshTrianglePickingBVHBuilt() const

@@ -34,6 +34,9 @@ class FPhysXSimulationCallback;
 class FPhysXPhysicsScene : public IPhysicsScene
 {
 public:
+	static bool CookTriangleMesh(const TArray<FVector>& Vertices, const TArray<int32>& Indices,
+		TArray<uint8>& OutCookedData, FString* OutError = nullptr);
+
 	void Initialize(UWorld* InWorld) override;
 	void Shutdown() override;
 	bool IsInitialized() const override { return Scene != nullptr && Physics != nullptr && DefaultMaterial != nullptr; }

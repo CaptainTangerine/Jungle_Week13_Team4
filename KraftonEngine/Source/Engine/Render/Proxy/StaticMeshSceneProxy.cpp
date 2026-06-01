@@ -188,7 +188,7 @@ void FStaticMeshSceneProxy::RebuildCollisionLines()
 	UStaticMeshComponent* SMC = GetStaticMeshComponent();
 	UStaticMesh* Mesh = SMC ? SMC->GetStaticMesh() : nullptr;
 	const UBodySetup* BodySetup = Mesh ? Mesh->GetBodySetup() : nullptr;
-	if (!SMC || !BodySetup || BodySetup->AggGeom.GetElementCount() <= 0)
+	if (!SMC || !BodySetup || (BodySetup->AggGeom.GetElementCount() <= 0 && !BodySetup->TriMesh.HasSourceMesh()))
 	{
 		return;
 	}
@@ -235,6 +235,31 @@ void FStaticMeshSceneProxy::RebuildCollisionLines()
 		const float Radius = Elem.Radius * std::max(AbsScale.X, AbsScale.Z);
 		const float HalfLength = Elem.Length * 0.5f * AbsScale.Y;
 		BuildCapsule(CachedCollisionLines, ToWorld(Elem.Center), CapX, CapY, CapZ, Radius, HalfLength);
+	}
+
+	const FTriMeshCollisionData& TriMesh = BodySetup->TriMesh;
+	if (TriMesh.HasSourceMesh())
+	{
+		for (size_t Index = 0; Index + 2 < TriMesh.Indices.size(); Index += 3)
+		{
+			const int32 IA = TriMesh.Indices[Index + 0];
+			const int32 IB = TriMesh.Indices[Index + 1];
+			const int32 IC = TriMesh.Indices[Index + 2];
+			if (IA < 0 || IB < 0 || IC < 0
+				|| IA >= static_cast<int32>(TriMesh.Vertices.size())
+				|| IB >= static_cast<int32>(TriMesh.Vertices.size())
+				|| IC >= static_cast<int32>(TriMesh.Vertices.size()))
+			{
+				continue;
+			}
+
+			const FVector A = ToWorld(TriMesh.Vertices[IA]);
+			const FVector B = ToWorld(TriMesh.Vertices[IB]);
+			const FVector C = ToWorld(TriMesh.Vertices[IC]);
+			AddLine(CachedCollisionLines, A, B);
+			AddLine(CachedCollisionLines, B, C);
+			AddLine(CachedCollisionLines, C, A);
+		}
 	}
 }
 

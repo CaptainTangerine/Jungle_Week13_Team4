@@ -18,6 +18,7 @@
 #include <PxPhysicsAPI.h>
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 using namespace physx;
 
@@ -78,6 +79,96 @@ static void ReleaseSharedPhysX()
 		if (GSharedFoundation) { GSharedFoundation->release(); GSharedFoundation = nullptr; }
 		GSharedRefCount = 0;
 	}
+}
+
+static const char* TriangleCookingResultToString(PxTriangleMeshCookingResult::Enum Result)
+{
+	switch (Result)
+	{
+	case PxTriangleMeshCookingResult::eSUCCESS:
+		return "success";
+	case PxTriangleMeshCookingResult::eLARGE_TRIANGLE:
+		return "large triangle";
+	case PxTriangleMeshCookingResult::eFAILURE:
+	default:
+		return "failure";
+	}
+}
+
+bool FPhysXPhysicsScene::CookTriangleMesh(const TArray<FVector>& Vertices, const TArray<int32>& Indices,
+	TArray<uint8>& OutCookedData, FString* OutError)
+{
+	auto SetError = [OutError](const char* Message)
+	{
+		if (OutError)
+		{
+			*OutError = Message ? Message : "";
+		}
+	};
+
+	OutCookedData.clear();
+	if (Vertices.size() < 3 || Indices.size() < 3 || (Indices.size() % 3) != 0)
+	{
+		SetError("Triangle mesh input is incomplete.");
+		return false;
+	}
+
+	PxFoundation* CookingFoundation = nullptr;
+	PxPhysics* CookingPhysics = nullptr;
+	AcquireSharedPhysX(CookingFoundation, CookingPhysics);
+	if (!CookingFoundation || !CookingPhysics)
+	{
+		ReleaseSharedPhysX();
+		SetError("PhysX Foundation/Physics could not be created for cooking.");
+		return false;
+	}
+
+	PxCookingParams CookingParams(CookingPhysics->getTolerancesScale());
+	CookingParams.meshPreprocessParams |= PxMeshPreprocessingFlag::eWELD_VERTICES;
+	CookingParams.meshWeldTolerance = 0.001f;
+
+	PxCooking* Cooking = PxCreateCooking(PX_PHYSICS_VERSION, *CookingFoundation, CookingParams);
+	if (!Cooking)
+	{
+		ReleaseSharedPhysX();
+		SetError("PxCreateCooking failed.");
+		return false;
+	}
+
+	PxTriangleMeshDesc Desc;
+	Desc.points.count = static_cast<PxU32>(Vertices.size());
+	Desc.points.stride = sizeof(FVector);
+	Desc.points.data = Vertices.data();
+	Desc.triangles.count = static_cast<PxU32>(Indices.size() / 3);
+	Desc.triangles.stride = sizeof(int32) * 3;
+	Desc.triangles.data = Indices.data();
+
+	PxTriangleMeshCookingResult::Enum CookResult = PxTriangleMeshCookingResult::eFAILURE;
+	PxDefaultMemoryOutputStream OutputStream;
+	const bool bCooked = Cooking->cookTriangleMesh(Desc, OutputStream, &CookResult);
+	if (bCooked && CookResult != PxTriangleMeshCookingResult::eFAILURE && OutputStream.getSize() > 0)
+	{
+		const PxU32 Size = OutputStream.getSize();
+		OutCookedData.resize(Size);
+		std::memcpy(OutCookedData.data(), OutputStream.getData(), Size);
+	}
+	else
+	{
+		FString Message = "PxCooking::cookTriangleMesh failed: ";
+		Message += TriangleCookingResultToString(CookResult);
+		SetError(Message.c_str());
+	}
+
+	Cooking->release();
+	ReleaseSharedPhysX();
+
+	if (OutCookedData.empty())
+	{
+		return false;
+	}
+
+	SetError("");
+	return true;
 }
 
 // ============================================================
@@ -1250,7 +1341,43 @@ PxShape* FPhysXPhysicsScene::AddShapeForComponent(FBodyMapping& Mapping, UPrimit
 	{
 		UStaticMesh* StaticMesh = StaticMeshComp->GetStaticMesh();
 		const UBodySetup* BodySetup = StaticMesh ? StaticMesh->GetBodySetup() : nullptr;
-		if (!BodySetup || BodySetup->AggGeom.GetElementCount() <= 0)
+		if (!BodySetup)
+		{
+			return nullptr;
+		}
+
+		if (BodySetup->HasTriMeshCollision()
+			&& StaticMeshComp->GetCollisionEnabled() == ECollisionEnabled::QueryAndPhysics
+			&& Mapping.Actor->is<PxRigidStatic>())
+		{
+			TArray<uint8> CookedData = BodySetup->TriMesh.CookedData;
+			PxDefaultMemoryInputData InputData(CookedData.data(), static_cast<PxU32>(CookedData.size()));
+			PxTriangleMesh* TriangleMesh = Physics->createTriangleMesh(InputData);
+			if (!TriangleMesh)
+			{
+				UE_LOG("[PhysX] Failed to create PxTriangleMesh from StaticMesh BodySetup cooked data");
+				return nullptr;
+			}
+
+			const FVector Scale = StaticMeshComp->GetWorldScale();
+			const PxVec3 MeshScale(
+				std::abs(Scale.X) > PX_MESH_SCALE_MIN ? Scale.X : (Scale.X < 0.0f ? -PX_MESH_SCALE_MIN : PX_MESH_SCALE_MIN),
+				std::abs(Scale.Y) > PX_MESH_SCALE_MIN ? Scale.Y : (Scale.Y < 0.0f ? -PX_MESH_SCALE_MIN : PX_MESH_SCALE_MIN),
+				std::abs(Scale.Z) > PX_MESH_SCALE_MIN ? Scale.Z : (Scale.Z < 0.0f ? -PX_MESH_SCALE_MIN : PX_MESH_SCALE_MIN));
+			PxTriangleMeshGeometry TriGeom(TriangleMesh, PxMeshScale(MeshScale));
+			PxShape* Shape = PxRigidActorExt::createExclusiveShape(*Mapping.Actor, TriGeom, *DefaultMaterial);
+			TriangleMesh->release();
+			if (!Shape)
+			{
+				return nullptr;
+			}
+
+			Shape->setLocalPose(GetComponentLocalPoseRelativeToRoot(Comp, Mapping.RootComp));
+			SetupComponentShape(Shape, Comp);
+			return Shape;
+		}
+
+		if (BodySetup->AggGeom.GetElementCount() <= 0)
 		{
 			return nullptr;
 		}

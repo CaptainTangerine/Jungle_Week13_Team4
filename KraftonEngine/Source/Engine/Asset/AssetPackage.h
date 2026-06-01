@@ -24,7 +24,8 @@ struct FAssetPackageHeader
 {
 	static constexpr uint32 MagicValue = 0x54455341; // ASET
 	static constexpr uint32 VersionStaticMeshBodySetup = 4;
-	static constexpr uint32 CurrentVersion = VersionStaticMeshBodySetup;
+	static constexpr uint32 VersionStaticMeshTriMeshBodySetup = 5;
+	static constexpr uint32 CurrentVersion = VersionStaticMeshTriMeshBodySetup;
 
 	uint32 Magic = MagicValue;
 	uint32 Version = CurrentVersion;

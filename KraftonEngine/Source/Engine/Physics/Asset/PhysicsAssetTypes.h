@@ -78,3 +78,43 @@ struct FKAggregateGeom
 		return static_cast<int32>(SphereElems.size() + BoxElems.size() + SphylElems.size());
 	}
 };
+
+struct FTriMeshCollisionData
+{
+	TArray<FVector> Vertices;
+	TArray<int32> Indices;
+	TArray<uint8> CookedData;
+	int32 SourceVertexCount = 0;
+	int32 SourceTriangleCount = 0;
+	int32 CookedFormatVersion = 1;
+
+	void Clear()
+	{
+		Vertices.clear();
+		Indices.clear();
+		CookedData.clear();
+		SourceVertexCount = 0;
+		SourceTriangleCount = 0;
+	}
+
+	bool HasSourceMesh() const
+	{
+		return Vertices.size() >= 3 && Indices.size() >= 3;
+	}
+
+	bool HasCookedData() const
+	{
+		return !CookedData.empty();
+	}
+};
+
+inline FArchive& operator<<(FArchive& Ar, FTriMeshCollisionData& Data)
+{
+	Ar << Data.Vertices;
+	Ar << Data.Indices;
+	Ar << Data.CookedData;
+	Ar << Data.SourceVertexCount;
+	Ar << Data.SourceTriangleCount;
+	Ar << Data.CookedFormatVersion;
+	return Ar;
+}

@@ -11,6 +11,7 @@
 #include "Source/Engine/Physics/Asset/BodySetup.generated.h"
 
 class IPhysicsScene;
+struct FStaticMesh;
 
 UENUM()
 enum EPhysicsType
@@ -61,9 +62,12 @@ public:
 		const FTransform& RelativeTM = FTransform(),
 		const FTransform& WorldTransform = FTransform(),
 		void* UserData = nullptr) const;
+	bool BuildTriMeshFromStaticMesh(const FStaticMesh& Mesh, FString* OutError = nullptr);
+	bool HasTriMeshCollision() const { return TriMesh.HasCookedData(); }
 
 	UPROPERTY(Edit, Save, Category="BodySetup", DisplayName="Primitives", Type=Struct)
 	FKAggregateGeom AggGeom;
+	FTriMeshCollisionData TriMesh;
 	UPROPERTY(Edit, Save, Category="BodySetup", DisplayName="Default Mass", Min=0.f, Speed=0.1f)
 	float DefaultMass = 1.f;
 	// 본별 기본 바디 인스턴스 설정(Simulate / Enable Gravity / Start Awake / Override Mass 등).

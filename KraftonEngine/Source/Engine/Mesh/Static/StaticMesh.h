@@ -41,6 +41,7 @@ public:
 	UBodySetup* GetBodySetup() const;
 	UBodySetup* GetOrCreateBodySetup();
 	void BuildDefaultBodySetup();
+	bool BuildTriMeshBodySetup(FString* OutError = nullptr);
 
 	void InitResources(ID3D11Device* InDevice);
 
