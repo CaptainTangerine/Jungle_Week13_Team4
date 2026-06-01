@@ -1,4 +1,4 @@
-#include "WheeledVehicle.h"
+﻿#include "WheeledVehicle.h"
 
 #include "Component/Primitive/StaticMeshComponent.h"
 #include "Component/Movement/WheeledVehicleMovementComponent.h"
@@ -44,28 +44,24 @@ void AWheeledVehicle::EnsureComponents()
 		// TODO: 차체 static mesh 지정 (editor 의 Static Mesh 프로퍼티 또는 코드). 없어도 물리는 정상 구동.
 	}
 
-	// 2) Wheel static mesh ×4 — body/wheel 이 모두 StaticMesh 라 FName("Wheel_i") 로 재획득/생성.
-	//    BodyMesh(=Root, chassis) 에 부착 → Tick 이 chassis-local pose 를 relative transform 으로 적용.
-	for (int32 i = 0; i < NumWheels; ++i)
+	// Wheel mesh 재획득: BodyMesh 의 static-mesh 자식을 순서대로. (컴포넌트 이름은 직렬화되지
+	// 않으므로 FName 매칭은 load 후 깨진다 → 순서로 매칭. load 는 Children 배열 순서,
+	// PIE-dup 은 GetChildren() 순회 순서를 보존하고, SpringArm/Camera 는 타입이 달라 제외된다.)
+	for (int32 i = 0; i < NumWheels; ++i) WheelMesh[i] = nullptr;
+
+	int32 Found = 0;
+	for (USceneComponent* Child : BodyMesh->GetChildren())
 	{
-		const FName WheelName(FString("Wheel_") + std::to_string(i));
-		WheelMesh[i] = nullptr;
-		for (UActorComponent* Comp : GetComponents())
-		{
-			UStaticMeshComponent* SM = Cast<UStaticMeshComponent>(Comp);
-			if (SM && SM != BodyMesh && SM->GetFName() == WheelName)
-			{
-				WheelMesh[i] = SM;
-				break;
-			}
-		}
-		if (!WheelMesh[i])
-		{
-			WheelMesh[i] = AddComponent<UStaticMeshComponent>();
-			WheelMesh[i]->SetFName(WheelName);
-			WheelMesh[i]->AttachToComponent(BodyMesh);
-			// TODO: wheel static mesh 지정 (editor 또는 코드).
-		}
+		if (Found >= NumWheels) break;
+		if (UStaticMeshComponent* SM = Cast<UStaticMeshComponent>(Child))
+			WheelMesh[Found++] = SM;
+	}
+	// 부족분만 생성 (최초 배치 시). 이름은 outliner 가독성용 — 매칭엔 안 쓴다.
+	for (int32 i = Found; i < NumWheels; ++i)
+	{
+		WheelMesh[i] = AddComponent<UStaticMeshComponent>();
+		WheelMesh[i]->SetFName(FName(FString("Wheel_") + std::to_string(i)));
+		WheelMesh[i]->AttachToComponent(BodyMesh);
 	}
 
 	// 3) Movement component.
@@ -117,13 +113,16 @@ void AWheeledVehicle::Tick(float DeltaTime)
 
 	// Wheel pose 반영 (suspension 변위 + steer/spin) — chassis-local pose 를 각 WheelMesh 의
 	// relative transform 에 적용. scale 은 에디터 값 유지를 위해 location/rotation 만 쓴다.
+	// WheelAlign(보정)을 먼저 적용(로컬 재정렬) 후 wheel local pose 를 합성: row-vector 컨벤션상
+	// 왼쪽 피연산자가 먼저 적용된다 (boneToWorld = boneGlobal * componentToWorld 와 동일).
+	const FQuat WheelAlign = WheelMeshRotationOffset.ToQuaternion();
 	FTransform WheelPoses[NumWheels];
 	const int32 Count = VehicleMC->GetWheelPoses(WheelPoses, NumWheels);
 	for (int32 i = 0; i < Count && i < NumWheels; ++i)
 	{
 		if (!WheelMesh[i]) continue;
 		WheelMesh[i]->SetRelativeLocation(WheelPoses[i].Location);
-		WheelMesh[i]->SetRelativeRotation(WheelPoses[i].Rotation);
+		WheelMesh[i]->SetRelativeRotation(WheelAlign * WheelPoses[i].Rotation);
 	}
 }
 

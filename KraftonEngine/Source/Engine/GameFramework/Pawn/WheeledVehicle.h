@@ -1,5 +1,6 @@
 #pragma once
 #include "Pawn.h"
+#include "Math/Rotator.h"
 
 #include "Source/Engine/GameFramework/Pawn/WheeledVehicle.generated.h"
 
@@ -22,7 +23,8 @@ class UCameraComponent;
 //
 // 직렬화: actor→component 멤버 포인터는 직렬화 제외 → EnsureComponents() 가 생성 또는 재획득 +
 //   UpdatedComponent 재연결을 idempotent 하게 처리하고 BeginPlay/PostDuplicate 양쪽에서 호출.
-//   바퀴는 동일 타입(StaticMesh)이라 FName("Wheel_i") 로 재획득한다.
+//   바퀴는 동일 타입(StaticMesh)이라 BodyMesh 의 static-mesh 자식 순서로 재획득한다
+//   (컴포넌트 이름은 직렬화 안 됨 → 순서 매칭. 생성/load/dup 모두 순서 보존).
 //   PhysX body 는 transient — MC 가 BeginPlay 에 tunable(UPROPERTY Save)로 재생성.
 // ============================================================
 UCLASS()
@@ -51,6 +53,12 @@ protected:
 
 	// 컴포넌트 생성(최초) 또는 재획득(load/dup) + MC UpdatedComponent 재연결. idempotent.
 	void EnsureComponents();
+
+	// 휠 메시 정렬 보정. PhysX 는 휠을 actor lateral(로컬 Y) 축으로 회전시킨다 (+X 전방, +Z 위).
+	// 휠 static mesh 가 이 컨벤션(허브=컴포넌트 원점, 롤 축=로컬 Y)으로 제작되지 않았으면 이 값으로
+	// 보정한다. 기본값(0,0,0)이면 영향 없음 (Tick 에서 wheel local pose 에 합성).
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Mesh Rotation Offset")
+	FRotator WheelMeshRotationOffset;
 
 	UStaticMeshComponent*             BodyMesh    = nullptr;   // 차체 visual = Root (← MC UpdatedComponent)
 	UStaticMeshComponent*             WheelMesh[NumWheels] = { nullptr, nullptr, nullptr, nullptr };
