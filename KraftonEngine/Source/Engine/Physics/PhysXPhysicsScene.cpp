@@ -518,11 +518,11 @@ void FPhysXPhysicsScene::Shutdown()
 	}
 	BodyMappings.clear();
 
+	if (VehicleManager) { VehicleManager->Release(); delete VehicleManager; VehicleManager = nullptr; }
 	if (DefaultMaterial) { DefaultMaterial->release(); DefaultMaterial = nullptr; }
 	if (Scene) { Scene->release(); Scene = nullptr; }
 	if (EventCallback) { delete EventCallback; EventCallback = nullptr; }
 	if (Dispatcher) { Dispatcher->release(); Dispatcher = nullptr; }
-	if (VehicleManager) { VehicleManager->Release(); delete VehicleManager; VehicleManager = nullptr; }
 
 	// Foundation/Physics는 공유 싱글턴 — release 카운트 감소만
 	Foundation = nullptr;
