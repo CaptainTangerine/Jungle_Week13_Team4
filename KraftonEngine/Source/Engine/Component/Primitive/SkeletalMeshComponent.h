@@ -63,16 +63,19 @@ public:
     UPhysicsAsset* GetPhysicsAssetOverride() const { return PhysicsAssetOverride; }
     UPhysicsAsset* GetPhysicsAsset() const;
 
-    // 랙돌 제어: PhysicsBlendWeight(0=순수 anim, 1=순수 물리)로 anim 포즈와 시뮬 포즈를
-    // 본별로 블렌드한다. SetSimulatePhysics 는 weight 를 0/1 로 두는 단축 API.
+    // 랙돌 제어: 바디별 PhysicsBlendWeight(0=순수 anim, 1=순수 물리)로 anim 포즈와 시뮬
+    // 포즈를 본별 블렌드한다. SetSimulatePhysics 는 전체 바디를 0/1 로 두는 단축 API.
     void SetSimulatePhysics(bool bSimulate) override;
-    bool IsSimulatingPhysics() const { return PhysicsBlendTarget > 0.0f; }
+    bool IsSimulatingPhysics() const;   // 활성 바디(weight 또는 target>0)가 하나라도 있으면 true
 
-    // 물리 블렌드 가중치 설정. [0,1] 로 클램프. bInterpolate=true 면 PhysicsBlendInterpSpeed
-    // 로 매 프레임 목표까지 부드럽게 보간(서서히 쓰러짐/일어남), false 면 즉시 적용.
-    // weight>0 이 되면 바디가 없을 경우 RefPose 로 인스턴스화하고 다이내믹으로 전환한다.
+    // 전체 바디의 블렌드 가중치 설정([0,1] 클램프). bInterpolate=true 면 PhysicsBlendInterpSpeed
+    // 로 목표까지 보간(서서히 쓰러짐/일어남), false 면 즉시. weight>0 이 되면 바디가 없을 경우
+    // RefPose 로 인스턴스화한다.
     void  SetPhysicsBlendWeight(float Weight, bool bInterpolate = true);
-    float GetPhysicsBlendWeight() const { return PhysicsBlendWeight; }
+    // 부분 래그돌: 특정 본(및 옵션으로 그 하위 본 전체)의 바디만 블렌드 가중치 설정.
+    //   예) 오른팔만 물리: SetBodyPhysicsBlendWeight("Bip001 R UpperArm", 1.0f, true). 나머지는 anim 유지.
+    void  SetBodyPhysicsBlendWeight(FName BoneName, float Weight, bool bIncludeChildren = true, bool bInterpolate = true);
+    float GetPhysicsBlendWeight() const;   // 최대 바디 가중치(정보용)
     void  SetPhysicsBlendInterpSpeed(float InSpeed) { PhysicsBlendInterpSpeed = InSpeed; }
     const TArray<FBodyInstance*>& GetBodies() const { return Bodies; }
     const TArray<FConstraintInstance*>& GetConstraints() const { return Constraints; }
@@ -110,19 +113,27 @@ private:
     bool InstantiatePhysicsAsset_Internal(UPhysicsAsset* InPhysicsAsset, const TArray<FTransform>& BoneWorldTransforms);
     void TermArticulated();
 
-    // anim 컴포넌트-글로벌(AnimGlobals)과 시뮬 바디 포즈를 Weight 로 본별 블렌드(컴포넌트
-    // 공간에서 위치 lerp + 회전 slerp)해 SetBoneLocalTransforms 로 푸시. Weight=1 이면 순수
-    // 물리 되읽기, 0 이면 순수 anim. 바디 없는 본은 anim 로컬을 블렌드된 부모에 누적해 따른다.
-    void ApplyPhysicsBlendedPose(const TArray<FMatrix>& AnimGlobals, float Weight);
+    // anim 컴포넌트-글로벌(AnimGlobals)과 각 바디의 시뮬 포즈를 그 바디의 PhysicsBlendWeight
+    // 로 본별 블렌드(컴포넌트 공간 위치 lerp + 회전 slerp)해 SetBoneLocalTransforms 로 푸시.
+    // weight=1 본은 순수 물리, 0 본은 순수 anim. 바디 없는 본은 anim 로컬을 블렌드된 부모에 누적.
+    void ApplyPhysicsBlendedPose(const TArray<FMatrix>& AnimGlobals);
 
-    // anim 으로 갱신된 본 월드 변환을 키네마틱 바디의 타깃으로 밀어 바디가 포즈를 추종하게 한다.
-    void SyncBodiesFromComponentPose();
+    // weight==0(키네마틱) 바디만 anim 본 월드 변환을 키네마틱 타깃으로 밀어 추종시킨다.
+    // (dynamic 바디에 호출하면 강제로 키네마틱 전환되므로 반드시 제외.) 부분 래그돌에서
+    // dynamic 자식의 조인트가 애니메이션되는 부모에 올바르게 앵커되도록 보장.
+    void SyncKinematicBodiesToAnim(const TArray<FMatrix>& AnimGlobals);
 
     // 레퍼런스 포즈 기준 컴포넌트-공간 글로벌(블렌드 anim 기준이 없을 때 폴백).
     void BuildReferencePoseGlobals(TArray<FMatrix>& OutGlobals) const;
 
-    // PhysicsBlendWeight/Target 에 따라 바디를 다이내믹/키네마틱으로 전환(변화 시에만).
+    // 각 바디 weight 를 Target 으로 InterpSpeed 만큼 보간.
+    void RampBodyBlendWeights(float DeltaTime);
+    // 각 바디를 (weight>0 || target>0) 이면 다이내믹, 아니면 키네마틱으로 전환(변화 시에만).
     void UpdateBodySimulationState();
+    // 활성 바디(weight 또는 target>0)가 하나라도 있는지.
+    bool AnyBodyPhysicsActive() const;
+    // BoneName 의 본 인덱스와 (bIncludeChildren 면) 그 하위 본 전체를 OutIndices 에 모은다.
+    void CollectBoneSubtree(FName BoneName, bool bIncludeChildren, TArray<int32>& OutIndices) const;
 
 protected:
     // Animation 런타임 상태.
@@ -139,12 +150,10 @@ protected:
     TArray<FBodyInstance*>     Bodies;
     TArray<FConstraintInstance*> Constraints;
 
-    // 물리 블렌드 상태. PhysicsBlendWeight(현재 적용값)가 Target 으로 InterpSpeed 만큼 보간된다.
+    // 블렌드 가중치는 바디별(FBodyInstance::PhysicsBlendWeight/Target)로 보관한다.
     //   weight 0   : 순수 anim(바디 키네마틱 추종)
     //   0<weight<1 : anim↔시뮬 본별 블렌드
     //   weight 1   : 순수 랙돌
-    float                      PhysicsBlendWeight = 0.0f;
-    float                      PhysicsBlendTarget = 0.0f;
+    // 부분 래그돌은 일부 바디만 weight>0 으로 둬서 "맞은 부위만" 물리가 되게 한다.
     float                      PhysicsBlendInterpSpeed = 4.0f;  // /sec (~0.25s, 0 이하면 즉시)
-    bool                       bBodiesSimulating = false;       // 바디 다이내믹 상태(중복 전환 방지)
 };

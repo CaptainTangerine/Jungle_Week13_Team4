@@ -96,7 +96,6 @@ void USkeletalMeshComponent::OnCreatePhysicsState()
                 }
             }
         }
-        bBodiesSimulating = false;
 
         UActorComponent::OnCreatePhysicsState();
     }
@@ -608,7 +607,7 @@ void USkeletalMeshComponent::TermArticulated()
 void USkeletalMeshComponent::SetSimulatePhysics(bool bSimulate)
 {
     Super::SetSimulatePhysics(bSimulate);
-    // 단축 API: 켜면 가중치 1(순수 랙돌), 끄면 0(순수 anim) 으로 보간 전환.
+    // 단축 API: 켜면 전체 바디 가중치 1(순수 랙돌), 끄면 0(순수 anim) 으로 보간 전환.
     SetPhysicsBlendWeight(bSimulate ? 1.0f : 0.0f);
 }
 
@@ -622,26 +621,111 @@ void USkeletalMeshComponent::SetPhysicsBlendWeight(float Weight, bool bInterpola
         InstantiatePhysicsAssetRefPose();
     }
 
-    PhysicsBlendTarget = Weight;
-    if (!bInterpolate || PhysicsBlendInterpSpeed <= 0.0f)
+    const bool bImmediate = (!bInterpolate || PhysicsBlendInterpSpeed <= 0.0f);
+    for (FBodyInstance* Body : Bodies)
     {
-        PhysicsBlendWeight = Weight;
+        if (!Body) continue;
+        Body->PhysicsBlendWeightTarget = Weight;
+        if (bImmediate) Body->PhysicsBlendWeight = Weight;
+    }
+    UpdateBodySimulationState();
+}
+
+void USkeletalMeshComponent::SetBodyPhysicsBlendWeight(FName BoneName, float Weight, bool bIncludeChildren, bool bInterpolate)
+{
+    Weight = std::clamp(Weight, 0.0f, 1.0f);
+
+    if (Weight > 0.0f && Bodies.empty())
+    {
+        InstantiatePhysicsAssetRefPose();
     }
 
-    // 가중치/목표가 활성(>0)이면 바디를 다이내믹으로 즉시 전환(보간 시작 프레임부터 시뮬).
+    TArray<int32> Indices;
+    CollectBoneSubtree(BoneName, bIncludeChildren, Indices);
+
+    const bool bImmediate = (!bInterpolate || PhysicsBlendInterpSpeed <= 0.0f);
+    for (int32 BoneIdx : Indices)
+    {
+        FBodyInstance* Body = GetBodyInstance(BoneIdx);
+        if (!Body) continue;
+        Body->PhysicsBlendWeightTarget = Weight;
+        if (bImmediate) Body->PhysicsBlendWeight = Weight;
+    }
     UpdateBodySimulationState();
+}
+
+void USkeletalMeshComponent::CollectBoneSubtree(FName BoneName, bool bIncludeChildren, TArray<int32>& OutIndices) const
+{
+    OutIndices.clear();
+    USkeletalMesh* Mesh = GetSkeletalMesh();
+    FSkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+    if (!Asset) return;
+
+    const int32 Root = FindBoneIndex(BoneName.ToString());
+    if (Root < 0) return;
+    OutIndices.push_back(Root);
+    if (!bIncludeChildren) return;
+
+    // 본은 parent-first 정렬. Root 보다 뒤에 있는 본 중 조상 체인에 Root 가 있으면 하위.
+    const int32 BoneCount = static_cast<int32>(Asset->Bones.size());
+    for (int32 i = Root + 1; i < BoneCount; ++i)
+    {
+        int32 P = Asset->Bones[i].ParentIndex;
+        while (P >= 0 && P != Root) { P = Asset->Bones[P].ParentIndex; }
+        if (P == Root) OutIndices.push_back(i);
+    }
+}
+
+bool USkeletalMeshComponent::IsSimulatingPhysics() const
+{
+    return AnyBodyPhysicsActive();
+}
+
+bool USkeletalMeshComponent::AnyBodyPhysicsActive() const
+{
+    for (FBodyInstance* Body : Bodies)
+    {
+        if (Body && (Body->PhysicsBlendWeight > 0.0f || Body->PhysicsBlendWeightTarget > 0.0f))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+float USkeletalMeshComponent::GetPhysicsBlendWeight() const
+{
+    float MaxWeight = 0.0f;
+    for (FBodyInstance* Body : Bodies)
+    {
+        if (Body) MaxWeight = std::max(MaxWeight, Body->PhysicsBlendWeight);
+    }
+    return MaxWeight;
+}
+
+void USkeletalMeshComponent::RampBodyBlendWeights(float DeltaTime)
+{
+    const float Step = PhysicsBlendInterpSpeed * DeltaTime;
+    for (FBodyInstance* Body : Bodies)
+    {
+        if (!Body) continue;
+        const float Target = Body->PhysicsBlendWeightTarget;
+        float& W = Body->PhysicsBlendWeight;
+        if (W == Target) continue;
+
+        if (PhysicsBlendInterpSpeed <= 0.0f || std::abs(Target - W) <= Step)
+        {
+            W = Target;
+        }
+        else
+        {
+            W += (Target > W ? Step : -Step);
+        }
+    }
 }
 
 void USkeletalMeshComponent::UpdateBodySimulationState()
 {
-    // weight 또는 target 중 하나라도 0보다 크면 바디는 시뮬레이션되어야 한다.
-    // (target 0 로 내려가는 보간 중에도 weight 가 0 에 닿기 전까진 다이내믹 유지.)
-    const bool bShouldSimulate = (PhysicsBlendWeight > 0.0f || PhysicsBlendTarget > 0.0f) && !Bodies.empty();
-    if (bShouldSimulate == bBodiesSimulating)
-    {
-        return;
-    }
-
     UWorld* World = GetWorld();
     IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
     if (!PhysicsScene)
@@ -649,15 +733,16 @@ void USkeletalMeshComponent::UpdateBodySimulationState()
         return;
     }
 
+    // 바디별로 (weight 또는 target>0)이면 다이내믹, 아니면 키네마틱. 변화 시에만 전환.
     for (FBodyInstance* Body : Bodies)
     {
-        // 외부 구동 바디(차량 chassis 등)는 컴포넌트의 sim/kinematic 전환에서 제외.
-        if (Body && Body->IsValidBodyInstance() && !Body->bExternallyControlled)
+        if (!Body || !Body->IsValidBodyInstance()) continue;
+        const bool bShouldSimulate = (Body->PhysicsBlendWeight > 0.0f || Body->PhysicsBlendWeightTarget > 0.0f);
+        if (bShouldSimulate != Body->bSimulatePhysics)
         {
             Body->SetInstanceSimulatePhysics(PhysicsScene, bShouldSimulate);
         }
     }
-    bBodiesSimulating = bShouldSimulate;
 }
 
 void USkeletalMeshComponent::BuildReferencePoseGlobals(TArray<FMatrix>& OutGlobals) const
@@ -677,7 +762,7 @@ void USkeletalMeshComponent::BuildReferencePoseGlobals(TArray<FMatrix>& OutGloba
     }
 }
 
-void USkeletalMeshComponent::ApplyPhysicsBlendedPose(const TArray<FMatrix>& AnimGlobals, float Weight)
+void USkeletalMeshComponent::ApplyPhysicsBlendedPose(const TArray<FMatrix>& AnimGlobals)
 {
     UWorld* World = GetWorld();
     IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
@@ -707,16 +792,17 @@ void USkeletalMeshComponent::ApplyPhysicsBlendedPose(const TArray<FMatrix>& Anim
         const int32 ParentIndex = Asset->Bones[i].ParentIndex;
 
         FBodyInstance* Body = GetBodyInstance(i);
-        if (Body && Body->IsValidBodyInstance())
+        if (Body && Body->IsValidBodyInstance() && Body->PhysicsBlendWeight > 0.0f)
         {
-            // 시뮬 바디의 컴포넌트-공간 글로벌(스케일 1) 과 anim 글로벌을 Weight 로 블렌드.
+            // 시뮬 바디의 컴포넌트-공간 글로벌(스케일 1) 과 anim 글로벌을 바디 weight 로 블렌드.
+            const float W = std::clamp(Body->PhysicsBlendWeight, 0.0f, 1.0f);
             const FTransform BodyWorld = Body->GetUnrealWorldTransform(PhysicsScene);
             const FMatrix PhysG = MakeRigidTransform(BodyWorld.ToMatrix() * WorldToComponent).ToMatrix();
-            BlendedGlobal[i] = BlendComponentGlobal(AnimGlobals[i], PhysG, Weight);
+            BlendedGlobal[i] = BlendComponentGlobal(AnimGlobals[i], PhysG, W);
         }
         else
         {
-            // 바디 없는 본: anim 로컬을 블렌드된 부모 글로벌에 누적해 anim 을 따른다.
+            // weight 0 바디 또는 바디 없는 본: anim 로컬을 블렌드된 부모 글로벌에 누적(anim 추종).
             const FMatrix AnimLocal = (ParentIndex >= 0)
                 ? AnimGlobals[i] * AnimGlobals[ParentIndex].GetInverse()
                 : AnimGlobals[i];
@@ -733,21 +819,11 @@ void USkeletalMeshComponent::ApplyPhysicsBlendedPose(const TArray<FMatrix>& Anim
     SetBoneLocalTransforms(LocalPose);
 }
 
-void USkeletalMeshComponent::SyncBodiesFromComponentPose()
+void USkeletalMeshComponent::SyncKinematicBodiesToAnim(const TArray<FMatrix>& AnimGlobals)
 {
     UWorld* World = GetWorld();
     IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
-    USkeletalMesh* Mesh = GetSkeletalMesh();
-    FSkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
-    if (!PhysicsScene || !Asset || Bodies.empty())
-    {
-        return;
-    }
-
-    // 현재(애니메이션으로 갱신된) 본 포즈의 컴포넌트-공간 글로벌 행렬.
-    TArray<FMatrix> CompGlobal;
-    BuildBoneEditGlobalMatrices(CompGlobal);
-    if (CompGlobal.empty())
+    if (!PhysicsScene || AnimGlobals.empty())
     {
         return;
     }
@@ -759,66 +835,55 @@ void USkeletalMeshComponent::SyncBodiesFromComponentPose()
         {
             continue;
         }
-
-        // 외부 구동 바디(차량 chassis 등)는 컴포넌트가 키네마틱 타깃을 밀지 않는다.
-        if (Body->bExternallyControlled)
+        // dynamic(weight>0) 바디는 제외 — SetKinematicTarget 이 강제로 키네마틱 전환시켜
+        // 시뮬레이션을 깨뜨린다. 키네마틱 바디만 anim 을 추종시킨다.
+        if (Body->PhysicsBlendWeight > 0.0f)
         {
             continue;
         }
 
         const int32 BoneIndex = Body->InstanceBoneIndex;
-        if (BoneIndex < 0 || BoneIndex >= static_cast<int32>(CompGlobal.size()))
+        if (BoneIndex < 0 || BoneIndex >= static_cast<int32>(AnimGlobals.size()))
         {
             continue;
         }
 
         // BoneWorldMatrix 에는 컴포넌트 월드 스케일이 실려 있어 단순 FTransform 분해 시
         // 키네마틱 타깃 회전이 깨진다. 스케일-안전 rigid 변환으로 추출.
-        const FMatrix BoneWorldMatrix = CompGlobal[BoneIndex] * ComponentToWorld;
+        const FMatrix BoneWorldMatrix = AnimGlobals[BoneIndex] * ComponentToWorld;
         Body->SetKinematicTarget(PhysicsScene, MakeRigidTransform(BoneWorldMatrix));
     }
 }
 
 void USkeletalMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
 {
-    // 1) 블렌드 가중치를 목표로 보간(부드러운 쓰러짐/일어남) 후 바디 시뮬 상태 갱신.
-    if (PhysicsBlendWeight != PhysicsBlendTarget)
-    {
-        const float Step = PhysicsBlendInterpSpeed * DeltaTime;
-        if (PhysicsBlendInterpSpeed <= 0.0f || std::abs(PhysicsBlendTarget - PhysicsBlendWeight) <= Step)
-        {
-            PhysicsBlendWeight = PhysicsBlendTarget;
-        }
-        else
-        {
-            PhysicsBlendWeight += (PhysicsBlendTarget > PhysicsBlendWeight ? Step : -Step);
-        }
-    }
+    // 1) 바디별 블렌드 가중치를 목표로 보간(부드러운 전환) 후 바디 시뮬 상태 갱신.
+    RampBodyBlendWeights(DeltaTime);
     UpdateBodySimulationState();
 
     // 2) anim 평가 — 블렌드의 기준 포즈. 평가 결과는 BoneEditLocalMatrices 에 반영된다.
     const bool bAnim = EvaluateAnimInstance(DeltaTime);
 
-    // 3) 물리 블렌드 활성: anim 포즈와 시뮬 포즈를 가중치로 섞어 푸시.
-    if (PhysicsBlendWeight > 0.0f && !Bodies.empty())
+    // anim 기준 컴포넌트-글로벌. anim 이 없으면 ref 포즈(블렌드 출력 피드백 방지).
+    const bool bWantBlend = AnyBodyPhysicsActive() && !Bodies.empty();
+    TArray<FMatrix> AnimGlobals;
+    if (bWantBlend || !Bodies.empty())
     {
-        TArray<FMatrix> AnimGlobals;
-        if (bAnim)
-        {
-            // 방금 평가된 anim 포즈의 컴포넌트-글로벌.
-            BuildBoneEditGlobalMatrices(AnimGlobals);
-        }
-        else
-        {
-            // anim 인스턴스가 없으면 ref 포즈를 anim 기준으로 사용(블렌드 출력 피드백 방지).
-            BuildReferencePoseGlobals(AnimGlobals);
-        }
-        ApplyPhysicsBlendedPose(AnimGlobals, PhysicsBlendWeight);
+        if (bAnim) BuildBoneEditGlobalMatrices(AnimGlobals);
+        else       BuildReferencePoseGlobals(AnimGlobals);
+    }
+
+    // 3) 활성 바디(부분/전체 랙돌)가 있으면: 키네마틱 바디는 anim 추종(자식 조인트 앵커),
+    //    그 위에 anim↔시뮬을 바디별 weight 로 블렌드해 푸시.
+    if (bWantBlend)
+    {
+        SyncKinematicBodiesToAnim(AnimGlobals);
+        ApplyPhysicsBlendedPose(AnimGlobals);
         UMeshComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
         return;
     }
 
-    // 4) weight==0: 순수 anim. 바디는 키네마틱으로 anim 을 추종해 다음 전환에 대비.
+    // 4) 활성 바디 없음: 순수 anim. 모든 바디는 키네마틱으로 anim 을 추종해 다음 전환에 대비.
     if (bAnim)
     {
         UMeshComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -830,7 +895,7 @@ void USkeletalMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 
     if (!Bodies.empty())
     {
-        SyncBodiesFromComponentPose();
+        SyncKinematicBodiesToAnim(AnimGlobals);
     }
 }
 
