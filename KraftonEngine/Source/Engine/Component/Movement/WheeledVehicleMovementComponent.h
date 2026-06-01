@@ -175,4 +175,13 @@ protected:
 	// 무게중심 Z 오프셋 (actor 중심 기준) — 보통 음수로 낮춰 전복 안정성↑.
 	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="CoM Offset Z", Min=-5.0f, Max=5.0f, Speed=0.01f)
 	float CenterOfMassOffsetZ = -0.5f;  // m
+
+
+	// Static mesh fallback in case the user does not want to use skeletal mesh
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Use Static Mesh")
+	bool bUseStaticMesh = false;
+
+	UStaticMesh* SM_Body = nullptr;
+	UStaticMesh* SM_Wheel = nullptr;
+
 };
