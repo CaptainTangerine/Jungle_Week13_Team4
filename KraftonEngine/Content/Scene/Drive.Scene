@@ -19,7 +19,7 @@
         "Properties" : {
           "CachedEditRotator" : [-0.000000, 0.000000, 0.000000],
           "CenterOfMassOffset" : [0.000000, 0.000000, 0.000000],
-          "CollisionEnabled" : 0,
+          "CollisionEnabled" : 3,
           "Mass" : 1.000000,
           "MaterialSlots" : ["Content/Material/Auto/material_1.mat"],
           "ObjectType" : 0,
@@ -45,6 +45,153 @@
           "bTickEnable" : true
         }
       }
+    }, {
+      "ClassName" : "AWheeledVehicle",
+      "Name" : "AWheeledVehicle_0",
+      "NonSceneComponents" : [{
+          "ClassName" : "UWheeledVehicleMovementComponent",
+          "ObjectId" : 8,
+          "Properties" : {
+            "CenterOfMassOffsetZ" : -0.500000,
+            "ChassisHeight" : 1.000000,
+            "ChassisLength" : 4.000000,
+            "ChassisMass" : 1500.000000,
+            "ChassisWidth" : 2.000000,
+            "EngineMaxOmega" : 600.000000,
+            "EnginePeakTorque" : 500.000000,
+            "MaxSteerAngle" : 30.000000,
+            "UpdatedComponent" : {
+              "ObjectId" : 5
+            },
+            "WheelMass" : 20.000000,
+            "WheelRadius" : 0.350000,
+            "WheelSetups" : [{
+                "BoneName" : "Wheel_FL",
+                "bAffectedByHandbrake" : false,
+                "bAffectedBySteering" : true
+              }, {
+                "BoneName" : "Wheel_FR",
+                "bAffectedByHandbrake" : false,
+                "bAffectedBySteering" : true
+              }, {
+                "BoneName" : "Wheel_RL",
+                "bAffectedByHandbrake" : true,
+                "bAffectedBySteering" : false
+              }, {
+                "BoneName" : "Wheel_RR",
+                "bAffectedByHandbrake" : true,
+                "bAffectedBySteering" : false
+              }],
+            "WheelWidth" : 0.250000,
+            "bAutoActivate" : true,
+            "bAutoRegisterUpdatedComponent" : true,
+            "bEditorOnly" : false,
+            "bHiddenInComponentTree" : false,
+            "bIsActive" : true,
+            "bTickEnable" : true
+          }
+        }],
+      "ObjectId" : 4,
+      "Properties" : {
+        "PendingActorLocation" : [-3.700562, -0.973321, 38.239475],
+        "PendingActorRotation" : [-0.000000, 0.000000, 0.000000],
+        "PendingActorScale" : [1.000000, 1.000000, 1.000000],
+        "PendingActorVisible" : true,
+        "PendingTagsString" : "",
+        "bAutoPossessPlayer" : true,
+        "bNeedsTick" : true,
+        "bUseControllerRotationPitch" : true,
+        "bUseControllerRotationRoll" : false,
+        "bUseControllerRotationYaw" : false
+      },
+      "RootComponent" : {
+        "Children" : [{
+            "Children" : [{
+                "Children" : [],
+                "ClassName" : "UCameraComponent",
+                "ObjectId" : 7,
+                "Properties" : {
+                  "CachedEditRotator" : [-0.000000, 0.000000, 0.000000],
+                  "CameraState.FOV" : 1.047198,
+                  "CameraState.FarZ" : 1000.000000,
+                  "CameraState.NearZ" : 0.100000,
+                  "CameraState.OrthoWidth" : 10.000000,
+                  "CameraState.bIsOrthogonal" : false,
+                  "RelativeTransform.Location" : [0.000000, 0.000000, 0.000000],
+                  "RelativeTransform.Scale" : [1.000000, 1.000000, 1.000000],
+                  "bAutoActivate" : true,
+                  "bEditorOnly" : false,
+                  "bHiddenInComponentTree" : false,
+                  "bIsActive" : true,
+                  "bTickEnable" : true
+                }
+              }],
+            "ClassName" : "USpringArmComponent",
+            "ObjectId" : 6,
+            "Properties" : {
+              "CachedEditRotator" : [-0.000000, 0.000000, 0.000000],
+              "CameraLagMaxDistance" : 0.000000,
+              "CameraLagSpeed" : 10.000000,
+              "CameraRotationLagSpeed" : 10.000000,
+              "ProbeChannel" : 0,
+              "ProbeSize" : 0.120000,
+              "RelativeTransform.Location" : [0.000000, 0.000000, 0.000000],
+              "RelativeTransform.Scale" : [1.000000, 1.000000, 1.000000],
+              "SocketOffset" : [0.000000, 0.000000, 3.000000],
+              "TargetArmLength" : 8.000000,
+              "TargetOffset" : [0.000000, 0.000000, 0.000000],
+              "bAutoActivate" : true,
+              "bDoCollisionTest" : false,
+              "bEditorOnly" : false,
+              "bEnableCameraLag" : true,
+              "bEnableCameraRotationLag" : true,
+              "bHiddenInComponentTree" : false,
+              "bIsActive" : true,
+              "bTickEnable" : true
+            }
+          }],
+        "ClassName" : "USkeletalMeshComponent",
+        "ObjectId" : 5,
+        "Properties" : {
+          "AnimInstance" : {
+            "ClassName" : "None"
+          },
+          "AnimInstanceClass" : "None",
+          "AnimationData" : {
+            "AnimToPlayPath" : "None",
+            "PlayRate" : 1.000000,
+            "bLooping" : true,
+            "bPlaying" : true
+          },
+          "AnimationMode" : 0,
+          "CachedEditRotator" : [-0.000000, 0.000000, 0.000000],
+          "CenterOfMassOffset" : [0.000000, 0.000000, 0.000000],
+          "CollisionEnabled" : 0,
+          "Mass" : 1.000000,
+          "MaterialSlots" : [],
+          "ObjectType" : 0,
+          "RelativeTransform.Location" : [-3.700562, -0.973321, 38.239475],
+          "RelativeTransform.Scale" : [1.000000, 1.000000, 1.000000],
+          "ResponseContainer" : {
+            "Responses[0]" : 2,
+            "Responses[1]" : 2,
+            "Responses[2]" : 2,
+            "Responses[3]" : 2,
+            "Responses[4]" : 2
+          },
+          "SkeletalMeshPath" : "None",
+          "bAutoActivate" : true,
+          "bCastShadow" : true,
+          "bCastShadowAsTwoSided" : false,
+          "bEditorOnly" : false,
+          "bGenerateOverlapEvents" : false,
+          "bHiddenInComponentTree" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bSimulatePhysics" : false,
+          "bTickEnable" : true
+        }
+      }
     }],
   "ClassName" : "UWorld",
   "ContextHandle" : "NewScene",
@@ -56,7 +203,7 @@
     "FarClip" : 1000.000000,
     "Location" : [69.526924, 1.331508, 53.440643],
     "NearClip" : 0.100000,
-    "Rotation" : [0.000000, 40.064960, 176.100128]
+    "Rotation" : [0.000000, 20.414976, 182.100128]
   },
   "Version" : 2,
   "WorldSettings" : {
