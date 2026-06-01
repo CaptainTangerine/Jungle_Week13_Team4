@@ -57,6 +57,7 @@ public:
 	static FMeshManager& Get();
 	static UStaticMesh* LoadStaticMesh(const FString& PathFileName, ID3D11Device* InDevice);
 	static UStaticMesh* LoadStaticMesh(const FString& PathFileName, const FImportOptions& Options, ID3D11Device* InDevice);
+	static bool         SaveStaticMesh(UStaticMesh* StaticMesh);
 
 	static USkeletalMesh* LoadSkeletalMesh(const FString& PathFileName , ID3D11Device* InDevice);
 	static bool           SaveSkeletalMesh(USkeletalMesh* SkeletalMesh);

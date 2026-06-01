@@ -12,6 +12,7 @@
 #include "Render/Proxy/PhysicsAssetDebugSceneProxy.h"
 #include "Render/Proxy/ParticleSystemSceneProxy.h"
 #include "Render/Proxy/SkeletalMeshSceneProxy.h"
+#include "Render/Proxy/StaticMeshSceneProxy.h"
 #include "Render/Scene/FScene.h"
 #include "Render/Types/RenderConstants.h"
 #include "Render/RenderPass/PassRenderStateTable.h"
@@ -525,6 +526,16 @@ void FDrawCommandBuilder::BuildProxyCommands(const FFrameContext& Frame, FScene&
 			BuildDecalCommands(Scene, Proxy, Frame, Output);
 		else
 			BuildMeshCommands(Scene, Proxy);
+
+		if (bShowCollision && Proxy->HasProxyFlag(EPrimitiveProxyFlags::StaticMesh))
+		{
+			const FStaticMeshSceneProxy* StaticMeshProxy = static_cast<const FStaticMeshSceneProxy*>(Proxy);
+			const FVector4& Color = StaticMeshProxy->GetCollisionWireColor();
+			for (const FWireLine& Line : StaticMeshProxy->GetCachedCollisionLines())
+			{
+				EditorLines.AddLine(Line.Start, Line.End, Color);
+			}
+		}
 
 		if (Proxy->IsSelected())
 			BuildSelectionCommands(Proxy, bShowBoundingVolume, Scene);

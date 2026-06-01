@@ -5,8 +5,10 @@
 #include "GameFramework/AActor.h"
 #include "GameFramework/Light/DirectionalLightActor.h"
 #include "GameFramework/Actor/StaticMeshActor.h"
+#include "Mesh/MeshManager.h"
 #include "Mesh/Static/StaticMesh.h"
 #include "Mesh/Static/StaticMeshAsset.h"
+#include "Physics/Asset/BodySetup.h"
 #include "Runtime/Engine.h"
 #include "Settings/EditorSettings.h"
 #include "Slate/SlateApplication.h"
@@ -241,7 +243,16 @@ void FStaticMeshEditorWidget::Render(float DeltaTime)
 	ImGui::BeginChild("Details", ImVec2(DetailsWidth, 0), true);
 	ImGui::Text("Static Mesh Details");
 	ImGui::Separator();
-	RenderDetailsPanel(StaticMesh ? StaticMesh->GetStaticMeshAsset() : nullptr);
+	const FString SaveLabel = IsDirty() ? "Save *" : "Save";
+	if (StaticMesh && ImGui::Button(SaveLabel.c_str()))
+	{
+		if (FMeshManager::SaveStaticMesh(StaticMesh))
+		{
+			ClearDirty();
+		}
+	}
+	ImGui::Separator();
+	RenderDetailsPanel(StaticMesh);
 	ImGui::EndChild();
 
 	ImGui::End();
@@ -280,8 +291,9 @@ void FStaticMeshEditorWidget::RenderMeshStatsOverlay(ImDrawList* DrawList, const
 	DrawList->AddText(TextPos, IM_COL32(235, 238, 242, 255), Text.c_str());
 }
 
-void FStaticMeshEditorWidget::RenderDetailsPanel(FStaticMesh* Asset) const
+void FStaticMeshEditorWidget::RenderDetailsPanel(UStaticMesh* StaticMesh)
 {
+	FStaticMesh* Asset = StaticMesh ? StaticMesh->GetStaticMeshAsset() : nullptr;
 	if (!Asset)
 	{
 		ImGui::TextDisabled("No static mesh data.");
@@ -292,4 +304,30 @@ void FStaticMeshEditorWidget::RenderDetailsPanel(FStaticMesh* Asset) const
 	ImGui::Text("Indices: %s", FormatStaticMeshStatCount(Asset->Indices.size()).c_str());
 	ImGui::Text("Triangles: %s", FormatStaticMeshStatCount(Asset->Indices.size() / 3).c_str());
 	ImGui::Text("Sections: %s", FormatStaticMeshStatCount(Asset->Sections.size()).c_str());
+
+	ImGui::Separator();
+	ImGui::Text("Collision");
+
+	UBodySetup* BodySetup = StaticMesh ? StaticMesh->GetBodySetup() : nullptr;
+	if (BodySetup)
+	{
+		ImGui::Text("BodySetup: Present");
+		ImGui::Text("Boxes: %s", FormatStaticMeshStatCount(BodySetup->AggGeom.BoxElems.size()).c_str());
+		ImGui::Text("Spheres: %s", FormatStaticMeshStatCount(BodySetup->AggGeom.SphereElems.size()).c_str());
+		ImGui::Text("Capsules: %s", FormatStaticMeshStatCount(BodySetup->AggGeom.SphylElems.size()).c_str());
+	}
+	else
+	{
+		ImGui::TextDisabled("BodySetup: Missing");
+	}
+
+	if (ImGui::Button("Reset To Bounds Box") && StaticMesh)
+	{
+		StaticMesh->BuildDefaultBodySetup();
+		if (UStaticMeshComponent* PreviewComp = ViewportClient.GetPreviewMeshComponent())
+		{
+			PreviewComp->MarkProxyDirty(EDirtyFlag::Mesh);
+		}
+		MarkDirty();
+	}
 }

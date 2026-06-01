@@ -1,5 +1,6 @@
 #include "Mesh/Static/StaticMesh.h"
 #include "Object/Reflection/ObjectFactory.h"
+#include "Asset/AssetPackage.h"
 #include "Mesh/MeshManager.h"
 #include "Serialization/WindowsArchive.h"
 #include "Mesh/Importer/ObjImporter.h"
@@ -7,6 +8,17 @@
 #include "Engine/Profiling/Stats/MemoryStats.h"
 #include "Mesh/MeshSimplifier.h"
 #include "Physics/Asset/BodySetup.h"
+
+namespace
+{
+	bool ShouldSerializeStaticMeshBodySetup(const FArchive& Ar)
+	{
+		const uint32 Version = Ar.GetPackageVersion();
+		return Ar.IsSaving()
+			|| Version == 0
+			|| Version >= FAssetPackageHeader::VersionStaticMeshBodySetup;
+	}
+}
 
 UStaticMesh::~UStaticMesh()
 {
@@ -34,6 +46,16 @@ void UStaticMesh::Serialize(FArchive& Ar)
 	// 2. 머티리얼 데이터 직렬화 (필수!)
 	Ar << StaticMaterials;
 
+	if (Ar.IsSaving() && !BodySetup)
+	{
+		BuildDefaultBodySetup();
+	}
+
+	if (ShouldSerializeStaticMeshBodySetup(Ar))
+	{
+		SerializeProperties(Ar, PF_Save);
+	}
+
 	// 3. 로딩 시 Section → MaterialIndex 매핑 캐싱 (매 프레임 문자열 비교 방지)
 	if (Ar.IsLoading())
 	{
@@ -49,7 +71,10 @@ void UStaticMesh::Serialize(FArchive& Ar)
 				}
 			}
 		}
-		BuildDefaultBodySetup();
+		if (!BodySetup)
+		{
+			BuildDefaultBodySetup();
+		}
 	}
 }
 
@@ -137,7 +162,10 @@ void UStaticMesh::SetStaticMeshAsset(FStaticMesh* InMesh)
 		}
 		EnsureMeshTrianglePickingBVHBuilt();
 	}
-	BuildDefaultBodySetup();
+	if (!BodySetup)
+	{
+		BuildDefaultBodySetup();
+	}
 }
 
 FStaticMesh* UStaticMesh::GetStaticMeshAsset() const

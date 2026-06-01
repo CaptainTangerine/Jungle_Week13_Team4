@@ -222,6 +222,7 @@ static bool LoadStaticMeshBinary(UStaticMesh* StaticMesh, const FString& BinaryP
 
 		FAssetImportMetadata Metadata;
 		Reader << Metadata;
+		Reader.SetPackageVersion(Header.Version);
 
 		StaticMesh->Serialize(Reader);
 	}
@@ -257,6 +258,7 @@ static bool SaveStaticMeshBinary(UStaticMesh* StaticMesh, const FString& BinaryP
 
 		FAssetImportMetadata Metadata = MakeImportMetadata(SourcePath);
 		Writer << Metadata;
+		Writer.SetPackageVersion(Header.Version);
 
 		StaticMesh->Serialize(Writer);
 	}
@@ -267,6 +269,46 @@ static bool SaveStaticMeshBinary(UStaticMesh* StaticMesh, const FString& BinaryP
 	}
 
 	return Writer.IsValid();
+}
+
+bool FMeshManager::SaveStaticMesh(UStaticMesh* StaticMesh)
+{
+	if (!StaticMesh)
+	{
+		return false;
+	}
+
+	const FString PackagePath = NormalizeProjectPath(StaticMesh->GetAssetPathFileName());
+	if (PackagePath.empty() || PackagePath == "None")
+	{
+		UE_LOG("StaticMesh save failed: mesh has no package path. Mesh=%s", StaticMesh->GetName().c_str());
+		return false;
+	}
+
+	FString SourcePath;
+	FAssetImportMetadata Metadata;
+	if (FAssetPackage::ReadMetadata(PackagePath, EAssetPackageType::StaticMesh, Metadata))
+	{
+		SourcePath = Metadata.SourcePath;
+	}
+
+	if (SourcePath.empty() || SourcePath == "None")
+	{
+		if (const FStaticMesh* MeshAsset = StaticMesh->GetStaticMeshAsset())
+		{
+			SourcePath = MeshAsset->PathFileName;
+		}
+	}
+
+	if (!SaveStaticMeshBinary(StaticMesh, PackagePath, SourcePath))
+	{
+		return false;
+	}
+
+	StaticMesh->SetAssetPathFileName(PackagePath);
+	StaticMeshCache[PackagePath] = StaticMesh;
+	ScanMeshAssets();
+	return true;
 }
 
 static bool LoadSkeletalMeshBinary(USkeletalMesh* SkeletalMesh, const FString& BinaryPath)

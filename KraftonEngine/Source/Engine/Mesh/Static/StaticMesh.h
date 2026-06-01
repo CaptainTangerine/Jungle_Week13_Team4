@@ -3,13 +3,13 @@
 #include "Object/Object.h"
 #include "Collision/BVH/MeshTriangleBVH.h"
 #include "Mesh/Static/StaticMeshAsset.h"
+#include "Physics/Asset/BodySetup.h"
 #include "Serialization/Archive.h"
 
 #include "Source/Engine/Mesh/Static/StaticMesh.generated.h"
 #include <memory>
 
 struct ID3D11Device;
-class UBodySetup;
 
 // LOD 단계별 GPU 리소스
 struct FLODMeshData
@@ -29,7 +29,7 @@ public:
 	UStaticMesh() = default;
 	~UStaticMesh() override;
 
-	void Serialize(FArchive& Ar);
+	void Serialize(FArchive& Ar) override;
 
 	void SetAssetPathFileName(const FString& InPathFileName) { AssetPathFileName = InPathFileName; }
 	const FString& GetAssetPathFileName() const { return AssetPathFileName; }
@@ -58,6 +58,7 @@ private:
 
 	FStaticMesh* StaticMeshAsset = nullptr;
 	TArray<FStaticMaterial> StaticMaterials; // 슬롯 이름과 머티리얼 인터페이스를 묶어서 저장하는 배열
+	UPROPERTY(Edit, Save, Instanced, Category="Collision", DisplayName="Body Setup")
 	UBodySetup* BodySetup = nullptr;
 	mutable FMeshTriangleBVH MeshTrianglePickingBVH; // 빠른 picking을 위해 메시 내부에 트리 형태로 만들어지는 자료구조
 

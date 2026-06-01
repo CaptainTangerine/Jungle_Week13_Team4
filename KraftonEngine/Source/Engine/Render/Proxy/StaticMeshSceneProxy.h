@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "Render/Proxy/PrimitiveSceneProxy.h"
+#include "Render/Proxy/ShapeSceneProxy.h"
 
 class UStaticMeshComponent;
 
@@ -19,13 +19,18 @@ public:
 
 	void UpdateMaterial() override;
 	void UpdateMesh() override;
+	void UpdateTransform() override;
 	void UpdateLOD(uint32 LODLevel) override;
+
+	const TArray<FWireLine>& GetCachedCollisionLines() const { return CachedCollisionLines; }
+	const FVector4& GetCollisionWireColor() const { return CollisionWireColor; }
 
 private:
 	UStaticMeshComponent* GetStaticMeshComponent() const;
 
 	// 모든 LOD의 SectionDraws 재구축
 	void RebuildSectionDraws();
+	void RebuildCollisionLines();
 
 	struct FLODDrawData
 	{
@@ -35,4 +40,7 @@ private:
 
 	FLODDrawData LODData[MAX_LOD];
 	uint32 LODCount = 1;
+
+	TArray<FWireLine> CachedCollisionLines;
+	FVector4 CollisionWireColor = { 0.30f, 0.85f, 1.00f, 1.0f };
 };

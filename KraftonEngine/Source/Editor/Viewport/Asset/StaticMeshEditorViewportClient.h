@@ -30,6 +30,7 @@ public:
 
 	FViewport* GetViewport() const override { return Viewport; }
 	UWorld* GetPreviewWorld() const override { return PreviewWorld; }
+	UStaticMeshComponent* GetPreviewMeshComponent() const { return PreviewMeshComponent; }
 
 	FViewportRenderOptions& GetRenderOptions() override { return RenderOptions; }
 	const FViewportRenderOptions& GetRenderOptions() const override { return RenderOptions; }

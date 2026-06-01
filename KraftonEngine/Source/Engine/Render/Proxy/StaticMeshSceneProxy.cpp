@@ -3,8 +3,11 @@
 #include "Mesh/Static/StaticMesh.h"
 #include "Mesh/Static/StaticMeshAsset.h"
 #include "Materials/Material.h"
+#include "Physics/Asset/BodySetup.h"
+#include "Math/MathUtils.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace
 {
@@ -24,6 +27,100 @@ namespace
 		{
 			std::sort(Draws.begin(), Draws.end(), SectionMaterialLess);
 		}
+	}
+
+	void AddLine(TArray<FWireLine>& Lines, const FVector& A, const FVector& B)
+	{
+		Lines.push_back({ A, B });
+	}
+
+	void AddWireCircle(TArray<FWireLine>& Lines, const FVector& Center, const FVector& AxisA, const FVector& AxisB,
+		float Radius, int32 Segments)
+	{
+		if (Radius <= 0.0f || Segments < 3) return;
+
+		const float Step = 2.0f * FMath::Pi / static_cast<float>(Segments);
+		FVector Prev = Center + AxisA * Radius;
+		for (int32 i = 1; i <= Segments; ++i)
+		{
+			const float Angle = Step * static_cast<float>(i);
+			FVector Next = Center + (AxisA * std::cos(Angle) + AxisB * std::sin(Angle)) * Radius;
+			AddLine(Lines, Prev, Next);
+			Prev = Next;
+		}
+	}
+
+	void AddWireQuarterArc(TArray<FWireLine>& Lines, const FVector& Center, const FVector& StartDir, const FVector& EndDir,
+		float Radius, int32 Segments)
+	{
+		if (Radius <= 0.0f || Segments < 1) return;
+
+		const float Step = (FMath::Pi * 0.5f) / static_cast<float>(Segments);
+		FVector Prev = Center + StartDir * Radius;
+		for (int32 i = 1; i <= Segments; ++i)
+		{
+			const float Angle = Step * static_cast<float>(i);
+			FVector Next = Center + (StartDir * std::cos(Angle) + EndDir * std::sin(Angle)) * Radius;
+			AddLine(Lines, Prev, Next);
+			Prev = Next;
+		}
+	}
+
+	void BuildSphere(TArray<FWireLine>& Lines, const FVector& Center, const FVector& X, const FVector& Y, const FVector& Z, float Radius)
+	{
+		AddWireCircle(Lines, Center, X, Y, Radius, 16);
+		AddWireCircle(Lines, Center, Y, Z, Radius, 16);
+		AddWireCircle(Lines, Center, Z, X, Radius, 16);
+	}
+
+	void BuildBox(TArray<FWireLine>& Lines, const FVector& Center, const FVector& X, const FVector& Y, const FVector& Z, const FVector& HalfExtent)
+	{
+		const FVector EX = X * HalfExtent.X;
+		const FVector EY = Y * HalfExtent.Y;
+		const FVector EZ = Z * HalfExtent.Z;
+
+		FVector C[8];
+		C[0] = Center - EX - EY - EZ;
+		C[1] = Center + EX - EY - EZ;
+		C[2] = Center + EX + EY - EZ;
+		C[3] = Center - EX + EY - EZ;
+		C[4] = Center - EX - EY + EZ;
+		C[5] = Center + EX - EY + EZ;
+		C[6] = Center + EX + EY + EZ;
+		C[7] = Center - EX + EY + EZ;
+
+		AddLine(Lines, C[0], C[1]); AddLine(Lines, C[1], C[2]); AddLine(Lines, C[2], C[3]); AddLine(Lines, C[3], C[0]);
+		AddLine(Lines, C[4], C[5]); AddLine(Lines, C[5], C[6]); AddLine(Lines, C[6], C[7]); AddLine(Lines, C[7], C[4]);
+		AddLine(Lines, C[0], C[4]); AddLine(Lines, C[1], C[5]); AddLine(Lines, C[2], C[6]); AddLine(Lines, C[3], C[7]);
+	}
+
+	void BuildCapsule(TArray<FWireLine>& Lines, const FVector& Center, const FVector& X, const FVector& Y, const FVector& Z,
+		float Radius, float HalfLength)
+	{
+		const FVector Top = Center + Y * HalfLength;
+		const FVector Bottom = Center - Y * HalfLength;
+
+		AddWireCircle(Lines, Top, X, Z, Radius, 16);
+		AddWireCircle(Lines, Bottom, X, Z, Radius, 16);
+		AddLine(Lines, Top + X * Radius, Bottom + X * Radius);
+		AddLine(Lines, Top - X * Radius, Bottom - X * Radius);
+		AddLine(Lines, Top + Z * Radius, Bottom + Z * Radius);
+		AddLine(Lines, Top - Z * Radius, Bottom - Z * Radius);
+
+		AddWireQuarterArc(Lines, Top, X, Y, Radius, 6);
+		AddWireQuarterArc(Lines, Top, X * -1.0f, Y, Radius, 6);
+		AddWireQuarterArc(Lines, Top, Z, Y, Radius, 6);
+		AddWireQuarterArc(Lines, Top, Z * -1.0f, Y, Radius, 6);
+
+		AddWireQuarterArc(Lines, Bottom, X, Y * -1.0f, Radius, 6);
+		AddWireQuarterArc(Lines, Bottom, X * -1.0f, Y * -1.0f, Radius, 6);
+		AddWireQuarterArc(Lines, Bottom, Z, Y * -1.0f, Radius, 6);
+		AddWireQuarterArc(Lines, Bottom, Z * -1.0f, Y * -1.0f, Radius, 6);
+	}
+
+	float MaxAbsScale(const FVector& Scale)
+	{
+		return std::max({ std::abs(Scale.X), std::abs(Scale.Y), std::abs(Scale.Z), 0.001f });
 	}
 }
 
@@ -56,6 +153,13 @@ void FStaticMeshSceneProxy::UpdateMesh()
 {
 	MeshBuffer = GetOwner()->GetMeshBuffer();
 	RebuildSectionDraws();
+	RebuildCollisionLines();
+}
+
+void FStaticMeshSceneProxy::UpdateTransform()
+{
+	FPrimitiveSceneProxy::UpdateTransform();
+	RebuildCollisionLines();
 }
 
 // ============================================================
@@ -75,6 +179,63 @@ void FStaticMeshSceneProxy::UpdateLOD(uint32 LODLevel)
 	std::swap(MeshBuffer, LODData[LODLevel].MeshBuffer);
 	std::swap(SectionDraws, LODData[LODLevel].SectionDraws);
 
+}
+
+void FStaticMeshSceneProxy::RebuildCollisionLines()
+{
+	CachedCollisionLines.clear();
+
+	UStaticMeshComponent* SMC = GetStaticMeshComponent();
+	UStaticMesh* Mesh = SMC ? SMC->GetStaticMesh() : nullptr;
+	const UBodySetup* BodySetup = Mesh ? Mesh->GetBodySetup() : nullptr;
+	if (!SMC || !BodySetup || BodySetup->AggGeom.GetElementCount() <= 0)
+	{
+		return;
+	}
+
+	const FMatrix& WorldMatrix = SMC->GetWorldMatrix();
+	const FQuat ComponentQuat = WorldMatrix.ToQuat().GetNormalized();
+	FVector Scale = SMC->GetWorldScale();
+	const FVector AbsScale(std::max(std::abs(Scale.X), 0.001f), std::max(std::abs(Scale.Y), 0.001f), std::max(std::abs(Scale.Z), 0.001f));
+
+	auto ToWorld = [&](const FVector& Local)
+	{
+		return WorldMatrix.TransformPositionWithW(Local);
+	};
+
+	const FVector X = ComponentQuat.RotateVector(FVector(1, 0, 0));
+	const FVector Y = ComponentQuat.RotateVector(FVector(0, 1, 0));
+	const FVector Z = ComponentQuat.RotateVector(FVector(0, 0, 1));
+
+	for (const FKSphereElem& Elem : BodySetup->AggGeom.SphereElems)
+	{
+		BuildSphere(CachedCollisionLines, ToWorld(Elem.Center), X, Y, Z, Elem.Radius * MaxAbsScale(Scale));
+	}
+
+	for (const FKBoxElem& Elem : BodySetup->AggGeom.BoxElems)
+	{
+		const FQuat ElemQuat = ComponentQuat * Elem.Rotation.ToQuaternion();
+		const FVector BoxX = ElemQuat.RotateVector(FVector(1, 0, 0));
+		const FVector BoxY = ElemQuat.RotateVector(FVector(0, 1, 0));
+		const FVector BoxZ = ElemQuat.RotateVector(FVector(0, 0, 1));
+		BuildBox(CachedCollisionLines,
+			ToWorld(Elem.Center),
+			BoxX,
+			BoxY,
+			BoxZ,
+			FVector(Elem.HalfExtent.X * AbsScale.X, Elem.HalfExtent.Y * AbsScale.Y, Elem.HalfExtent.Z * AbsScale.Z));
+	}
+
+	for (const FKSphylElem& Elem : BodySetup->AggGeom.SphylElems)
+	{
+		const FQuat ElemQuat = ComponentQuat * Elem.Rotation.ToQuaternion();
+		const FVector CapX = ElemQuat.RotateVector(FVector(1, 0, 0));
+		const FVector CapY = ElemQuat.RotateVector(FVector(0, 1, 0));
+		const FVector CapZ = ElemQuat.RotateVector(FVector(0, 0, 1));
+		const float Radius = Elem.Radius * std::max(AbsScale.X, AbsScale.Z);
+		const float HalfLength = Elem.Length * 0.5f * AbsScale.Y;
+		BuildCapsule(CachedCollisionLines, ToWorld(Elem.Center), CapX, CapY, CapZ, Radius, HalfLength);
+	}
 }
 
 // ============================================================
