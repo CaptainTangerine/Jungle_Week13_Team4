@@ -28,6 +28,10 @@
 #include "Physics/Asset/PhysicsAssetManager.h"
 #include "Physics/Asset/BodySetup.h"
 #include "Physics/Asset/BodyConstraintGenerator.h"
+#include "Physics/BodyInstance.h"
+#include "Physics/IPhysicsScene.h"
+#include "Physics/PhysicsInterfaceTypes.h"
+#include "GameFramework/World.h"
 #include "Editor/UI/Panel/FPropertyTable.h"
 #include "Physics/Asset/ConstraintSetup.h"
 #include "Math/MathUtils.h"
@@ -372,6 +376,7 @@ void FMeshEditorWidget::Open(UObject* Object)
 	AnimTabState            = FAnimationTabState {};
 	SelectedBoneIndex       = -1;
 	SelectedConstraintIndex = -1;
+	SelectedBoneIndices.clear();
 	bSimulating             = false;
 }
 
@@ -425,6 +430,22 @@ void FMeshEditorWidget::Tick(float DeltaTime)
 		ApplyMorphPreviewOverrides(Out.MorphWeights);
 
 		Comp->SetAnimationPose(Out.Pose, Out.MorphWeights);
+	}
+	else if (ActiveTab == EMeshEditorTab::Physics && bSimulating)
+	{
+		// 에디터 내 랙돌 프리뷰: 프리뷰 월드의 물리 씬을 직접 스텝한 뒤 본 포즈를 되읽는다.
+		USkeletalMeshComponent* Comp = ViewportClient.GetPreviewMeshComponent();
+		if (Comp)
+		{
+			if (UWorld* World = Comp->GetWorld())
+			{
+				if (IPhysicsScene* Scene = World->GetPhysicsScene())
+				{
+					Scene->Tick(DeltaTime);
+				}
+			}
+			Comp->SimulatePhysicsPreview(DeltaTime);
+		}
 	}
 }
 
@@ -1539,6 +1560,15 @@ void FMeshEditorWidget::RenderPhysicsLayout()
 	{
 		ImGui::TextDisabled("No preview mesh.");
 	}
+
+	// 트리 빈 공간을 좌클릭하면 선택 해제(본 노드 위가 아닌 곳 클릭).
+	if (ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+	{
+		SelectedBoneIndex = -1;
+		SelectedConstraintIndex = -1;
+		SelectedBoneIndices.clear();
+		ViewportClient.SetSelectedBone(Cast<USkeletalMesh>(EditedObject), -1);
+	}
 	ImGui::EndChild();
 
 	ImGui::SameLine();
@@ -1642,16 +1672,88 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 		ImGui::TextDisabled("(unsaved asset — no source path)");
 	}
 
-	// 시뮬레이션 토글(런타임 연결은 §2 TODO — USkeletalMeshComponent 랙돌 통합).
+	// 시뮬레이션 토글 — 프리뷰 메시에 편집 중 에셋을 적용해 랙돌을 돌린다. 바닥(정적 박스)을
+	// 발 높이에 깔아 랙돌이 무너지며 쌓이게 한다(펠비스 포함 전신 이동 + 조인트 꺾임 관찰).
 	const char* SimLabel = bSimulating ? "Stop Simulation" : "Start Simulation";
 	if (ImGui::Button(SimLabel, ImVec2(-1.0f, 0.0f)))
 	{
+		USkeletalMeshComponent* Comp = ViewportClient.GetPreviewMeshComponent();
 		bSimulating = !bSimulating;
-		// TODO(§2): Kinematic <-> Dynamic 전환 + 본 포즈 <-> 시뮬 포즈 블렌딩.
+		if (Comp)
+		{
+			UWorld* World = Comp->GetWorld();
+			IPhysicsScene* Scene = World ? World->GetPhysicsScene() : nullptr;
+			if (bSimulating)
+			{
+				Comp->SetPhysicsAssetOverride(CurrentPhysicsAsset);   // 편집 중(미저장 가능) 에셋으로
+				Comp->CreatePhysicsState();                           // 바디/조인트 인스턴스화(+상태 플래그)
+				Comp->SetSimulatePhysics(true);                       // 전체 다이내믹
+
+				// 발 높이(바운드 최저점)에 큰 정적 바닥 박스 생성.
+				if (Scene && !PreviewGroundHandle.IsValid())
+				{
+					const FBoundingBox B = Comp->GetWorldBoundingBox();
+					const float HalfThick = 50.0f;
+					const FVector Center((B.Min.X + B.Max.X) * 0.5f, (B.Min.Y + B.Max.Y) * 0.5f, B.Min.Z - HalfThick);
+
+					FActorCreationParams AP;
+					AP.InitialTM = FTransform(Center, FQuat(), FVector(1.0f, 1.0f, 1.0f));
+					AP.bStatic = true;
+					PreviewGroundHandle = Scene->CreateActor(AP);
+
+					FKAggregateGeom Geom;
+					FKBoxElem Box;
+					Box.Center = FVector(0.0f, 0.0f, 0.0f);
+					Box.HalfExtent = FVector(1000.0f, 1000.0f, HalfThick);
+					Geom.BoxElems.push_back(Box);
+
+					FGeometryAddParams GP;
+					GP.Geometry = &Geom;
+					GP.Scale = FVector(1.0f, 1.0f, 1.0f);
+					Scene->AddGeometry(PreviewGroundHandle, GP);
+				}
+			}
+			else
+			{
+				Comp->SetSimulatePhysics(false);
+				Comp->DestroyPhysicsState();      // 바디/조인트 정리
+				Comp->ResetToReferencePose();     // 바인드 포즈로 복원
+				if (Scene && PreviewGroundHandle.IsValid())
+				{
+					Scene->ReleaseActor(PreviewGroundHandle);
+					PreviewGroundHandle = {};
+				}
+			}
+		}
 	}
 	ImGui::Text("Bodies: %d   Constraints: %d",
 		static_cast<int32>(CurrentPhysicsAsset->BodySetups.size()),
 		static_cast<int32>(CurrentPhysicsAsset->ConstraintSetups.size()));
+
+	// 시각화 토글. Bodies 를 끄고 Constraints 만 켜면 "Constraint 만 보기" 모드(각도 편집 시
+	// 바디 와이어가 시야를 가리지 않음). 조인트는 본 선택 시 해당 조인트만, 아니면 전체.
+	bool bShowBodies = ViewportClient.IsDrawBodies();
+	if (ImGui::Checkbox("Show Bodies", &bShowBodies))
+	{
+		ViewportClient.SetDrawBodies(bShowBodies);
+	}
+	ImGui::SameLine();
+	bool bShowConstraints = ViewportClient.IsDrawConstraints();
+	if (ImGui::Checkbox("Show Constraints", &bShowConstraints))
+	{
+		ViewportClient.SetDrawConstraints(bShowConstraints);
+	}
+	if (ImGui::SmallButton("Constraints Only"))
+	{
+		ViewportClient.SetDrawBodies(false);
+		ViewportClient.SetDrawConstraints(true);
+	}
+	ImGui::SameLine();
+	if (ImGui::SmallButton("Show All"))
+	{
+		ViewportClient.SetDrawBodies(true);
+		ViewportClient.SetDrawConstraints(true);
+	}
 
 	// 전체 스켈레톤에 대해 바디/조인트 초기값을 일괄 생성(이미 있는 본은 건너뜀) — 생성기에 위임.
 	if (ImGui::Button("Generate All (Bodies + Constraints)", ImVec2(-1.0f, 0.0f)))
@@ -1663,6 +1765,9 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 		}
 	}
 	ImGui::Separator();
+
+	// 다중선택 시 일괄 편집 패널(이후 primary 단일 디테일도 함께 표시).
+	RenderPhysicsBulkEdit();
 
 	if (SelectedBoneIndex == -1)
 	{
@@ -1918,12 +2023,91 @@ FName FMeshEditorWidget::GetPhysicsBoneName(int32 BoneIndex) const
 	return FName(Asset->Bones[BoneIndex].Name);
 }
 
+void FMeshEditorWidget::RenderPhysicsBulkEdit()
+{
+	if (!CurrentPhysicsAsset || SelectedBoneIndices.size() <= 1)
+	{
+		return;
+	}
+
+	const int32 NumSelected = static_cast<int32>(SelectedBoneIndices.size());
+	int32 NumBodies = 0;
+	int32 NumConstraints = 0;
+	for (int32 BoneIdx : SelectedBoneIndices)
+	{
+		if (FindPhysicsBodyIndexForBone(BoneIdx) != -1) ++NumBodies;
+		if (FindPhysicsConstraintIndexForChild(GetPhysicsBoneName(BoneIdx)) != -1) ++NumConstraints;
+	}
+
+	ImGui::SeparatorText("Bulk Edit");
+	ImGui::Text("Selected: %d bones  (bodies %d, constraints %d)", NumSelected, NumBodies, NumConstraints);
+	ImGui::TextDisabled("Ctrl/Shift+click in the tree to multi-select.");
+
+	static const char* MotionItems[] = { "Limited", "Locked", "Free" };       // EAngularConstraintMotion 순서
+	static const char* PhysTypeItems[] = { "Default", "Kinematic", "Simulated" }; // EPhysicsType 순서
+
+	// ── Constraint 일괄 ──
+	if (NumConstraints > 0)
+	{
+		ImGui::SeparatorText("Constraint (angular)");
+		ImGui::Combo("Twist Motion",  &BulkTwistMotion,  MotionItems, 3);
+		ImGui::DragFloat("Twist Limit (deg)",  &BulkTwistLimit,  1.0f, 0.0f, 180.0f);
+		ImGui::Combo("Swing1 Motion", &BulkSwing1Motion, MotionItems, 3);
+		ImGui::DragFloat("Swing1 Limit (deg)", &BulkSwing1Limit, 1.0f, 0.0f, 180.0f);
+		ImGui::Combo("Swing2 Motion", &BulkSwing2Motion, MotionItems, 3);
+		ImGui::DragFloat("Swing2 Limit (deg)", &BulkSwing2Limit, 1.0f, 0.0f, 180.0f);
+
+		char Label[64];
+		std::snprintf(Label, sizeof(Label), "Apply to %d constraint(s)", NumConstraints);
+		if (ImGui::Button(Label, ImVec2(-1.0f, 0.0f)))
+		{
+			for (int32 BoneIdx : SelectedBoneIndices)
+			{
+				const int32 Ci = FindPhysicsConstraintIndexForChild(GetPhysicsBoneName(BoneIdx));
+				if (Ci == -1) continue;
+				FConstraintSetup& C = CurrentPhysicsAsset->ConstraintSetups[Ci];
+				// 모션/한계만 일괄 적용. 본 이름/프레임/드라이브는 항목별 고유값이라 보존.
+				C.TwistMotion  = static_cast<EAngularConstraintMotion>(BulkTwistMotion);
+				C.Swing1Motion = static_cast<EAngularConstraintMotion>(BulkSwing1Motion);
+				C.Swing2Motion = static_cast<EAngularConstraintMotion>(BulkSwing2Motion);
+				C.TwistLimit  = BulkTwistLimit;
+				C.Swing1Limit = BulkSwing1Limit;
+				C.Swing2Limit = BulkSwing2Limit;
+			}
+			MarkDirty();
+		}
+	}
+
+	// ── Body 일괄 ──
+	if (NumBodies > 0)
+	{
+		ImGui::SeparatorText("Body");
+		ImGui::Combo("Physics Type", &BulkBodyPhysicsType, PhysTypeItems, 3);
+
+		char Label[64];
+		std::snprintf(Label, sizeof(Label), "Apply to %d body(s)", NumBodies);
+		if (ImGui::Button(Label, ImVec2(-1.0f, 0.0f)))
+		{
+			for (int32 BoneIdx : SelectedBoneIndices)
+			{
+				const int32 Bi = FindPhysicsBodyIndexForBone(BoneIdx);
+				if (Bi == -1 || !CurrentPhysicsAsset->BodySetups[Bi]) continue;
+				CurrentPhysicsAsset->BodySetups[Bi]->PhysicsType = static_cast<EPhysicsType>(BulkBodyPhysicsType);
+			}
+			MarkDirty();
+		}
+	}
+
+	ImGui::Separator();
+}
+
 void FMeshEditorWidget::RenderPhysicsBoneTree(const FSkeletalMesh* Asset, int32 Index)
 {
 	const FBone& Bone = Asset->Bones[Index];
 
 	ImGuiTreeNodeFlags Flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
-	if (Index == SelectedBoneIndex)
+	const bool bInSelection = std::find(SelectedBoneIndices.begin(), SelectedBoneIndices.end(), Index) != SelectedBoneIndices.end();
+	if (bInSelection || Index == SelectedBoneIndex)
 	{
 		Flags |= ImGuiTreeNodeFlags_Selected;
 	}
@@ -1957,7 +2141,34 @@ void FMeshEditorWidget::RenderPhysicsBoneTree(const FSkeletalMesh* Asset, int32 
 
 	if (ImGui::IsItemClicked())
 	{
-		SelectedBoneIndex = Index;
+		const ImGuiIO& IO = ImGui::GetIO();
+		if (IO.KeyShift && SelectedBoneIndex >= 0)
+		{
+			// 범위 선택: primary~Index 본 인덱스 구간을 선택에 추가(손가락 등 연속 본 묶음).
+			const int32 Lo = std::min(SelectedBoneIndex, Index);
+			const int32 Hi = std::max(SelectedBoneIndex, Index);
+			for (int32 K = Lo; K <= Hi; ++K)
+			{
+				if (std::find(SelectedBoneIndices.begin(), SelectedBoneIndices.end(), K) == SelectedBoneIndices.end())
+				{
+					SelectedBoneIndices.push_back(K);
+				}
+			}
+		}
+		else if (IO.KeyCtrl)
+		{
+			// 토글
+			auto It = std::find(SelectedBoneIndices.begin(), SelectedBoneIndices.end(), Index);
+			if (It != SelectedBoneIndices.end()) { SelectedBoneIndices.erase(It); }
+			else { SelectedBoneIndices.push_back(Index); }
+		}
+		else
+		{
+			// 단일 선택
+			SelectedBoneIndices.clear();
+			SelectedBoneIndices.push_back(Index);
+		}
+		SelectedBoneIndex = Index;   // primary = 마지막 클릭
 		ViewportClient.SetSelectedBone(Cast<USkeletalMesh>(EditedObject), Index);
 	}
 

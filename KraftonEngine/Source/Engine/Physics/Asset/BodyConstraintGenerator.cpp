@@ -5,6 +5,7 @@
 #include "Object/Object.h"   // UObjectManager
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 
 namespace
@@ -38,6 +39,44 @@ namespace
 		const float AxisLen = std::sqrt(Axis.X * Axis.X + Axis.Y * Axis.Y + Axis.Z * Axis.Z);
 		Axis = FVector(Axis.X / AxisLen, Axis.Y / AxisLen, Axis.Z / AxisLen);
 		return FQuat::FromAxisAngle(Axis, std::acos(Dot));
+	}
+
+	// 본-로컬 X축을 Dir(정규화) 로 회전시키는 쿼터니언. 조인트 프레임의 twist 축(PxD6 의 X)을
+	// 본 세그먼트 방향에 맞추는 데 사용한다.
+	FQuat RotationXToDir(const FVector& Dir)
+	{
+		const float Dot = Dir.X;   // (1,0,0)·Dir
+		if (Dot >  0.99999f) { return FQuat(); }
+		if (Dot < -0.99999f) { return FQuat::FromAxisAngle(FVector(0.0f, 0.0f, 1.0f), 3.14159265f); }
+		FVector Axis(0.0f, -Dir.Z, Dir.Y);   // (1,0,0) × Dir
+		const float AxisLen = std::sqrt(Axis.X * Axis.X + Axis.Y * Axis.Y + Axis.Z * Axis.Z);
+		Axis = FVector(Axis.X / AxisLen, Axis.Y / AxisLen, Axis.Z / AxisLen);
+		return FQuat::FromAxisAngle(Axis, std::acos(Dot));
+	}
+
+	float VLen(const FVector& V) { return std::sqrt(V.X * V.X + V.Y * V.Y + V.Z * V.Z); }
+	FVector VCross(const FVector& A, const FVector& B)
+	{
+		return FVector(A.Y * B.Z - A.Z * B.Y, A.Z * B.X - A.X * B.Z, A.X * B.Y - A.Y * B.X);
+	}
+	FVector VNorm(const FVector& V)
+	{
+		const float L = VLen(V);
+		return (L > 1e-6f) ? FVector(V.X / L, V.Y / L, V.Z / L) : FVector(1.0f, 0.0f, 0.0f);
+	}
+
+	// 경첩(1축) 관절로 다룰 본 이름인지 — 무릎/팔꿈치류. 이름 기반 휴리스틱(스켈레톤 의존).
+	bool IsHingeBoneName(const FString& Name)
+	{
+		FString L = Name;
+		std::transform(L.begin(), L.end(), L.begin(),
+			[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+		static const char* Keys[] = { "calf", "shin", "lowerleg", "knee", "forearm", "lowerarm", "elbow" };
+		for (const char* K : Keys)
+		{
+			if (L.find(K) != FString::npos) { return true; }
+		}
+		return false;
 	}
 
 	// 본의 첫 자식 방향/거리로 캡슐(본-로컬)을 피팅. 자식 없으면(=leaf) 작은 기본값.
@@ -124,12 +163,6 @@ namespace
 		Out.Length   = 1.0f;
 	}
 
-	// 본의 부모-상대 로컬 포즈(ReferenceLocalPose) → FTransform. 조인트 ParentFrame 용.
-	FTransform BoneLocalPoseTransform(const FBone& Bone)
-	{
-		return FTransform(MatrixTranslation(Bone.ReferenceLocalPose),
-			FQuat::FromMatrix(Bone.ReferenceLocalPose), FVector(1.0f, 1.0f, 1.0f));
-	}
 }
 
 UBodySetup* FBodyConstraintGenerator::GenerateBody(UPhysicsAsset* Asset, const FSkeletalMesh* Mesh, int32 BoneIndex)
@@ -183,8 +216,65 @@ int32 FBodyConstraintGenerator::GenerateConstraint(UPhysicsAsset* Asset, const F
 	FConstraintSetup Constraint;
 	Constraint.ParentBone = ParentName;
 	Constraint.ChildBone  = ChildName;
-	// 조인트 앵커를 자식 본 원점에: ParentFrame=자식의 부모-로컬 포즈, ChildFrame=identity(기본).
-	Constraint.ParentFrame = BoneLocalPoseTransform(Mesh->Bones[ChildBoneIndex]);
+
+	// 조인트 앵커는 자식 본 원점. 추가로 조인트 프레임의 twist 축(X)을 본 세그먼트 방향
+	// (자식의 첫 자식으로 향하는 방향)에 정렬한다. 정렬이 없으면 본 로컬 X(스켈레톤에 따라
+	// 옆방향)가 twist 축이 되어 Swing 콘이 본을 따라가지 않고 옆으로 뻗는다.
+	//   ChildFrame  = (원점, FrameRot)  — 자식 본 로컬
+	//   ParentFrame = ChildFrameMat * 자식 로컬 포즈 (행렬 합성, 아래) — rest 에서 두 프레임 일치
+	const FBone& ChildBone = Mesh->Bones[ChildBoneIndex];
+
+	// 세그먼트 방향(자식 → 그 첫 자식) — child 본 로컬.
+	FVector SegLocal(0.0f, 0.0f, 0.0f);
+	bool bHasSeg = false;
+	const int32 GrandChild = FindFirstChildBone(Mesh, ChildBoneIndex);
+	if (GrandChild != -1)
+	{
+		const FVector Seg = MatrixTranslation(Mesh->Bones[GrandChild].ReferenceLocalPose);
+		if (VLen(Seg) > 1e-4f) { SegLocal = VNorm(Seg); bHasSeg = true; }
+	}
+
+	FQuat FrameRot;   // 조인트 프레임 회전(child 본 로컬). identity = 본 로컬 축 그대로(leaf 폴백).
+	if (bHasSeg && IsHingeBoneName(ChildName.ToString()))
+	{
+		// 경첩(무릎/팔꿈치): twist 축을 "경첩 회전축"에 맞춘다. rest 포즈가 펴진 상태라
+		// 두 세그먼트의 외적으론 축을 못 구하므로, 세그먼트와 월드축의 외적으로 측면 축을 추정한다.
+		// twist 만 넓게 Limited, 두 swing 은 Locked → 1축 힌지(UE 무릎의 Twist=60, Swing≈0 형태).
+		const FQuat ChildGlobalRot = FQuat::FromMatrix(ChildBone.GetReferenceGlobalPose());
+		const FVector SegComp = ChildGlobalRot.RotateVector(SegLocal);
+		const FVector Refs[3] = { FVector(0.0f, 0.0f, 1.0f), FVector(0.0f, 1.0f, 0.0f), FVector(1.0f, 0.0f, 0.0f) };
+		FVector HingeComp(1.0f, 0.0f, 0.0f);
+		for (const FVector& Ref : Refs)
+		{
+			const FVector C = VCross(SegComp, Ref);
+			if (VLen(C) > 0.3f) { HingeComp = C; break; }   // 세그먼트와 충분히 수직인 첫 축
+		}
+		const FVector HingeLocal = ChildGlobalRot.Inverse().RotateVector(VNorm(HingeComp));
+		FrameRot = RotationXToDir(VNorm(HingeLocal));
+
+		Constraint.TwistMotion  = ACM_Limited;
+		Constraint.TwistLimit   = 80.0f;   // 도. 넓은 대칭 굽힘 범위(방향/비대칭은 수동 튜닝).
+		Constraint.Swing1Motion = ACM_Locked;
+		Constraint.Swing2Motion = ACM_Locked;
+	}
+	else if (bHasSeg)
+	{
+		// 일반(볼/콘) 조인트: twist 축 = 본 길이축. 모션은 struct 기본값(전 축 Limited 콘) 유지.
+		FrameRot = RotationXToDir(SegLocal);
+	}
+
+	// ChildFrame = (자식 본 원점, FrameRot). ParentFrame 은 엔진 규약(row-vector child*parent)으로
+	// 행렬 합성해 bind 포즈에서 ChildFrame 과 정확히 일치시킨다(쿼터니언 합성은 column 규약이라
+	// 순서가 어긋나 머리/쇄골 등에서 90° 스냅을 유발했음):
+	//   jointWorld = ChildFrameMat * childGlobal = ParentFrameMat * parentGlobal
+	//   childGlobal = childLocalPose * parentGlobal  →  ParentFrameMat = ChildFrameMat * childLocalPose
+	Constraint.ChildFrame  = FTransform(FVector(0.0f, 0.0f, 0.0f), FrameRot, FVector(1.0f, 1.0f, 1.0f));
+
+	const FMatrix ChildFrameMat  = FrameRot.ToMatrix();
+	const FMatrix ParentFrameMat = ChildFrameMat * ChildBone.ReferenceLocalPose;
+	FTransform ParentFrame(ParentFrameMat);
+	ParentFrame.Scale = FVector(1.0f, 1.0f, 1.0f);   // 본 로컬 포즈 스케일 누수 방지
+	Constraint.ParentFrame = ParentFrame;
 
 	Asset->ConstraintSetups.push_back(Constraint);
 	return static_cast<int32>(Asset->ConstraintSetups.size()) - 1;

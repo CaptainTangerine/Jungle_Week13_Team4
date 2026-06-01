@@ -18,16 +18,20 @@ public:
 
 	const TArray<FWireLine>& GetCachedLines() const { return CachedLines; }
 	const TArray<FWireLine>& GetCachedSelectedLines() const { return CachedSelectedLines; }
+	const TArray<FWireLine>& GetCachedConstraintLines() const { return CachedConstraintLines; }
 
 	const FVector4& GetBodyColor() const { return BodyColor; }
 	const FVector4& GetSelectedColor() const { return SelectedColor; }
+	const FVector4& GetConstraintColor() const { return ConstraintColor; }
 
 private:
 	void RebuildLines();
 
-	TArray<FWireLine> CachedLines;          // 일반 바디
-	TArray<FWireLine> CachedSelectedLines;  // 선택 본의 바디(하이라이트)
+	TArray<FWireLine> CachedLines;            // 일반 바디
+	TArray<FWireLine> CachedSelectedLines;    // 선택 본의 바디(하이라이트)
+	TArray<FWireLine> CachedConstraintLines;  // 조인트 프레임 축 + Swing 콘 + Twist 호
 
 	FVector4 BodyColor;
 	FVector4 SelectedColor;
+	FVector4 ConstraintColor;
 };

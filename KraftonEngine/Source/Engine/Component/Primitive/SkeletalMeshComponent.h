@@ -77,6 +77,11 @@ public:
     void  SetBodyPhysicsBlendWeight(FName BoneName, float Weight, bool bIncludeChildren = true, bool bInterpolate = true);
     float GetPhysicsBlendWeight() const;   // 최대 바디 가중치(정보용)
     void  SetPhysicsBlendInterpSpeed(float InSpeed) { PhysicsBlendInterpSpeed = InSpeed; }
+
+    // 에디터 프리뷰 전용: 물리 씬을 스텝한 뒤 매 프레임 호출해 시뮬 바디 포즈를 본에 되읽는다
+    // (런타임 TickComponent 의 물리 경로만 수행; anim 인스턴스가 없으면 ref 포즈를 기준으로).
+    // 게임 월드에선 TickComponent 가 자동 처리하므로 호출 불필요.
+    void  SimulatePhysicsPreview(float DeltaTime);
     const TArray<FBodyInstance*>& GetBodies() const { return Bodies; }
     const TArray<FConstraintInstance*>& GetConstraints() const { return Constraints; }
     FBodyInstance* GetBodyInstance(FName BoneName) const;

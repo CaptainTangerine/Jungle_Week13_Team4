@@ -604,6 +604,15 @@ void USkinnedMeshComponent::SetBoneLocalTransforms(const TArray<FTransform>& Loc
 	MarkWorldBoundsDirty();
 }
 
+void USkinnedMeshComponent::ResetToReferencePose()
+{
+	// 편집 포즈를 끄면 BuildBoneEditGlobalMatrices 가 ref local pose 를 사용 → 바인드 포즈로 복원.
+	bUseBoneEditPose = false;
+	bUseBoneEditBasePose = false;
+	RefreshSkinningAfterPoseChanged();
+	MarkWorldBoundsDirty();
+}
+
 void USkinnedMeshComponent::SetAnimationPose(
 	const TArray<FTransform>& LocalPose,
 	const TArray<float>&      InMorphTargetWeights

@@ -1088,6 +1088,15 @@ FPhysicsActorHandle FPhysXPhysicsScene::CreateActor(const FActorCreationParams& 
 			NewDynamic->setRigidBodyFlag(PxRigidBodyFlag::eUSE_KINEMATIC_TARGET_FOR_SCENE_QUERIES, true);
 			NewDynamic->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, !Params.bSimulatePhysics);
 			SetDynamicCCDEnabled(NewDynamic, Params.bSimulatePhysics);
+
+			// 랙돌 안정화 (raw 다이내믹 바디 = PhysicsAsset/랙돌 경로):
+			//  - maxDepenetrationVelocity: 기본 무한대라, 스폰 시 바닥/월드와 살짝 겹친 바디를
+			//    무한 속도로 밀어내 폭발한다. 유한값으로 클램프해 부드럽게 분리(가끔 폭발 차단).
+			//  - solverIterationCounts: 기본 (4,1)은 관절 체인이 길면 수렴 부족 → 지터/발산.
+			//    (8,2)로 상향해 조인트 안정성 확보.
+			//  (값은 스케일에 따라 튜닝 여지 있음.)
+			NewDynamic->setMaxDepenetrationVelocity(10.0f);
+			NewDynamic->setSolverIterationCounts(8, 2);
 		}
 		NewActor = NewDynamic;
 	}
@@ -1300,32 +1309,63 @@ FPhysicsConstraintHandle FPhysXPhysicsScene::CreateConstraint(const FConstraintC
 	}
 
 	constexpr float MinAngularLimit = 0.0001f;
-	const auto ClampAngularLimit = [](float Value)
+	// 저작 한계는 도(degree). 라디안으로 변환 후 [eps, Pi] 로 클램프.
+	const auto ClampAngularLimit = [](float Degrees)
 	{
-		return std::max(0.0f, std::min(Value, PxPi));
+		const float Rad = Degrees * (PxPi / 180.0f);
+		return std::max(MinAngularLimit, std::min(Rad, PxPi));
 	};
 
-	Joint->setMotion(PxD6Axis::eX, PxD6Motion::eLOCKED);
-	Joint->setMotion(PxD6Axis::eY, PxD6Motion::eLOCKED);
-	Joint->setMotion(PxD6Axis::eZ, PxD6Motion::eLOCKED);
-
-	const float TwistLimit = ClampAngularLimit(Setup->TwistLimit);
-	const float Swing1Limit = ClampAngularLimit(Setup->Swing1Limit);
-	const float Swing2Limit = ClampAngularLimit(Setup->Swing2Limit);
-
-	Joint->setMotion(PxD6Axis::eTWIST, TwistLimit > MinAngularLimit ? PxD6Motion::eLIMITED : PxD6Motion::eLOCKED);
-	Joint->setMotion(PxD6Axis::eSWING1, Swing1Limit > MinAngularLimit ? PxD6Motion::eLIMITED : PxD6Motion::eLOCKED);
-	Joint->setMotion(PxD6Axis::eSWING2, Swing2Limit > MinAngularLimit ? PxD6Motion::eLIMITED : PxD6Motion::eLOCKED);
-
-	if (TwistLimit > MinAngularLimit)
+	// 축별 모션 enum → PxD6Motion 매핑.
+	const auto MapLinear = [](ELinearConstraintMotion M) -> PxD6Motion::Enum
 	{
+		switch (M)
+		{
+		case LCM_Free:    return PxD6Motion::eFREE;
+		case LCM_Limited: return PxD6Motion::eLIMITED;
+		case LCM_Locked:
+		default:          return PxD6Motion::eLOCKED;
+		}
+	};
+	const auto MapAngular = [](EAngularConstraintMotion M) -> PxD6Motion::Enum
+	{
+		switch (M)
+		{
+		case ACM_Free:    return PxD6Motion::eFREE;
+		case ACM_Locked:  return PxD6Motion::eLOCKED;
+		case ACM_Limited:
+		default:          return PxD6Motion::eLIMITED;
+		}
+	};
+
+	Joint->setMotion(PxD6Axis::eX, MapLinear(Setup->LinearXMotion));
+	Joint->setMotion(PxD6Axis::eY, MapLinear(Setup->LinearYMotion));
+	Joint->setMotion(PxD6Axis::eZ, MapLinear(Setup->LinearZMotion));
+	Joint->setMotion(PxD6Axis::eTWIST,  MapAngular(Setup->TwistMotion));
+	Joint->setMotion(PxD6Axis::eSWING1, MapAngular(Setup->Swing1Motion));
+	Joint->setMotion(PxD6Axis::eSWING2, MapAngular(Setup->Swing2Motion));
+
+	// 각도 한계는 해당 축이 Limited 일 때만 적용.
+	if (Setup->TwistMotion == ACM_Limited)
+	{
+		const float TwistLimit = ClampAngularLimit(Setup->TwistLimit);
 		Joint->setTwistLimit(PxJointAngularLimitPair(-TwistLimit, TwistLimit));
 	}
-	if (Swing1Limit > MinAngularLimit || Swing2Limit > MinAngularLimit)
+	if (Setup->Swing1Motion == ACM_Limited || Setup->Swing2Motion == ACM_Limited)
 	{
 		Joint->setSwingLimit(PxJointLimitCone(
-			std::max(Swing1Limit, MinAngularLimit),
-			std::max(Swing2Limit, MinAngularLimit)));
+			ClampAngularLimit(Setup->Swing1Limit),
+			ClampAngularLimit(Setup->Swing2Limit)));
+	}
+
+	// 선형 축 중 하나라도 Limited 면 거리 한계 적용(강성 0 = 강체 한계).
+	const bool bAnyLinearLimited =
+		(Setup->LinearXMotion == LCM_Limited) ||
+		(Setup->LinearYMotion == LCM_Limited) ||
+		(Setup->LinearZMotion == LCM_Limited);
+	if (bAnyLinearLimited && Setup->LinearLimit > 0.0f)
+	{
+		Joint->setDistanceLimit(PxJointLinearLimit(Setup->LinearLimit, PxSpring(0.0f, 0.0f)));
 	}
 
 	if (Setup->DriveStiffness > 0.0f || Setup->DriveDamping > 0.0f)

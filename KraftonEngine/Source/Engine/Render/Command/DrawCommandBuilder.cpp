@@ -91,6 +91,7 @@ void FDrawCommandBuilder::Create(ID3D11Device* InDevice, ID3D11DeviceContext* In
 	EditorLines.Create(InDevice);
 	GridLines.Create(InDevice);
 	DebugBoneLines.Create(InDevice);
+	OverlayLines.Create(InDevice);
 	FontGeometry.Create(InDevice);
 
 	FogCB.Create(InDevice, sizeof(FFogConstants), "FogCB");
@@ -110,6 +111,7 @@ void FDrawCommandBuilder::Release()
 	EditorLines.Release();
 	GridLines.Release();
 	DebugBoneLines.Release();
+	OverlayLines.Release();
 	FontGeometry.Release();
 
 	for (auto& Pair : PerSceneObjectCBPool)
@@ -151,6 +153,7 @@ void FDrawCommandBuilder::BeginCollect(const FFrameContext& Frame)
 	EditorLines.Clear();
 	GridLines.Clear();
 	DebugBoneLines.Clear();
+	OverlayLines.Clear();
 	FontGeometry.Clear();
 	FontGeometry.ClearScreen();
 
@@ -489,6 +492,11 @@ void FDrawCommandBuilder::BuildProxyCommands(const FFrameContext& Frame, FScene&
 				{
 					EditorLines.AddLine(Line.Start, Line.End, PhysProxy->GetSelectedColor());
 				}
+				// 조인트 한계 시각화는 메시에 가리지 않게 NoDepth 오버레이로(아래 BuildEditorLineCommands).
+				for (const FWireLine& Line : PhysProxy->GetCachedConstraintLines())
+				{
+					OverlayLines.AddLine(Line.Start, Line.End, PhysProxy->GetConstraintColor());
+				}
 			}
 		}
 		else if (Proxy->HasProxyFlag(EPrimitiveProxyFlags::WireShape))
@@ -707,6 +715,8 @@ void FDrawCommandBuilder::BuildEditorLineCommands(EViewMode ViewMode)
 	BoneLinesRS.DepthStencil = EDepthStencilState::NoDepth;
 
 	EmitLineCommand(DebugBoneLines, EditorShader, BoneLinesRS);
+	// 조인트 한계 등 — 메시 위에 항상 보이도록 깊이 무시로 오버레이.
+	EmitLineCommand(OverlayLines, EditorShader, BoneLinesRS);
 }
 
 // ============================================================

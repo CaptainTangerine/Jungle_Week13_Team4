@@ -83,6 +83,7 @@ private:
 	FLineGeometry  EditorLines;
 	FLineGeometry  GridLines;
 	FLineGeometry  DebugBoneLines;
+	FLineGeometry  OverlayLines;   // 깊이 무시(NoDepth)로 메시 위에 덮어 그리는 에디터 라인(조인트 한계 등)
 	FFontGeometry  FontGeometry;
 
 	// PerObject CB 풀

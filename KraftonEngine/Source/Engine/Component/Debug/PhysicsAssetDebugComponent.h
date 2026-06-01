@@ -38,9 +38,20 @@ public:
 	bool IsVisibleDebug() const { return bDrawEnabled; }
 	void SetVisibleDebug(bool bEnabled) { bDrawEnabled = bEnabled; MarkRenderStateDirty(); }
 
+	// 조인트(Constraint) 시각화 마스터 토글. true 일 때, 본이 선택돼 있으면 그 본에 연결된
+	// Constraint 만, 선택이 없으면 전체를 그린다(클러터 감소).
+	bool IsDrawConstraints() const { return bDrawConstraints; }
+	void SetDrawConstraints(bool bEnabled) { bDrawConstraints = bEnabled; MarkRenderStateDirty(); }
+
+	// 바디(콜리전 프리미티브) 시각화 토글. off + DrawConstraints on = "Constraint 만 보기" 모드.
+	bool IsDrawBodies() const { return bDrawBodies; }
+	void SetDrawBodies(bool bEnabled) { bDrawBodies = bEnabled; MarkRenderStateDirty(); }
+
 private:
 	UPhysicsAsset*          PhysicsAsset       = nullptr;
 	USkeletalMeshComponent* TargetMeshComponent = nullptr;
 	int32                   SelectedBoneIndex  = -1;
 	bool                    bDrawEnabled       = true;
+	bool                    bDrawConstraints   = true;
+	bool                    bDrawBodies        = true;
 };
