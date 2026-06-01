@@ -192,6 +192,53 @@
           "bTickEnable" : true
         }
       }
+    }, {
+      "ClassName" : "ABoxActor",
+      "Name" : "ABoxActor_1",
+      "NonSceneComponents" : [],
+      "ObjectId" : 9,
+      "Properties" : {
+        "PendingActorLocation" : [0.000000, 0.000000, 0.000000],
+        "PendingActorRotation" : [-0.000000, 0.000000, 0.000000],
+        "PendingActorScale" : [65.652000, 67.731003, 1.000000],
+        "PendingActorVisible" : true,
+        "PendingTagsString" : "",
+        "bNeedsTick" : true
+      },
+      "RootComponent" : {
+        "Children" : [],
+        "ClassName" : "UBoxComponent",
+        "ObjectId" : 10,
+        "Properties" : {
+          "BoxExtent" : [1.000000, 1.000000, 1.000000],
+          "CachedEditRotator" : [-0.000000, 0.000000, 0.000000],
+          "CenterOfMassOffset" : [0.000000, 0.000000, 0.000000],
+          "CollisionEnabled" : 3,
+          "Mass" : 1.000000,
+          "ObjectType" : 0,
+          "RelativeTransform.Location" : [0.000000, 0.000000, 0.000000],
+          "RelativeTransform.Scale" : [65.652000, 67.731003, 1.000000],
+          "ResponseContainer" : {
+            "Responses[0]" : 2,
+            "Responses[1]" : 2,
+            "Responses[2]" : 2,
+            "Responses[3]" : 2,
+            "Responses[4]" : 2
+          },
+          "ShapeColor" : [0.000000, 1.000000, 0.000000, 1.000000],
+          "bAutoActivate" : true,
+          "bCastShadow" : false,
+          "bCastShadowAsTwoSided" : false,
+          "bDrawOnlyIfSelected" : false,
+          "bEditorOnly" : false,
+          "bGenerateOverlapEvents" : false,
+          "bHiddenInComponentTree" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bSimulatePhysics" : false,
+          "bTickEnable" : true
+        }
+      }
     }],
   "ClassName" : "UWorld",
   "ContextHandle" : "NewScene",
@@ -201,9 +248,9 @@
   "PerspectiveCamera" : {
     "FOV" : 1.047198,
     "FarClip" : 1000.000000,
-    "Location" : [69.526924, 1.331508, 53.440643],
+    "Location" : [2.012138, 138.246658, 39.127270],
     "NearClip" : 0.100000,
-    "Rotation" : [0.000000, 20.414976, 182.100128]
+    "Rotation" : [0.000000, 20.564964, 279.749695]
   },
   "Version" : 2,
   "WorldSettings" : {
