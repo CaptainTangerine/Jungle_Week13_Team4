@@ -26,9 +26,32 @@ if not exist "%PM_python_PATH%\python.exe" (
 )
 
 set VSWHERE="%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
-for /f "usebackq delims=" %%i in (`%VSWHERE% -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -version [17.0^,18.0^) -property installationPath`) do set VS_PATH=%%i
+
+REM Try VS 2022 with C++ tools first
+for /f "usebackq delims=" %%i in (`%VSWHERE% -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -version [17.0^,18.0^) -property installationPath 2^>nul`) do set VS_PATH=%%i
+
+REM Fallback: VS 2019 with C++ tools
 if not defined VS_PATH (
-    echo Visual Studio 2022 with C++ build tools was not found.
+    for /f "usebackq delims=" %%i in (`%VSWHERE% -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -version [16.0^,17.0^) -property installationPath 2^>nul`) do set VS_PATH=%%i
+)
+
+REM Fallback: Any VS with C++ tools
+if not defined VS_PATH (
+    for /f "usebackq delims=" %%i in (`%VSWHERE% -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2^>nul`) do set VS_PATH=%%i
+)
+
+REM Fallback: Any VS (might not have C++ tools - will fail at build time)
+if not defined VS_PATH (
+    for /f "usebackq delims=" %%i in (`%VSWHERE% -latest -products * -property installationPath 2^>nul`) do set VS_PATH=%%i
+    if defined VS_PATH (
+        echo Warning: Visual Studio found but C++ build tools may not be installed.
+        echo Please install "Desktop development with C++" workload via Visual Studio Installer.
+    )
+)
+
+if not defined VS_PATH (
+    echo Visual Studio was not found. Please install Visual Studio 2019 or later
+    echo with "Desktop development with C++" workload.
     pause
     exit /b 1
 )

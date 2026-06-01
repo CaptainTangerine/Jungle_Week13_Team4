@@ -24,6 +24,13 @@ namespace PSKey
 	constexpr const char* bEnableCCD = "bEnableCCD";
 	constexpr const char* bEnablePCM = "bEnablePCM";
 	constexpr const char* bEnableActiveActors = "bEnableActiveActors";
+	constexpr const char* bEnablePVD = "bEnablePVD";
+	constexpr const char* PvdHost = "PvdHost";
+	constexpr const char* PvdPort = "PvdPort";
+	constexpr const char* PvdTimeoutMs = "PvdTimeoutMs";
+	constexpr const char* bPvdTransmitContacts = "bPvdTransmitContacts";
+	constexpr const char* bPvdTransmitConstraints = "bPvdTransmitConstraints";
+	constexpr const char* bPvdTransmitSceneQueries = "bPvdTransmitSceneQueries";
 }
 
 void FProjectSettings::SaveToFile(const FString& Path) const
@@ -51,6 +58,13 @@ void FProjectSettings::SaveToFile(const FString& Path) const
 	PhysicsObj[PSKey::bEnableCCD] = Physics.bEnableCCD;
 	PhysicsObj[PSKey::bEnablePCM] = Physics.bEnablePCM;
 	PhysicsObj[PSKey::bEnableActiveActors] = Physics.bEnableActiveActors;
+	PhysicsObj[PSKey::bEnablePVD] = Physics.bEnablePVD;
+	PhysicsObj[PSKey::PvdHost] = Physics.PvdHost;
+	PhysicsObj[PSKey::PvdPort] = static_cast<int>(Physics.PvdPort);
+	PhysicsObj[PSKey::PvdTimeoutMs] = static_cast<int>(Physics.PvdTimeoutMs);
+	PhysicsObj[PSKey::bPvdTransmitContacts] = Physics.bPvdTransmitContacts;
+	PhysicsObj[PSKey::bPvdTransmitConstraints] = Physics.bPvdTransmitConstraints;
+	PhysicsObj[PSKey::bPvdTransmitSceneQueries] = Physics.bPvdTransmitSceneQueries;
 	Root[PSKey::PhysicsSection] = PhysicsObj;
 
 	std::filesystem::path FilePath(FPaths::ToWide(Path));
@@ -130,5 +144,25 @@ void FProjectSettings::LoadFromFile(const FString& Path)
 			Physics.bEnablePCM = P[PSKey::bEnablePCM].ToBool();
 		if (P.hasKey(PSKey::bEnableActiveActors))
 			Physics.bEnableActiveActors = P[PSKey::bEnableActiveActors].ToBool();
+		if (P.hasKey(PSKey::bEnablePVD))
+			Physics.bEnablePVD = P[PSKey::bEnablePVD].ToBool();
+		if (P.hasKey(PSKey::PvdHost))
+			Physics.PvdHost = P[PSKey::PvdHost].ToString();
+		if (P.hasKey(PSKey::PvdPort))
+		{
+			int v = P[PSKey::PvdPort].ToInt();
+			Physics.PvdPort = static_cast<uint32>((std::max)(1, (std::min)(v, 65535)));
+		}
+		if (P.hasKey(PSKey::PvdTimeoutMs))
+		{
+			int v = P[PSKey::PvdTimeoutMs].ToInt();
+			Physics.PvdTimeoutMs = static_cast<uint32>((std::max)(0, (std::min)(v, 60000)));
+		}
+		if (P.hasKey(PSKey::bPvdTransmitContacts))
+			Physics.bPvdTransmitContacts = P[PSKey::bPvdTransmitContacts].ToBool();
+		if (P.hasKey(PSKey::bPvdTransmitConstraints))
+			Physics.bPvdTransmitConstraints = P[PSKey::bPvdTransmitConstraints].ToBool();
+		if (P.hasKey(PSKey::bPvdTransmitSceneQueries))
+			Physics.bPvdTransmitSceneQueries = P[PSKey::bPvdTransmitSceneQueries].ToBool();
 	}
 }

@@ -39,6 +39,13 @@ class FProjectSettings : public TSingleton<FProjectSettings>
 		bool bEnableCCD = true;
 		bool bEnablePCM = true;
 		bool bEnableActiveActors = true;
+		bool bEnablePVD = false;
+		FString PvdHost = "127.0.0.1";
+		uint32 PvdPort = 5425;
+		uint32 PvdTimeoutMs = 10;
+		bool bPvdTransmitContacts = true;
+		bool bPvdTransmitConstraints = true;
+		bool bPvdTransmitSceneQueries = false;
 	};
 
 public:

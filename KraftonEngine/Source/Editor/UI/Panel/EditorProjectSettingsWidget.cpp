@@ -5,6 +5,9 @@
 #include "Object/Reflection/UClass.h"
 #include "ImGui/imgui.h"
 
+#include <algorithm>
+#include <cstring>
+
 void EditorProjectSettingsWidget::Render()
 {
 	if (!bOpen) return;
@@ -99,6 +102,33 @@ void EditorProjectSettingsWidget::Render()
 		ImGui::Checkbox("CCD", &PS.Physics.bEnableCCD);
 		ImGui::Checkbox("PCM", &PS.Physics.bEnablePCM);
 		ImGui::Checkbox("Active Actors", &PS.Physics.bEnableActiveActors);
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("PVD");
+		ImGui::Checkbox("Enable PVD", &PS.Physics.bEnablePVD);
+
+		char PvdHost[128] = {};
+		strncpy_s(PvdHost, sizeof(PvdHost), PS.Physics.PvdHost.c_str(), _TRUNCATE);
+		if (ImGui::InputText("PVD Host", PvdHost, sizeof(PvdHost)))
+		{
+			PS.Physics.PvdHost = PvdHost;
+		}
+
+		int PvdPort = static_cast<int>(PS.Physics.PvdPort);
+		if (ImGui::InputInt("PVD Port", &PvdPort))
+		{
+			PS.Physics.PvdPort = static_cast<uint32>((std::max)(1, (std::min)(PvdPort, 65535)));
+		}
+
+		int PvdTimeoutMs = static_cast<int>(PS.Physics.PvdTimeoutMs);
+		if (ImGui::InputInt("PVD Timeout Ms", &PvdTimeoutMs))
+		{
+			PS.Physics.PvdTimeoutMs = static_cast<uint32>((std::max)(0, (std::min)(PvdTimeoutMs, 60000)));
+		}
+
+		ImGui::Checkbox("PVD Contacts", &PS.Physics.bPvdTransmitContacts);
+		ImGui::Checkbox("PVD Constraints", &PS.Physics.bPvdTransmitConstraints);
+		ImGui::Checkbox("PVD Scene Queries", &PS.Physics.bPvdTransmitSceneQueries);
 		ImGui::TextDisabled("Requires scene reload to take effect.");
 	}
 

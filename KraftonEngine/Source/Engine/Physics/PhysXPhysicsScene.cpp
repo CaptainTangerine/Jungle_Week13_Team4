@@ -54,7 +54,62 @@ static PxDefaultAllocator GPhysXAllocator;
 // ============================================================
 static PxFoundation* GSharedFoundation = nullptr;
 static PxPhysics* GSharedPhysics = nullptr;
+static PxPvd* GSharedPvd = nullptr;
+static PxPvdTransport* GSharedPvdTransport = nullptr;
+static bool GSharedExtensionsInitialized = false;
 static int32 GSharedRefCount = 0;
+
+static void ReleaseSharedPvd()
+{
+	if (GSharedPvd)
+	{
+		GSharedPvd->disconnect();
+		GSharedPvd->release();
+		GSharedPvd = nullptr;
+	}
+	if (GSharedPvdTransport)
+	{
+		GSharedPvdTransport->release();
+		GSharedPvdTransport = nullptr;
+	}
+}
+
+static PxPvd* CreateSharedPvdIfEnabled(PxFoundation& Foundation)
+{
+	const auto& PhysicsSettings = FProjectSettings::Get().Physics;
+	if (!PhysicsSettings.bEnablePVD)
+	{
+		return nullptr;
+	}
+
+	GSharedPvd = PxCreatePvd(Foundation);
+	if (!GSharedPvd)
+	{
+		UE_LOG("[PhysX] PVD creation failed");
+		return nullptr;
+	}
+
+	const char* Host = PhysicsSettings.PvdHost.empty() ? "127.0.0.1" : PhysicsSettings.PvdHost.c_str();
+	const int Port = static_cast<int>((std::max)(1u, (std::min)(PhysicsSettings.PvdPort, 65535u)));
+	const unsigned int TimeoutMs = static_cast<unsigned int>(PhysicsSettings.PvdTimeoutMs);
+	GSharedPvdTransport = PxDefaultPvdSocketTransportCreate(Host, Port, TimeoutMs);
+	if (!GSharedPvdTransport)
+	{
+		UE_LOG("[PhysX] PVD socket transport creation failed (%s:%d)", Host, Port);
+		ReleaseSharedPvd();
+		return nullptr;
+	}
+
+	if (!GSharedPvd->connect(*GSharedPvdTransport, PxPvdInstrumentationFlag::eALL))
+	{
+		UE_LOG("[PhysX] PVD connection failed (%s:%d, timeout=%u ms)", Host, Port, TimeoutMs);
+		ReleaseSharedPvd();
+		return nullptr;
+	}
+
+	UE_LOG("[PhysX] PVD connected (%s:%d)", Host, Port);
+	return GSharedPvd;
+}
 
 static void AcquireSharedPhysX(PxFoundation*& OutFoundation, PxPhysics*& OutPhysics)
 {
@@ -63,7 +118,16 @@ static void AcquireSharedPhysX(PxFoundation*& OutFoundation, PxPhysics*& OutPhys
 		GSharedFoundation = PxCreateFoundation(PX_PHYSICS_VERSION, GPhysXAllocator, GPhysXErrorCallback);
 		if (GSharedFoundation)
 		{
-			GSharedPhysics = PxCreatePhysics(PX_PHYSICS_VERSION, *GSharedFoundation, PxTolerancesScale());
+			CreateSharedPvdIfEnabled(*GSharedFoundation);
+			GSharedPhysics = PxCreatePhysics(PX_PHYSICS_VERSION, *GSharedFoundation, PxTolerancesScale(),
+				GSharedPvd != nullptr, GSharedPvd);
+			if (GSharedPhysics)
+			{
+				GSharedExtensionsInitialized = PxInitExtensions(*GSharedPhysics, GSharedPvd);
+				UE_LOG("[PhysX] Extensions initialized (PVD=%d, Result=%d)",
+					GSharedPvd ? 1 : 0,
+					GSharedExtensionsInitialized ? 1 : 0);
+			}
 		}
 	}
 	++GSharedRefCount;
@@ -75,7 +139,13 @@ static void ReleaseSharedPhysX()
 {
 	if (--GSharedRefCount <= 0)
 	{
+		if (GSharedExtensionsInitialized)
+		{
+			PxCloseExtensions();
+			GSharedExtensionsInitialized = false;
+		}
 		if (GSharedPhysics) { GSharedPhysics->release(); GSharedPhysics = nullptr; }
+		ReleaseSharedPvd();
 		if (GSharedFoundation) { GSharedFoundation->release(); GSharedFoundation = nullptr; }
 		GSharedRefCount = 0;
 	}
@@ -443,9 +513,15 @@ static void SetupFilterData(PxShape* Shape, UPrimitiveComponent* Comp)
 	Shape->setQueryFilterData(Filter);
 }
 
+static void DisablePvdSceneVisualization(PxScene* Scene);
+static void DisablePvdActorVisualization(PxRigidActor* Actor);
+static void DisablePvdShapeVisualization(PxShape* Shape);
+
 static void SetupDefaultRawBodyFilterData(PxShape* Shape)
 {
 	if (!Shape) return;
+
+	DisablePvdShapeVisualization(Shape);
 
 	PxFilterData Filter;
 	Filter.word0 = static_cast<PxU32>(ECollisionChannel::WorldDynamic);
@@ -490,6 +566,8 @@ static void SetupComponentShape(PxShape* Shape, UPrimitiveComponent* Comp)
 	{
 		return;
 	}
+
+	DisablePvdShapeVisualization(Shape);
 
 	SetupFilterData(Shape, Comp);
 
@@ -606,6 +684,61 @@ static void SetDynamicCCDEnabled(PxRigidDynamic* Dynamic, bool bEnabled)
 	if (!Dynamic) return;
 
 	Dynamic->setRigidBodyFlag(PxRigidBodyFlag::eENABLE_CCD, bEnabled && IsSceneCCDEnabled());
+}
+
+static void DisablePvdSceneVisualization(PxScene* Scene)
+{
+	if (!Scene) return;
+
+	Scene->setVisualizationParameter(PxVisualizationParameter::eSCALE, 0.0f);
+	Scene->setVisualizationParameter(PxVisualizationParameter::eCOLLISION_AABBS, 0.0f);
+	Scene->setVisualizationParameter(PxVisualizationParameter::eACTOR_AXES, 0.0f);
+	Scene->setVisualizationParameter(PxVisualizationParameter::eBODY_AXES, 0.0f);
+	Scene->setVisualizationParameter(PxVisualizationParameter::eCOLLISION_SHAPES, 0.0f);
+	Scene->setVisualizationParameter(PxVisualizationParameter::eCOLLISION_EDGES, 0.0f);
+	Scene->setVisualizationParameter(PxVisualizationParameter::eCOLLISION_FNORMALS, 0.0f);
+	Scene->setVisualizationParameter(PxVisualizationParameter::eJOINT_LOCAL_FRAMES, 0.0f);
+	Scene->setVisualizationParameter(PxVisualizationParameter::eJOINT_LIMITS, 0.0f);
+}
+
+static void DisablePvdActorVisualization(PxRigidActor* Actor)
+{
+	if (Actor)
+	{
+		Actor->setActorFlag(PxActorFlag::eVISUALIZATION, false);
+	}
+}
+
+static void DisablePvdShapeVisualization(PxShape* Shape)
+{
+	if (Shape)
+	{
+		Shape->setFlag(PxShapeFlag::eVISUALIZATION, false);
+	}
+}
+
+static bool IsPvdConnected()
+{
+	return GSharedPvd && GSharedPvd->isConnected(false);
+}
+
+static void LogPvdActorState(const char* Context, PxScene* Scene, PxRigidActor* Actor)
+{
+	if (!IsPvdConnected() || !Actor)
+	{
+		return;
+	}
+
+	const PxU32 SceneActorCount = Scene
+		? Scene->getNbActors(PxActorTypeFlag::eRIGID_STATIC | PxActorTypeFlag::eRIGID_DYNAMIC)
+		: 0;
+	const char* ActorType = Actor->is<PxRigidDynamic>() ? "Dynamic" : "Static";
+	UE_LOG("[PhysX][PVD] %s Actor=%p Type=%s Shapes=%u SceneActors=%u",
+		Context,
+		static_cast<void*>(Actor),
+		ActorType,
+		Actor->getNbShapes(),
+		SceneActorCount);
 }
 
 // PxFilterShader — 엔진의 채널/응답 매트릭스를 PhysX에서 처리
@@ -725,6 +858,22 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 		return;
 	}
 
+	if (PxPvdSceneClient* PvdClient = Scene->getScenePvdClient())
+	{
+		DisablePvdSceneVisualization(Scene);
+		PvdClient->setScenePvdFlag(PxPvdSceneFlag::eTRANSMIT_CONTACTS, PhysicsSettings.bPvdTransmitContacts);
+		PvdClient->setScenePvdFlag(PxPvdSceneFlag::eTRANSMIT_CONSTRAINTS, PhysicsSettings.bPvdTransmitConstraints);
+		PvdClient->setScenePvdFlag(PxPvdSceneFlag::eTRANSMIT_SCENEQUERIES, PhysicsSettings.bPvdTransmitSceneQueries);
+		UE_LOG("[PhysX] PVD scene flags (Contacts=%d, Constraints=%d, SceneQueries=%d, Visualization=None)",
+			PhysicsSettings.bPvdTransmitContacts ? 1 : 0,
+			PhysicsSettings.bPvdTransmitConstraints ? 1 : 0,
+			PhysicsSettings.bPvdTransmitSceneQueries ? 1 : 0);
+	}
+	else if (IsPvdConnected())
+	{
+		UE_LOG("[PhysX] PVD is connected, but Scene PVD client is unavailable.");
+	}
+
 	// Default material (static friction, dynamic friction, restitution)
 	DefaultMaterial = Physics->createMaterial(0.5f, 0.5f, 0.3f);
 	if (!DefaultMaterial)
@@ -735,12 +884,13 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 		return;
 	}
 
-	UE_LOG("[PhysX] Initialized successfully (Scene=%p, Workers=%u, CCD=%d, PCM=%d, ActiveActors=%d)",
+	UE_LOG("[PhysX] Initialized successfully (Scene=%p, Workers=%u, CCD=%d, PCM=%d, ActiveActors=%d, PVD=%d)",
 		Scene,
 		WorkerThreadCount,
 		PhysicsSettings.bEnableCCD ? 1 : 0,
 		PhysicsSettings.bEnablePCM ? 1 : 0,
-		PhysicsSettings.bEnableActiveActors ? 1 : 0);
+		PhysicsSettings.bEnableActiveActors ? 1 : 0,
+		(GSharedPvd && GSharedPvd->isConnected(true)) ? 1 : 0);
 }
 
 void FPhysXPhysicsScene::Shutdown()
@@ -816,6 +966,7 @@ void FPhysXPhysicsScene::RegisterComponent(UPrimitiveComponent* Comp)
 		}
 
 		Body->userData = OwnerActor;
+		DisablePvdActorVisualization(Body);
 		Scene->addActor(*Body);
 
 		FBodyMapping NewMapping;
@@ -843,6 +994,7 @@ void FPhysXPhysicsScene::RegisterComponent(UPrimitiveComponent* Comp)
 		return;
 	}
 	Mapping->Components.push_back(Comp);
+	LogPvdActorState("Component registered", Scene, Mapping->Actor);
 
 	// Dynamic이면 RootComp의 Mass / CenterOfMass로 갱신 (shape 추가될 때마다 inertia 재계산).
 	if (PxRigidDynamic* Dyn = Mapping->Actor->is<PxRigidDynamic>())
@@ -951,6 +1103,7 @@ FPhysicsActorHandle FPhysXPhysicsScene::CreateActor(const FActorCreationParams& 
 	}
 
 	NewActor->userData = Params.UserData;
+	DisablePvdActorVisualization(NewActor);
 	NewActor->setActorFlag(PxActorFlag::eDISABLE_GRAVITY, !Params.bEnableGravity);
 	if (Params.bQueryOnly)
 	{
@@ -1021,6 +1174,7 @@ bool FPhysXPhysicsScene::AddGeometry(FPhysicsActorHandle Actor, const FGeometryA
 		{
 			PxRigidBodyExt::setMassAndUpdateInertia(*Dynamic, std::max(Dynamic->getMass(), 1.0f));
 		}
+		LogPvdActorState("Geometry added", Scene, RigidActor);
 	}
 
 	return FirstShape != nullptr;
