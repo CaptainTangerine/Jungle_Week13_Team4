@@ -376,6 +376,7 @@ void FMeshEditorWidget::Open(UObject* Object)
 	AnimTabState            = FAnimationTabState {};
 	SelectedBoneIndex       = -1;
 	SelectedConstraintIndex = -1;
+	SelectedBoneIndices.clear();
 	bSimulating             = false;
 }
 
@@ -1559,6 +1560,15 @@ void FMeshEditorWidget::RenderPhysicsLayout()
 	{
 		ImGui::TextDisabled("No preview mesh.");
 	}
+
+	// 트리 빈 공간을 좌클릭하면 선택 해제(본 노드 위가 아닌 곳 클릭).
+	if (ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+	{
+		SelectedBoneIndex = -1;
+		SelectedConstraintIndex = -1;
+		SelectedBoneIndices.clear();
+		ViewportClient.SetSelectedBone(Cast<USkeletalMesh>(EditedObject), -1);
+	}
 	ImGui::EndChild();
 
 	ImGui::SameLine();
@@ -1755,6 +1765,9 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 		}
 	}
 	ImGui::Separator();
+
+	// 다중선택 시 일괄 편집 패널(이후 primary 단일 디테일도 함께 표시).
+	RenderPhysicsBulkEdit();
 
 	if (SelectedBoneIndex == -1)
 	{
@@ -2010,12 +2023,91 @@ FName FMeshEditorWidget::GetPhysicsBoneName(int32 BoneIndex) const
 	return FName(Asset->Bones[BoneIndex].Name);
 }
 
+void FMeshEditorWidget::RenderPhysicsBulkEdit()
+{
+	if (!CurrentPhysicsAsset || SelectedBoneIndices.size() <= 1)
+	{
+		return;
+	}
+
+	const int32 NumSelected = static_cast<int32>(SelectedBoneIndices.size());
+	int32 NumBodies = 0;
+	int32 NumConstraints = 0;
+	for (int32 BoneIdx : SelectedBoneIndices)
+	{
+		if (FindPhysicsBodyIndexForBone(BoneIdx) != -1) ++NumBodies;
+		if (FindPhysicsConstraintIndexForChild(GetPhysicsBoneName(BoneIdx)) != -1) ++NumConstraints;
+	}
+
+	ImGui::SeparatorText("Bulk Edit");
+	ImGui::Text("Selected: %d bones  (bodies %d, constraints %d)", NumSelected, NumBodies, NumConstraints);
+	ImGui::TextDisabled("Ctrl/Shift+click in the tree to multi-select.");
+
+	static const char* MotionItems[] = { "Limited", "Locked", "Free" };       // EAngularConstraintMotion 순서
+	static const char* PhysTypeItems[] = { "Default", "Kinematic", "Simulated" }; // EPhysicsType 순서
+
+	// ── Constraint 일괄 ──
+	if (NumConstraints > 0)
+	{
+		ImGui::SeparatorText("Constraint (angular)");
+		ImGui::Combo("Twist Motion",  &BulkTwistMotion,  MotionItems, 3);
+		ImGui::DragFloat("Twist Limit (deg)",  &BulkTwistLimit,  1.0f, 0.0f, 180.0f);
+		ImGui::Combo("Swing1 Motion", &BulkSwing1Motion, MotionItems, 3);
+		ImGui::DragFloat("Swing1 Limit (deg)", &BulkSwing1Limit, 1.0f, 0.0f, 180.0f);
+		ImGui::Combo("Swing2 Motion", &BulkSwing2Motion, MotionItems, 3);
+		ImGui::DragFloat("Swing2 Limit (deg)", &BulkSwing2Limit, 1.0f, 0.0f, 180.0f);
+
+		char Label[64];
+		std::snprintf(Label, sizeof(Label), "Apply to %d constraint(s)", NumConstraints);
+		if (ImGui::Button(Label, ImVec2(-1.0f, 0.0f)))
+		{
+			for (int32 BoneIdx : SelectedBoneIndices)
+			{
+				const int32 Ci = FindPhysicsConstraintIndexForChild(GetPhysicsBoneName(BoneIdx));
+				if (Ci == -1) continue;
+				FConstraintSetup& C = CurrentPhysicsAsset->ConstraintSetups[Ci];
+				// 모션/한계만 일괄 적용. 본 이름/프레임/드라이브는 항목별 고유값이라 보존.
+				C.TwistMotion  = static_cast<EAngularConstraintMotion>(BulkTwistMotion);
+				C.Swing1Motion = static_cast<EAngularConstraintMotion>(BulkSwing1Motion);
+				C.Swing2Motion = static_cast<EAngularConstraintMotion>(BulkSwing2Motion);
+				C.TwistLimit  = BulkTwistLimit;
+				C.Swing1Limit = BulkSwing1Limit;
+				C.Swing2Limit = BulkSwing2Limit;
+			}
+			MarkDirty();
+		}
+	}
+
+	// ── Body 일괄 ──
+	if (NumBodies > 0)
+	{
+		ImGui::SeparatorText("Body");
+		ImGui::Combo("Physics Type", &BulkBodyPhysicsType, PhysTypeItems, 3);
+
+		char Label[64];
+		std::snprintf(Label, sizeof(Label), "Apply to %d body(s)", NumBodies);
+		if (ImGui::Button(Label, ImVec2(-1.0f, 0.0f)))
+		{
+			for (int32 BoneIdx : SelectedBoneIndices)
+			{
+				const int32 Bi = FindPhysicsBodyIndexForBone(BoneIdx);
+				if (Bi == -1 || !CurrentPhysicsAsset->BodySetups[Bi]) continue;
+				CurrentPhysicsAsset->BodySetups[Bi]->PhysicsType = static_cast<EPhysicsType>(BulkBodyPhysicsType);
+			}
+			MarkDirty();
+		}
+	}
+
+	ImGui::Separator();
+}
+
 void FMeshEditorWidget::RenderPhysicsBoneTree(const FSkeletalMesh* Asset, int32 Index)
 {
 	const FBone& Bone = Asset->Bones[Index];
 
 	ImGuiTreeNodeFlags Flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
-	if (Index == SelectedBoneIndex)
+	const bool bInSelection = std::find(SelectedBoneIndices.begin(), SelectedBoneIndices.end(), Index) != SelectedBoneIndices.end();
+	if (bInSelection || Index == SelectedBoneIndex)
 	{
 		Flags |= ImGuiTreeNodeFlags_Selected;
 	}
@@ -2049,7 +2141,34 @@ void FMeshEditorWidget::RenderPhysicsBoneTree(const FSkeletalMesh* Asset, int32 
 
 	if (ImGui::IsItemClicked())
 	{
-		SelectedBoneIndex = Index;
+		const ImGuiIO& IO = ImGui::GetIO();
+		if (IO.KeyShift && SelectedBoneIndex >= 0)
+		{
+			// 범위 선택: primary~Index 본 인덱스 구간을 선택에 추가(손가락 등 연속 본 묶음).
+			const int32 Lo = std::min(SelectedBoneIndex, Index);
+			const int32 Hi = std::max(SelectedBoneIndex, Index);
+			for (int32 K = Lo; K <= Hi; ++K)
+			{
+				if (std::find(SelectedBoneIndices.begin(), SelectedBoneIndices.end(), K) == SelectedBoneIndices.end())
+				{
+					SelectedBoneIndices.push_back(K);
+				}
+			}
+		}
+		else if (IO.KeyCtrl)
+		{
+			// 토글
+			auto It = std::find(SelectedBoneIndices.begin(), SelectedBoneIndices.end(), Index);
+			if (It != SelectedBoneIndices.end()) { SelectedBoneIndices.erase(It); }
+			else { SelectedBoneIndices.push_back(Index); }
+		}
+		else
+		{
+			// 단일 선택
+			SelectedBoneIndices.clear();
+			SelectedBoneIndices.push_back(Index);
+		}
+		SelectedBoneIndex = Index;   // primary = 마지막 클릭
 		ViewportClient.SetSelectedBone(Cast<USkeletalMesh>(EditedObject), Index);
 	}
 

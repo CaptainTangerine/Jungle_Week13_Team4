@@ -83,6 +83,7 @@ private:
 
 	// Physics tab helpers (PhysicsAsset 저작: 발제 2-2)
 	void           RenderPhysicsDetails();
+	void           RenderPhysicsBulkEdit();   // 다중선택 시 바디/조인트 일괄 편집 패널
 	UPhysicsAsset* EnsurePhysicsAssetForCurrentSkeleton();
 	void           AddBodyToSelectedBone();
 	void           RemoveBodyAtSelectedBone();
@@ -125,6 +126,13 @@ private:
 	UPhysicsAsset* CurrentPhysicsAsset     = nullptr;
 	int32          SelectedConstraintIndex = -1;
 	bool           bSimulating             = false;
+
+	// 본 트리 다중선택(일괄편집용). SelectedBoneIndex 는 primary(디테일/뷰포트 하이라이트).
+	TArray<int32>  SelectedBoneIndices;
+	// 일괄편집 템플릿(헤더 의존 최소화 위해 plain 값; .cpp 에서 enum 캐스트).
+	int32 BulkTwistMotion = 0, BulkSwing1Motion = 0, BulkSwing2Motion = 0;  // 0=Limited,1=Locked,2=Free
+	float BulkTwistLimit = 45.f, BulkSwing1Limit = 30.f, BulkSwing2Limit = 30.f;
+	int32 BulkBodyPhysicsType = 0;   // 0=Default,1=Kinematic,2=Simulated
 	// 시뮬 중 랙돌이 쌓일 정적 바닥(프리뷰 물리 씬). Stop 시 해제.
 	FPhysicsActorHandle PreviewGroundHandle;
 
