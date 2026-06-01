@@ -3,6 +3,7 @@
 #include "Editor/Viewport/Asset/MeshEditorViewportClient.h"
 #include "Editor/UI/Dialog/FbxImportOptionsDialog.h"
 #include "Asset/AssetRegistry.h"
+#include "Physics/PhysicsHandles.h"
 
 struct FSkeletalMesh;
 struct ImDrawList;
@@ -124,6 +125,8 @@ private:
 	UPhysicsAsset* CurrentPhysicsAsset     = nullptr;
 	int32          SelectedConstraintIndex = -1;
 	bool           bSimulating             = false;
+	// 시뮬 중 랙돌이 쌓일 정적 바닥(프리뷰 물리 씬). Stop 시 해제.
+	FPhysicsActorHandle PreviewGroundHandle;
 
 	uint32  InstanceId;
 	FName   PreviewWorldHandle = FName::None;

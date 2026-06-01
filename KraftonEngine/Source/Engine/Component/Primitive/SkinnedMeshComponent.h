@@ -65,6 +65,10 @@ public:
 
 	void SetBoneLocalTransforms(const TArray<FTransform>& LocalPose);
 	void SetAnimationPose(const TArray<FTransform>& LocalPose, const TArray<float>& InMorphTargetWeights);
+
+	// 편집 포즈(BoneEdit)를 끄고 레퍼런스(바인드) 포즈로 되돌린다. 에디터 시뮬 종료 후
+	// 메시를 원래 자세로 복원할 때 사용.
+	void ResetToReferencePose();
 	void ApplyBoneEditBasePose();
 
 	int32 FindMorphTargetIndex(const FString& TargetName) const;

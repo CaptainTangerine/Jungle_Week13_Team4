@@ -899,6 +899,23 @@ void USkeletalMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     }
 }
 
+void USkeletalMeshComponent::SimulatePhysicsPreview(float DeltaTime)
+{
+    // 에디터 프리뷰: anim 인스턴스가 없으므로 ref 포즈를 기준 포즈로 사용한다.
+    RampBodyBlendWeights(DeltaTime);
+    UpdateBodySimulationState();
+
+    if (!AnyBodyPhysicsActive() || Bodies.empty())
+    {
+        return;
+    }
+
+    TArray<FMatrix> AnimGlobals;
+    BuildReferencePoseGlobals(AnimGlobals);
+    SyncKinematicBodiesToAnim(AnimGlobals);   // 핀 고정된(weight 0) 바디는 ref 포즈에 머무름
+    ApplyPhysicsBlendedPose(AnimGlobals);     // 시뮬 바디는 물리 결과를 본에 반영
+}
+
 // ──────────────────────────────────────────────
 // Editor / 직렬화 통합
 // ──────────────────────────────────────────────

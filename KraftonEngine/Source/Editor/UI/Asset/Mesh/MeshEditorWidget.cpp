@@ -28,6 +28,10 @@
 #include "Physics/Asset/PhysicsAssetManager.h"
 #include "Physics/Asset/BodySetup.h"
 #include "Physics/Asset/BodyConstraintGenerator.h"
+#include "Physics/BodyInstance.h"
+#include "Physics/IPhysicsScene.h"
+#include "Physics/PhysicsInterfaceTypes.h"
+#include "GameFramework/World.h"
 #include "Editor/UI/Panel/FPropertyTable.h"
 #include "Physics/Asset/ConstraintSetup.h"
 #include "Math/MathUtils.h"
@@ -425,6 +429,22 @@ void FMeshEditorWidget::Tick(float DeltaTime)
 		ApplyMorphPreviewOverrides(Out.MorphWeights);
 
 		Comp->SetAnimationPose(Out.Pose, Out.MorphWeights);
+	}
+	else if (ActiveTab == EMeshEditorTab::Physics && bSimulating)
+	{
+		// 에디터 내 랙돌 프리뷰: 프리뷰 월드의 물리 씬을 직접 스텝한 뒤 본 포즈를 되읽는다.
+		USkeletalMeshComponent* Comp = ViewportClient.GetPreviewMeshComponent();
+		if (Comp)
+		{
+			if (UWorld* World = Comp->GetWorld())
+			{
+				if (IPhysicsScene* Scene = World->GetPhysicsScene())
+				{
+					Scene->Tick(DeltaTime);
+				}
+			}
+			Comp->SimulatePhysicsPreview(DeltaTime);
+		}
 	}
 }
 
@@ -1642,12 +1662,59 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 		ImGui::TextDisabled("(unsaved asset — no source path)");
 	}
 
-	// 시뮬레이션 토글(런타임 연결은 §2 TODO — USkeletalMeshComponent 랙돌 통합).
+	// 시뮬레이션 토글 — 프리뷰 메시에 편집 중 에셋을 적용해 랙돌을 돌린다. 바닥(정적 박스)을
+	// 발 높이에 깔아 랙돌이 무너지며 쌓이게 한다(펠비스 포함 전신 이동 + 조인트 꺾임 관찰).
 	const char* SimLabel = bSimulating ? "Stop Simulation" : "Start Simulation";
 	if (ImGui::Button(SimLabel, ImVec2(-1.0f, 0.0f)))
 	{
+		USkeletalMeshComponent* Comp = ViewportClient.GetPreviewMeshComponent();
 		bSimulating = !bSimulating;
-		// TODO(§2): Kinematic <-> Dynamic 전환 + 본 포즈 <-> 시뮬 포즈 블렌딩.
+		if (Comp)
+		{
+			UWorld* World = Comp->GetWorld();
+			IPhysicsScene* Scene = World ? World->GetPhysicsScene() : nullptr;
+			if (bSimulating)
+			{
+				Comp->SetPhysicsAssetOverride(CurrentPhysicsAsset);   // 편집 중(미저장 가능) 에셋으로
+				Comp->CreatePhysicsState();                           // 바디/조인트 인스턴스화(+상태 플래그)
+				Comp->SetSimulatePhysics(true);                       // 전체 다이내믹
+
+				// 발 높이(바운드 최저점)에 큰 정적 바닥 박스 생성.
+				if (Scene && !PreviewGroundHandle.IsValid())
+				{
+					const FBoundingBox B = Comp->GetWorldBoundingBox();
+					const float HalfThick = 50.0f;
+					const FVector Center((B.Min.X + B.Max.X) * 0.5f, (B.Min.Y + B.Max.Y) * 0.5f, B.Min.Z - HalfThick);
+
+					FActorCreationParams AP;
+					AP.InitialTM = FTransform(Center, FQuat(), FVector(1.0f, 1.0f, 1.0f));
+					AP.bStatic = true;
+					PreviewGroundHandle = Scene->CreateActor(AP);
+
+					FKAggregateGeom Geom;
+					FKBoxElem Box;
+					Box.Center = FVector(0.0f, 0.0f, 0.0f);
+					Box.HalfExtent = FVector(1000.0f, 1000.0f, HalfThick);
+					Geom.BoxElems.push_back(Box);
+
+					FGeometryAddParams GP;
+					GP.Geometry = &Geom;
+					GP.Scale = FVector(1.0f, 1.0f, 1.0f);
+					Scene->AddGeometry(PreviewGroundHandle, GP);
+				}
+			}
+			else
+			{
+				Comp->SetSimulatePhysics(false);
+				Comp->DestroyPhysicsState();      // 바디/조인트 정리
+				Comp->ResetToReferencePose();     // 바인드 포즈로 복원
+				if (Scene && PreviewGroundHandle.IsValid())
+				{
+					Scene->ReleaseActor(PreviewGroundHandle);
+					PreviewGroundHandle = {};
+				}
+			}
+		}
 	}
 	ImGui::Text("Bodies: %d   Constraints: %d",
 		static_cast<int32>(CurrentPhysicsAsset->BodySetups.size()),
