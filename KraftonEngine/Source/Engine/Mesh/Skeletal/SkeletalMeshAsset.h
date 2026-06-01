@@ -9,11 +9,30 @@
 #include "Materials/MaterialManager.h"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 inline void SerializeSkeletalMatrix(FArchive& Ar, FMatrix& Matrix)
 {
 	Ar.Serialize(Matrix.Data, sizeof(float) * 16);
+}
+
+// 행렬 basis(회전 축)의 스케일을 1 로 접되 translation 은 그대로 둔다.
+// 본 글로벌에 베이크된 균일 스케일을 제거해 "본=스케일1(rigid)" 전제(래그돌 재구성·캡슐 피팅)
+// 와 일관시키는 데 쓴다. 스키닝(InvBind×Global)에서는 어차피 스케일이 상쇄되므로 표시 결과 불변.
+inline FMatrix StripMatrixBasisScale(const FMatrix& In)
+{
+	const FVector S = In.GetScale();
+	const float SX = std::abs(S.X) > 1e-8f ? S.X : 1.0f;
+	const float SY = std::abs(S.Y) > 1e-8f ? S.Y : 1.0f;
+	const float SZ = std::abs(S.Z) > 1e-8f ? S.Z : 1.0f;
+
+	FMatrix Out = In;
+	Out.M[0][0] /= SX; Out.M[0][1] /= SX; Out.M[0][2] /= SX;
+	Out.M[1][0] /= SY; Out.M[1][1] /= SY; Out.M[1][2] /= SY;
+	Out.M[2][0] /= SZ; Out.M[2][1] /= SZ; Out.M[2][2] /= SZ;
+	// row 3(translation)과 동차 열은 보존.
+	return Out;
 }
 
 struct FBone
@@ -275,6 +294,54 @@ struct FSkeletalMesh
 			Bone.ReferenceGlobalPose = (Bone.ParentIndex >= 0 && Bone.ParentIndex < BoneIndex)
 				? Bone.ReferenceLocalPose * Bones[Bone.ParentIndex].ReferenceGlobalPose
 				: Bone.ReferenceLocalPose;
+		}
+
+		NormalizeBindPoseScale();
+	}
+
+	// 스켈레톤 바인드 포즈 basis 에 균일 스케일 S 가 베이크된 메시(예: cm/m 단위 불일치로
+	// import 된 FBX)를 단위 스케일로 정규화한다. 스키닝은 InvBind×Global 에서 S 가 상쇄돼
+	// 정상이지만, 래그돌은 바디에서 스케일1 rigid 글로벌을 재구성하고 캡슐 피팅도 InvBind(1/S)
+	// 공간에서 재므로 "스케일1" 전제가 깨져 시뮬 시 메시가 1/S 로 수축하고 캡슐이 S 배 작아진다.
+	// basis 스케일만 1 로 접고 translation(본 실제 위치)은 보존 → 표시 결과 불변, 다운스트림 일관.
+	// 단위 스케일(정상) 메시는 감지 후 손대지 않는다. NormalizeBonePoseData 끝에서 호출.
+	void NormalizeBindPoseScale()
+	{
+		if (Bones.empty()) { return; }
+
+		// 베이크된 비단위 스케일 감지 — 없으면 그대로 둔다(기존 정상 메시 무변경).
+		bool bHasBakedScale = false;
+		for (const FBone& Bone : Bones)
+		{
+			const FVector S = Bone.ReferenceGlobalPose.GetScale();
+			if (std::abs(S.X - 1.0f) > 1e-3f || std::abs(S.Y - 1.0f) > 1e-3f || std::abs(S.Z - 1.0f) > 1e-3f)
+			{
+				bHasBakedScale = true;
+				break;
+			}
+		}
+		if (!bHasBakedScale) { return; }
+
+		// 1) 본 글로벌 basis 스케일을 1 로 접고(translation 보존) 역바인드 재유도.
+		for (FBone& Bone : Bones)
+		{
+			Bone.ReferenceGlobalPose   = StripMatrixBasisScale(Bone.ReferenceGlobalPose);
+			Bone.SkinBindGlobalPose    = Bone.ReferenceGlobalPose;
+			Bone.InverseBindPoseMatrix = Bone.ReferenceGlobalPose.GetInverse();
+		}
+
+		// 2) 단위 스케일 글로벌로부터 로컬 재유도(parent-first 전제: Global = Local * ParentGlobal).
+		for (int32 i = 0; i < static_cast<int32>(Bones.size()); ++i)
+		{
+			FBone& Bone = Bones[i];
+			const int32 P = Bone.ParentIndex;
+			Bone.ReferenceLocalPose = (P >= 0 && P < i)
+				? Bone.ReferenceGlobalPose * Bones[P].ReferenceGlobalPose.GetInverse()
+				: Bone.ReferenceGlobalPose;
+
+			// legacy 슬롯 동기화(저장/구경로 호환).
+			Bone.LocalMatrix  = Bone.ReferenceLocalPose;
+			Bone.GlobalMatrix = Bone.ReferenceGlobalPose;
 		}
 	}
 
