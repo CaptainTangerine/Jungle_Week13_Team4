@@ -234,7 +234,9 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	FBodyInstance* ChassisBI = nullptr;
 	if (SkeletalBody && !SkeletalBody->GetBodies().empty())
 	{
-		FBodyInstance* Candidate = SkeletalBody->GetBodies()[0];
+		auto ChassisBoneIndex = SkeletalBody->FindBoneIndex(ChassisSetUp);
+		if (ChassisBoneIndex < 0) UE_LOG("Chassis Setup not found. Falling back to root"); ChassisBoneIndex = 0;
+		FBodyInstance* Candidate = SkeletalBody->GetBodies()[ChassisBoneIndex];
 		if (Candidate && Candidate->IsValidBodyInstance())
 		{
 			ChassisBI = Candidate;

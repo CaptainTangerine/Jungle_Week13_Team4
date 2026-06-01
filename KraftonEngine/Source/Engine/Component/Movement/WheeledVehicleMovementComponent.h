@@ -128,6 +128,9 @@ protected:
 		FWheelSetup{ "Wheel_RR", false, true  },
 	};
 
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Setup")
+	FString ChassisSetUp = FString("Chassis");
+
 	// CreateVehicle 가 해석/캐시 (비-reflected). SkeletalBody = UpdatedComponent cast.
 	USkeletalMeshComponent* SkeletalBody = nullptr;
 	int32 WheelBoneIndices[NumWheels] = { -1, -1, -1, -1 };
