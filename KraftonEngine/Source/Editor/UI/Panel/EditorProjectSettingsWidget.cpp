@@ -91,6 +91,15 @@ void EditorProjectSettingsWidget::Render()
 	if (ImGui::CollapsingHeader("Physics", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		ImGui::TextUnformatted("Backend: PhysX");
+		int WorkerThreadCount = static_cast<int>(PS.Physics.WorkerThreadCount);
+		if (ImGui::SliderInt("Worker Threads", &WorkerThreadCount, 1, 32))
+		{
+			PS.Physics.WorkerThreadCount = static_cast<uint32>(WorkerThreadCount);
+		}
+		ImGui::Checkbox("CCD", &PS.Physics.bEnableCCD);
+		ImGui::Checkbox("PCM", &PS.Physics.bEnablePCM);
+		ImGui::Checkbox("Active Actors", &PS.Physics.bEnableActiveActors);
+		ImGui::TextDisabled("Requires scene reload to take effect.");
 	}
 
 	if (ImGui::CollapsingHeader("Shadow", ImGuiTreeNodeFlags_DefaultOpen))
