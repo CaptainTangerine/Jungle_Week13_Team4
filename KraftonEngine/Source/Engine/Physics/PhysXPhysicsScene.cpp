@@ -1148,30 +1148,59 @@ FPhysicsConstraintHandle FPhysXPhysicsScene::CreateConstraint(const FConstraintC
 	constexpr float MinAngularLimit = 0.0001f;
 	const auto ClampAngularLimit = [](float Value)
 	{
-		return std::max(0.0f, std::min(Value, PxPi));
+		return std::max(MinAngularLimit, std::min(Value, PxPi));
 	};
 
-	Joint->setMotion(PxD6Axis::eX, PxD6Motion::eLOCKED);
-	Joint->setMotion(PxD6Axis::eY, PxD6Motion::eLOCKED);
-	Joint->setMotion(PxD6Axis::eZ, PxD6Motion::eLOCKED);
-
-	const float TwistLimit = ClampAngularLimit(Setup->TwistLimit);
-	const float Swing1Limit = ClampAngularLimit(Setup->Swing1Limit);
-	const float Swing2Limit = ClampAngularLimit(Setup->Swing2Limit);
-
-	Joint->setMotion(PxD6Axis::eTWIST, TwistLimit > MinAngularLimit ? PxD6Motion::eLIMITED : PxD6Motion::eLOCKED);
-	Joint->setMotion(PxD6Axis::eSWING1, Swing1Limit > MinAngularLimit ? PxD6Motion::eLIMITED : PxD6Motion::eLOCKED);
-	Joint->setMotion(PxD6Axis::eSWING2, Swing2Limit > MinAngularLimit ? PxD6Motion::eLIMITED : PxD6Motion::eLOCKED);
-
-	if (TwistLimit > MinAngularLimit)
+	// 축별 모션 enum → PxD6Motion 매핑.
+	const auto MapLinear = [](ELinearConstraintMotion M) -> PxD6Motion::Enum
 	{
+		switch (M)
+		{
+		case LCM_Free:    return PxD6Motion::eFREE;
+		case LCM_Limited: return PxD6Motion::eLIMITED;
+		case LCM_Locked:
+		default:          return PxD6Motion::eLOCKED;
+		}
+	};
+	const auto MapAngular = [](EAngularConstraintMotion M) -> PxD6Motion::Enum
+	{
+		switch (M)
+		{
+		case ACM_Free:    return PxD6Motion::eFREE;
+		case ACM_Locked:  return PxD6Motion::eLOCKED;
+		case ACM_Limited:
+		default:          return PxD6Motion::eLIMITED;
+		}
+	};
+
+	Joint->setMotion(PxD6Axis::eX, MapLinear(Setup->LinearXMotion));
+	Joint->setMotion(PxD6Axis::eY, MapLinear(Setup->LinearYMotion));
+	Joint->setMotion(PxD6Axis::eZ, MapLinear(Setup->LinearZMotion));
+	Joint->setMotion(PxD6Axis::eTWIST,  MapAngular(Setup->TwistMotion));
+	Joint->setMotion(PxD6Axis::eSWING1, MapAngular(Setup->Swing1Motion));
+	Joint->setMotion(PxD6Axis::eSWING2, MapAngular(Setup->Swing2Motion));
+
+	// 각도 한계는 해당 축이 Limited 일 때만 적용.
+	if (Setup->TwistMotion == ACM_Limited)
+	{
+		const float TwistLimit = ClampAngularLimit(Setup->TwistLimit);
 		Joint->setTwistLimit(PxJointAngularLimitPair(-TwistLimit, TwistLimit));
 	}
-	if (Swing1Limit > MinAngularLimit || Swing2Limit > MinAngularLimit)
+	if (Setup->Swing1Motion == ACM_Limited || Setup->Swing2Motion == ACM_Limited)
 	{
 		Joint->setSwingLimit(PxJointLimitCone(
-			std::max(Swing1Limit, MinAngularLimit),
-			std::max(Swing2Limit, MinAngularLimit)));
+			ClampAngularLimit(Setup->Swing1Limit),
+			ClampAngularLimit(Setup->Swing2Limit)));
+	}
+
+	// 선형 축 중 하나라도 Limited 면 거리 한계 적용(강성 0 = 강체 한계).
+	const bool bAnyLinearLimited =
+		(Setup->LinearXMotion == LCM_Limited) ||
+		(Setup->LinearYMotion == LCM_Limited) ||
+		(Setup->LinearZMotion == LCM_Limited);
+	if (bAnyLinearLimited && Setup->LinearLimit > 0.0f)
+	{
+		Joint->setDistanceLimit(PxJointLinearLimit(Setup->LinearLimit, PxSpring(0.0f, 0.0f)));
 	}
 
 	if (Setup->DriveStiffness > 0.0f || Setup->DriveDamping > 0.0f)

@@ -30,6 +30,9 @@ public:
 	void CreatePhysicsAssetDebugComponent();
 	// PhysicsAsset 콜리전 프리미티브 미리보기 표시 대상 설정(매 프레임/변경 시 호출).
 	void SetDebugPhysicsAsset(UPhysicsAsset* InAsset);
+	// 조인트(Constraint) 시각화 토글.
+	void SetDrawConstraints(bool bEnabled);
+	bool IsDrawConstraints() const;
 	void ResetCameraToPreviousBounds();
 
 	void SetPreviewWorld(UWorld* InWorld) { PreviewWorld = InWorld; }

@@ -489,6 +489,10 @@ void FDrawCommandBuilder::BuildProxyCommands(const FFrameContext& Frame, FScene&
 				{
 					EditorLines.AddLine(Line.Start, Line.End, PhysProxy->GetSelectedColor());
 				}
+				for (const FWireLine& Line : PhysProxy->GetCachedConstraintLines())
+				{
+					EditorLines.AddLine(Line.Start, Line.End, PhysProxy->GetConstraintColor());
+				}
 			}
 		}
 		else if (Proxy->HasProxyFlag(EPrimitiveProxyFlags::WireShape))

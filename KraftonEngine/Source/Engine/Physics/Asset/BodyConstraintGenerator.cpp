@@ -40,6 +40,19 @@ namespace
 		return FQuat::FromAxisAngle(Axis, std::acos(Dot));
 	}
 
+	// 본-로컬 X축을 Dir(정규화) 로 회전시키는 쿼터니언. 조인트 프레임의 twist 축(PxD6 의 X)을
+	// 본 세그먼트 방향에 맞추는 데 사용한다.
+	FQuat RotationXToDir(const FVector& Dir)
+	{
+		const float Dot = Dir.X;   // (1,0,0)·Dir
+		if (Dot >  0.99999f) { return FQuat(); }
+		if (Dot < -0.99999f) { return FQuat::FromAxisAngle(FVector(0.0f, 0.0f, 1.0f), 3.14159265f); }
+		FVector Axis(0.0f, -Dir.Z, Dir.Y);   // (1,0,0) × Dir
+		const float AxisLen = std::sqrt(Axis.X * Axis.X + Axis.Y * Axis.Y + Axis.Z * Axis.Z);
+		Axis = FVector(Axis.X / AxisLen, Axis.Y / AxisLen, Axis.Z / AxisLen);
+		return FQuat::FromAxisAngle(Axis, std::acos(Dot));
+	}
+
 	// 본의 첫 자식 방향/거리로 캡슐(본-로컬)을 피팅. 자식 없으면(=leaf) 작은 기본값.
 	// (Fallback) 부모→첫 자식 세그먼트로 캡슐 피팅. 스킨 버텍스가 없을 때만 사용.
 	bool FitCapsuleFromChildSegment(const FSkeletalMesh* Mesh, int32 BoneIndex, FKSphylElem& Out)
@@ -124,12 +137,6 @@ namespace
 		Out.Length   = 1.0f;
 	}
 
-	// 본의 부모-상대 로컬 포즈(ReferenceLocalPose) → FTransform. 조인트 ParentFrame 용.
-	FTransform BoneLocalPoseTransform(const FBone& Bone)
-	{
-		return FTransform(MatrixTranslation(Bone.ReferenceLocalPose),
-			FQuat::FromMatrix(Bone.ReferenceLocalPose), FVector(1.0f, 1.0f, 1.0f));
-	}
 }
 
 UBodySetup* FBodyConstraintGenerator::GenerateBody(UPhysicsAsset* Asset, const FSkeletalMesh* Mesh, int32 BoneIndex)
@@ -183,8 +190,30 @@ int32 FBodyConstraintGenerator::GenerateConstraint(UPhysicsAsset* Asset, const F
 	FConstraintSetup Constraint;
 	Constraint.ParentBone = ParentName;
 	Constraint.ChildBone  = ChildName;
-	// 조인트 앵커를 자식 본 원점에: ParentFrame=자식의 부모-로컬 포즈, ChildFrame=identity(기본).
-	Constraint.ParentFrame = BoneLocalPoseTransform(Mesh->Bones[ChildBoneIndex]);
+
+	// 조인트 앵커는 자식 본 원점. 추가로 조인트 프레임의 twist 축(X)을 본 세그먼트 방향
+	// (자식의 첫 자식으로 향하는 방향)에 정렬한다. 정렬이 없으면 본 로컬 X(스켈레톤에 따라
+	// 옆방향)가 twist 축이 되어 Swing 콘이 본을 따라가지 않고 옆으로 뻗는다.
+	//   ChildFrame  = (원점, FrameRot)               — 자식 본 로컬
+	//   ParentFrame = (자식 로컬 위치, 자식로컬회전 * FrameRot) — rest 에서 두 프레임 일치
+	const FBone& ChildBone = Mesh->Bones[ChildBoneIndex];
+	const FVector ChildLocalPos = MatrixTranslation(ChildBone.ReferenceLocalPose);
+	const FQuat   ChildLocalRot = FQuat::FromMatrix(ChildBone.ReferenceLocalPose);
+
+	FQuat FrameRot;   // identity 기본(세그먼트 방향을 못 구하는 leaf 등)
+	const int32 GrandChild = FindFirstChildBone(Mesh, ChildBoneIndex);
+	if (GrandChild != -1)
+	{
+		const FVector Seg = MatrixTranslation(Mesh->Bones[GrandChild].ReferenceLocalPose);
+		const float SegLen = std::sqrt(Seg.X * Seg.X + Seg.Y * Seg.Y + Seg.Z * Seg.Z);
+		if (SegLen > 1e-4f)
+		{
+			FrameRot = RotationXToDir(FVector(Seg.X / SegLen, Seg.Y / SegLen, Seg.Z / SegLen));
+		}
+	}
+
+	Constraint.ChildFrame  = FTransform(FVector(0.0f, 0.0f, 0.0f), FrameRot, FVector(1.0f, 1.0f, 1.0f));
+	Constraint.ParentFrame = FTransform(ChildLocalPos, ChildLocalRot * FrameRot, FVector(1.0f, 1.0f, 1.0f));
 
 	Asset->ConstraintSetups.push_back(Constraint);
 	return static_cast<int32>(Asset->ConstraintSetups.size()) - 1;

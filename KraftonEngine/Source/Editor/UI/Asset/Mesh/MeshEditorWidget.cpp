@@ -1653,6 +1653,13 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 		static_cast<int32>(CurrentPhysicsAsset->BodySetups.size()),
 		static_cast<int32>(CurrentPhysicsAsset->ConstraintSetups.size()));
 
+	// 조인트 시각화 토글. 본이 선택돼 있으면 그 본 연결 조인트만, 아니면 전체를 그린다.
+	bool bShowConstraints = ViewportClient.IsDrawConstraints();
+	if (ImGui::Checkbox("Show Constraints (selected bone only when a bone is selected)", &bShowConstraints))
+	{
+		ViewportClient.SetDrawConstraints(bShowConstraints);
+	}
+
 	// 전체 스켈레톤에 대해 바디/조인트 초기값을 일괄 생성(이미 있는 본은 건너뜀) — 생성기에 위임.
 	if (ImGui::Button("Generate All (Bodies + Constraints)", ImVec2(-1.0f, 0.0f)))
 	{

@@ -6,8 +6,10 @@
 #include "Mesh/Skeletal/SkeletalMeshAsset.h"
 #include "Physics/Asset/PhysicsAsset.h"
 #include "Physics/Asset/BodySetup.h"
+#include "Physics/Asset/ConstraintSetup.h"
 #include "Math/MathUtils.h"
 
+#include <algorithm>
 #include <cmath>
 
 #pragma region Wire builders
@@ -118,6 +120,78 @@ namespace
 		}
 		return -1;
 	}
+
+	// 모션 타입 → 시각화 각도. Locked=0(콘 없음), Limited=한계, Free=90°(콘) / Pi(twist) 근사.
+	float AngularVizAngle(EAngularConstraintMotion Motion, float Limit, float FreeAngle)
+	{
+		if (Motion == ACM_Locked) return 0.0f;
+		if (Motion == ACM_Free)   return FreeAngle;
+		return std::max(0.0f, std::min(Limit, FMath::Pi));
+	}
+
+	// 조인트 프레임(앵커 + X=twist, Y=swing1, Z=swing2 축) 기준으로 시각화 라인 생성.
+	//  - 프레임 축(twist 축은 길게)
+	//  - Swing 타원뿔(Swing1=Y방향, Swing2=Z방향 반각)
+	//  - Twist 허용 범위 호(Y-Z 평면)
+	void BuildConstraintViz(TArray<FWireLine>& Lines, const FVector& Anchor,
+		const FVector& AX, const FVector& AY, const FVector& AZ,
+		const FConstraintSetup& C, float Size)
+	{
+		const float AxisLen = Size;
+
+		// 프레임 축. twist(X)를 더 길게.
+		AddLine(Lines, Anchor, Anchor + AX * (AxisLen * 1.6f));
+		AddLine(Lines, Anchor, Anchor + AY * AxisLen);
+		AddLine(Lines, Anchor, Anchor + AZ * AxisLen);
+
+		// Swing 콘: X축을 중심으로 Y(swing1)/Z(swing2) 반각만큼 벌어진 타원뿔.
+		const float A1 = AngularVizAngle(C.Swing1Motion, C.Swing1Limit, FMath::Pi * 0.5f);
+		const float A2 = AngularVizAngle(C.Swing2Motion, C.Swing2Limit, FMath::Pi * 0.5f);
+		if (A1 > 0.0f || A2 > 0.0f)
+		{
+			const float ConeLen = AxisLen * 1.3f;
+			// tan 이 90°에서 발산하므로 80°로 클램프.
+			const float Clamp = FMath::Pi * 0.444f;
+			const float RY = ConeLen * std::tan(std::min(A1, Clamp));
+			const float RZ = ConeLen * std::tan(std::min(A2, Clamp));
+			const FVector End = Anchor + AX * ConeLen;
+
+			const int32 Seg = 24;
+			FVector Prev = End + AY * RY;
+			for (int32 i = 1; i <= Seg; ++i)
+			{
+				const float Ang = (2.0f * FMath::Pi) * static_cast<float>(i) / static_cast<float>(Seg);
+				const FVector P = End + AY * (RY * std::cos(Ang)) + AZ * (RZ * std::sin(Ang));
+				AddLine(Lines, Prev, P);
+				Prev = P;
+			}
+			// 앵커→타원 4 스포크.
+			AddLine(Lines, Anchor, End + AY * RY);
+			AddLine(Lines, Anchor, End - AY * RY);
+			AddLine(Lines, Anchor, End + AZ * RZ);
+			AddLine(Lines, Anchor, End - AZ * RZ);
+		}
+
+		// Twist 부채꼴: 트위스트는 X축 둘레 회전이므로 X에 수직인 Y-Z 평면에서 ±TwistLimit 범위를
+		// 부채꼴(arc + 방사형 스포크)로 그린다. 호 = 허용 범위 경계, 스포크 = 부채꼴 채움.
+		const float TW = AngularVizAngle(C.TwistMotion, C.TwistLimit, FMath::Pi);
+		if (TW > 0.0f)
+		{
+			const float R = AxisLen * 0.9f;
+			// ~12° 간격으로 분할(최소 4).
+			const int32 Seg = std::max(4, static_cast<int32>((2.0f * TW) / (FMath::Pi / 15.0f)));
+			FVector Prev = Anchor + AY * (R * std::cos(-TW)) + AZ * (R * std::sin(-TW));
+			AddLine(Lines, Anchor, Prev);   // 시작 반경선
+			for (int32 i = 1; i <= Seg; ++i)
+			{
+				const float Ang = -TW + (2.0f * TW) * static_cast<float>(i) / static_cast<float>(Seg);
+				const FVector P = Anchor + AY * (R * std::cos(Ang)) + AZ * (R * std::sin(Ang));
+				AddLine(Lines, Prev, P);     // 호 세그먼트
+				AddLine(Lines, Anchor, P);   // 방사형 스포크(부채꼴 채움)
+				Prev = P;
+			}
+		}
+	}
 }
 
 #pragma endregion
@@ -130,8 +204,9 @@ FPhysicsAssetDebugSceneProxy::FPhysicsAssetDebugSceneProxy(UPhysicsAssetDebugCom
 		| EPrimitiveProxyFlags::NeverCull
 		| EPrimitiveProxyFlags::PhysicsAssetDebug;
 
-	BodyColor     = FVector4(0.30f, 0.75f, 1.00f, 1.0f);   // 하늘색
-	SelectedColor = FVector4(1.00f, 0.80f, 0.20f, 1.0f);   // 노랑(선택 본)
+	BodyColor       = FVector4(0.30f, 0.75f, 1.00f, 1.0f);   // 하늘색
+	SelectedColor   = FVector4(1.00f, 0.80f, 0.20f, 1.0f);   // 노랑(선택 본)
+	ConstraintColor = FVector4(0.40f, 1.00f, 0.45f, 1.0f);   // 연두(조인트 프레임/한계)
 	RebuildLines();
 }
 
@@ -149,6 +224,7 @@ void FPhysicsAssetDebugSceneProxy::RebuildLines()
 {
 	CachedLines.clear();
 	CachedSelectedLines.clear();
+	CachedConstraintLines.clear();
 
 	UPhysicsAssetDebugComponent* Comp = static_cast<UPhysicsAssetDebugComponent*>(GetOwner());
 	if (!Comp || !Comp->IsVisibleDebug()) return;
@@ -205,5 +281,56 @@ void FPhysicsAssetDebugSceneProxy::RebuildLines()
 			BuildCapsule(Out, ToWorld(Elem.Center), Q.RotateVector(FVector(1, 0, 0)), Q.RotateVector(FVector(0, 1, 0)), Q.RotateVector(FVector(0, 0, 1)),
 				Elem.Radius * S, Elem.Length * 0.5f * S);
 		}
+	}
+
+	// ── 조인트 시각화: 각 Constraint 의 ChildFrame 앵커에 프레임 축 + Swing 콘 + Twist 호 ──
+	// 마스터 토글 off 면 생략. 본이 선택돼 있으면 그 본에 연결된 Constraint 만 그린다.
+	for (const FConstraintSetup& C : Asset->ConstraintSetups)
+	{
+		if (!Comp->IsDrawConstraints()) break;
+
+		const int32 ChildBone = FindBoneIndexByName(MeshAsset, C.ChildBone);
+		if (ChildBone < 0) continue;
+
+		// 선택된 본이 있으면, 그 본이 child 나 parent 인 Constraint 만 표시.
+		if (SelectedBone >= 0)
+		{
+			const int32 ParentBoneSel = FindBoneIndexByName(MeshAsset, C.ParentBone);
+			if (ChildBone != SelectedBone && ParentBoneSel != SelectedBone)
+			{
+				continue;
+			}
+		}
+
+		const FVector BonePos   = MeshComp->GetBoneLocationByIndex(ChildBone);
+		const FQuat   BoneQuat  = MeshComp->GetBoneQuatByIndex(ChildBone);
+		const FVector BoneScale = MeshComp->GetBoneScaleByIndex(ChildBone);
+
+		// 조인트 앵커(월드) = 자식 본 월드에 ChildFrame(본-로컬, 컴포넌트 단위) 적용.
+		const FVector LP = C.ChildFrame.Location;
+		const FVector AnchorWorld = BonePos + BoneQuat.RotateVector(
+			FVector(LP.X * BoneScale.X, LP.Y * BoneScale.Y, LP.Z * BoneScale.Z));
+		const FQuat FrameQuat = BoneQuat * C.ChildFrame.Rotation;
+
+		const FVector AX = FrameQuat.RotateVector(FVector(1, 0, 0));
+		const FVector AY = FrameQuat.RotateVector(FVector(0, 1, 0));
+		const FVector AZ = FrameQuat.RotateVector(FVector(0, 0, 1));
+
+		// 시각화 크기: 본 길이(부모와의 거리)에 비례 — 월드 스케일/단위에 무관하게 적당한 크기.
+		float VizSize = 0.0f;
+		const int32 ParentBone = FindBoneIndexByName(MeshAsset, C.ParentBone);
+		if (ParentBone >= 0)
+		{
+			const FVector ParentPos = MeshComp->GetBoneLocationByIndex(ParentBone);
+			const FVector D = AnchorWorld - ParentPos;
+			VizSize = 0.4f * std::sqrt(D.X * D.X + D.Y * D.Y + D.Z * D.Z);
+		}
+		if (VizSize < 1e-4f)
+		{
+			// 폴백: 본 월드 스케일 기반 기본 크기.
+			VizSize = 0.5f * ((BoneScale.X + BoneScale.Y + BoneScale.Z) / 3.0f);
+		}
+
+		BuildConstraintViz(CachedConstraintLines, AnchorWorld, AX, AY, AZ, C, VizSize);
 	}
 }

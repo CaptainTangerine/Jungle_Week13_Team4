@@ -80,6 +80,19 @@ void FMeshEditorViewportClient::SetDebugPhysicsAsset(UPhysicsAsset* InAsset)
 	}
 }
 
+void FMeshEditorViewportClient::SetDrawConstraints(bool bEnabled)
+{
+	if (PhysicsDebugComponent)
+	{
+		PhysicsDebugComponent->SetDrawConstraints(bEnabled);
+	}
+}
+
+bool FMeshEditorViewportClient::IsDrawConstraints() const
+{
+	return PhysicsDebugComponent ? PhysicsDebugComponent->IsDrawConstraints() : false;
+}
+
 void FMeshEditorViewportClient::ResetCameraToPreviousBounds()
 {
 	if (!PreviewActor)
