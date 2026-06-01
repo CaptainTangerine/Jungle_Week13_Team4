@@ -3,6 +3,7 @@
 
 #include <fstream>
 #include <filesystem>
+#include <algorithm>
 
 namespace PSKey
 {
@@ -17,6 +18,12 @@ namespace PSKey
 	constexpr const char* GameSection = "Game";
 	constexpr const char* StartLevelName = "StartLevelName";
 	constexpr const char* GameModeClassName = "GameModeClassName";
+
+	constexpr const char* PhysicsSection = "Physics";
+	constexpr const char* WorkerThreadCount = "WorkerThreadCount";
+	constexpr const char* bEnableCCD = "bEnableCCD";
+	constexpr const char* bEnablePCM = "bEnablePCM";
+	constexpr const char* bEnableActiveActors = "bEnableActiveActors";
 }
 
 void FProjectSettings::SaveToFile(const FString& Path) const
@@ -38,6 +45,13 @@ void FProjectSettings::SaveToFile(const FString& Path) const
 	GameObj[PSKey::StartLevelName] = Game.StartLevelName;
 	GameObj[PSKey::GameModeClassName] = Game.GameModeClassName;
 	Root[PSKey::GameSection] = GameObj;
+
+	JSON PhysicsObj = Object();
+	PhysicsObj[PSKey::WorkerThreadCount] = static_cast<int>(Physics.WorkerThreadCount);
+	PhysicsObj[PSKey::bEnableCCD] = Physics.bEnableCCD;
+	PhysicsObj[PSKey::bEnablePCM] = Physics.bEnablePCM;
+	PhysicsObj[PSKey::bEnableActiveActors] = Physics.bEnableActiveActors;
+	Root[PSKey::PhysicsSection] = PhysicsObj;
 
 	std::filesystem::path FilePath(FPaths::ToWide(Path));
 	if (FilePath.has_parent_path())
@@ -100,5 +114,21 @@ void FProjectSettings::LoadFromFile(const FString& Path)
 			int v = S[PSKey::MaxPointAtlasPages].ToInt();
 			Shadow.MaxPointAtlasPages = static_cast<uint32>(v > 1 ? v : 1);
 		}
+	}
+
+	if (Root.hasKey(PSKey::PhysicsSection))
+	{
+		JSON P = Root[PSKey::PhysicsSection];
+		if (P.hasKey(PSKey::WorkerThreadCount))
+		{
+			int v = P[PSKey::WorkerThreadCount].ToInt();
+			Physics.WorkerThreadCount = static_cast<uint32>((std::max)(1, (std::min)(v, 32)));
+		}
+		if (P.hasKey(PSKey::bEnableCCD))
+			Physics.bEnableCCD = P[PSKey::bEnableCCD].ToBool();
+		if (P.hasKey(PSKey::bEnablePCM))
+			Physics.bEnablePCM = P[PSKey::bEnablePCM].ToBool();
+		if (P.hasKey(PSKey::bEnableActiveActors))
+			Physics.bEnableActiveActors = P[PSKey::bEnableActiveActors].ToBool();
 	}
 }

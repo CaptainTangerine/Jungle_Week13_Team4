@@ -32,9 +32,19 @@ class FProjectSettings : public TSingleton<FProjectSettings>
 		                            // 잘못된 이름이거나 AGameModeBase 파생이 아니면 디폴트 fallback.
 	};
 
+	// --- Physics ---
+	struct FPhysicsOption
+	{
+		uint32 WorkerThreadCount = 2;
+		bool bEnableCCD = true;
+		bool bEnablePCM = true;
+		bool bEnableActiveActors = true;
+	};
+
 public:
 	FShadowOption Shadow;
 	FGameOption Game;
+	FPhysicsOption Physics;
 
 	// --- 직렬화 ---
 	void SaveToFile(const FString& Path) const;

@@ -9,6 +9,7 @@
 #include "Math/Quat.h"
 #include "Object/Object.h"  // IsAliveObject
 #include "Physics/Asset/ConstraintSetup.h"
+#include "Core/ProjectSettings.h"
 #include "Core/Logging/Log.h"
 
 // PhysX headers
@@ -385,6 +386,18 @@ static void SetupDefaultRawBodyFilterData(PxShape* Shape)
 	Shape->setQueryFilterData(Filter);
 }
 
+static bool IsSceneCCDEnabled()
+{
+	return FProjectSettings::Get().Physics.bEnableCCD;
+}
+
+static void SetDynamicCCDEnabled(PxRigidDynamic* Dynamic, bool bEnabled)
+{
+	if (!Dynamic) return;
+
+	Dynamic->setRigidBodyFlag(PxRigidBodyFlag::eENABLE_CCD, bEnabled && IsSceneCCDEnabled());
+}
+
 // PxFilterShader — 엔진의 채널/응답 매트릭스를 PhysX에서 처리
 // 양쪽 모두 상대 채널에 대해 Block이면 물리 충돌, 한쪽이라도 Overlap이면 트리거, 그 외 무시
 static PxFilterFlags KraftonFilterShader(
@@ -421,6 +434,10 @@ static PxFilterFlags KraftonFilterShader(
 			| PxPairFlag::eNOTIFY_TOUCH_FOUND
 			| PxPairFlag::eNOTIFY_TOUCH_LOST
 			| PxPairFlag::eNOTIFY_CONTACT_POINTS;
+		if (IsSceneCCDEnabled())
+		{
+			pairFlags |= PxPairFlag::eDETECT_CCD_CONTACT;
+		}
 		return PxFilterFlag::eDEFAULT;
 	}
 
@@ -459,8 +476,11 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 		return;
 	}
 
+	const auto& PhysicsSettings = FProjectSettings::Get().Physics;
+	const uint32 WorkerThreadCount = (std::max)(1u, PhysicsSettings.WorkerThreadCount);
+
 	// CPU Dispatcher
-	Dispatcher = PxDefaultCpuDispatcherCreate(2);
+	Dispatcher = PxDefaultCpuDispatcherCreate(static_cast<PxU32>(WorkerThreadCount));
 
 	// Event callback
 	EventCallback = new FPhysXSimulationCallback();
@@ -471,6 +491,22 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 	SceneDesc.cpuDispatcher = Dispatcher;
 	SceneDesc.filterShader = KraftonFilterShader;
 	SceneDesc.simulationEventCallback = EventCallback;
+
+	auto SetSceneFlag = [&SceneDesc](PxSceneFlag::Enum Flag, bool bEnabled)
+	{
+		if (bEnabled)
+		{
+			SceneDesc.flags |= Flag;
+		}
+		else
+		{
+			SceneDesc.flags.clear(Flag);
+		}
+	};
+	SetSceneFlag(PxSceneFlag::eENABLE_CCD, PhysicsSettings.bEnableCCD);
+	SetSceneFlag(PxSceneFlag::eENABLE_PCM, PhysicsSettings.bEnablePCM);
+	SetSceneFlag(PxSceneFlag::eENABLE_ACTIVE_ACTORS, PhysicsSettings.bEnableActiveActors);
+
 	Scene = Physics->createScene(SceneDesc);
 
 	if (!Scene)
@@ -493,7 +529,12 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 	VehicleManager = new FPhysXVehicleManager();
 	VehicleManager->Init(Physics, Scene, Cooking, DefaultMaterial);
 
-	UE_LOG("[PhysX] Initialized successfully (Scene=%p)", Scene);
+	UE_LOG("[PhysX] Initialized successfully (Scene=%p, Workers=%u, CCD=%d, PCM=%d, ActiveActors=%d)",
+		Scene,
+		WorkerThreadCount,
+		PhysicsSettings.bEnableCCD ? 1 : 0,
+		PhysicsSettings.bEnablePCM ? 1 : 0,
+		PhysicsSettings.bEnableActiveActors ? 1 : 0);
 }
 
 void FPhysXPhysicsScene::Shutdown()
@@ -562,6 +603,11 @@ void FPhysXPhysicsScene::RegisterComponent(UPrimitiveComponent* Comp)
 			? static_cast<PxRigidActor*>(Physics->createRigidDynamic(BodyXf))
 			: static_cast<PxRigidActor*>(Physics->createRigidStatic(BodyXf));
 		if (!Body) return;
+
+		if (PxRigidDynamic* DynamicBody = Body->is<PxRigidDynamic>())
+		{
+			SetDynamicCCDEnabled(DynamicBody, true);
+		}
 
 		Body->userData = OwnerActor;
 		Scene->addActor(*Body);
@@ -670,6 +716,7 @@ FPhysicsActorHandle FPhysXPhysicsScene::CreateActor(const FActorCreationParams& 
 		{
 			NewDynamic->setRigidBodyFlag(PxRigidBodyFlag::eUSE_KINEMATIC_TARGET_FOR_SCENE_QUERIES, true);
 			NewDynamic->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, !Params.bSimulatePhysics);
+			SetDynamicCCDEnabled(NewDynamic, Params.bSimulatePhysics);
 		}
 		NewActor = NewDynamic;
 	}
@@ -833,7 +880,15 @@ void FPhysXPhysicsScene::SetActorKinematic(FPhysicsActorHandle Actor, bool bKine
 		return;
 	}
 
+	if (bKinematic)
+	{
+		SetDynamicCCDEnabled(Dynamic, false);
+	}
 	Dynamic->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, bKinematic);
+	if (!bKinematic)
+	{
+		SetDynamicCCDEnabled(Dynamic, true);
+	}
 	Dynamic->wakeUp();
 }
 
@@ -848,6 +903,7 @@ void FPhysXPhysicsScene::SetActorKinematicTarget(FPhysicsActorHandle Actor, cons
 
 	if (!(Dynamic->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC))
 	{
+		SetDynamicCCDEnabled(Dynamic, false);
 		Dynamic->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
 	}
 	Dynamic->setKinematicTarget(ToPxTransform(WorldPose));
