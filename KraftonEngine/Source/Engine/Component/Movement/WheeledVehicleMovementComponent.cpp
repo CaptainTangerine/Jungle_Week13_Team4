@@ -3,10 +3,8 @@
 #include "Physics/PhysXPhysicsScene.h"
 #include "Physics/PhysXVehicleManager.h"
 #include "Component/SceneComponent.h"
-#include "Component/Primitive/SkeletalMeshComponent.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
-#include "Physics/BodyInstance.h"        // FBodyInstance (chassis hijack)
 #include "Core/Types/CollisionTypes.h"   // ECollisionChannel, ObjectTypeBit
 #include "Core/Logging/Log.h"
 #include "Math/Quat.h"
@@ -95,17 +93,12 @@ bool UWheeledVehicleMovementComponent::GetChassisWorldTransform(FTransform& Out)
 	{
 		return false;
 	}
-	// actor 는 chassis bone 의 world 포즈 (= B × componentWorld). component 가 따라가려면
-	// componentWorld = B⁻¹ × bodyWorld. parametric 은 B⁻¹=Identity 라 bodyWorld 그대로.
+	// parametric: actor(PxRigidDynamic) origin == 차체 컴포넌트 origin (스폰 시 UpdatedComponent
+	// 월드 포즈로 생성). 따라서 actor world pose 를 그대로 차체 world transform 으로 반환한다.
 	const PxTransform T = PVehicleActor->getGlobalPose();
-	const FMatrix BodyWorld = FTransform(
+	Out = FTransform(
 		FVector(T.p.x, T.p.y, T.p.z),
 		FQuat(T.q.x, T.q.y, T.q.z, T.q.w),
-		FVector(1.0f, 1.0f, 1.0f)).ToMatrix();
-	const FMatrix ComponentWorld = ChassisBoneInvComponent * BodyWorld;
-	Out = FTransform(
-		FVector(ComponentWorld.M[3][0], ComponentWorld.M[3][1], ComponentWorld.M[3][2]),
-		FQuat::FromMatrix(ComponentWorld),
 		FVector(1.0f, 1.0f, 1.0f));
 	return true;
 }
@@ -195,15 +188,11 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	using WO = PxVehicleDrive4WWheelOrder;
 	const PxU32 NW = static_cast<PxU32>(NumWheels);
 
-	// --- 차체 컴포넌트 + wheel bone 위치. +X=forward, Y=side, +Z=up ---
-	SkeletalBody = Cast<USkeletalMeshComponent>(GetUpdatedComponent());
-
+	// --- 차체 박스 치수 + parametric wheel 위치 (chassis 박스 4코너). +X=forward, Y=side, +Z=up ---
 	const float HalfX  = ChassisLength * 0.5f;
 	const float HalfY  = ChassisWidth  * 0.5f;
 	const float HalfZ  = ChassisHeight * 0.5f;
 
-	// Wheel 위치는 skeletal mesh 의 wheel bone(component-space) 에서 가져온다 (UE WheelSetup 패턴).
-	// 본이 없으면 parametric 4코너 fallback.
 	const float FrontX = HalfX - WheelRadius;
 	const float TrackY = HalfY;
 	const float WheelZ = -HalfZ;
@@ -214,83 +203,7 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	WheelCenters[WO::eREAR_LEFT]   = PxVec3(-FrontX,  TrackY, WheelZ);
 	WheelCenters[WO::eREAR_RIGHT]  = PxVec3(-FrontX, -TrackY, WheelZ);
 
-	// --- chassis 소스 결정 (hijack: mesh 의 PhysicsAsset body, 아니면 parametric box) ---
-	// ChassisSetUp 본의 body 를 hijack. 본을 못 찾으면 root(0) fallback.
-	int32 ChassisBoneIndex = -1;
-	if (SkeletalBody)
-	{
-		ChassisBoneIndex = SkeletalBody->FindBoneIndex(ChassisSetUp);
-		if (ChassisBoneIndex < 0)
-		{
-			UE_LOG("[WheeledVehicleMC] CreateVehicle: chassis bone '%s' not found; falling back to root (0).", ChassisSetUp.c_str());
-			ChassisBoneIndex = 0;
-		}
-	}
-
-	FBodyInstance* ChassisBI = nullptr;
-	if (SkeletalBody && !SkeletalBody->GetBodies().empty() && ChassisBoneIndex >= 0)
-	{
-		FBodyInstance* Candidate = SkeletalBody->GetBodyInstance(ChassisBoneIndex);
-		if (Candidate && Candidate->IsValidBodyInstance())
-		{
-			ChassisBI = Candidate;
-		}
-	}
-	const bool bHijack = (ChassisBI != nullptr);
-
-	// --- wheel bone 위치 + chassis-bone frame (B⁻¹) ---
-	// hijack actor 는 chassis bone 의 world 에 놓인다 → wheel offset(actor 기준) 과 readback(actor→component)
-	// 을 그 frame 으로 맞춘다. parametric actor 는 component 원점에 놓이므로 B⁻¹ = Identity.
-	ChassisBoneInvComponent = FMatrix::Identity;
-	for (int32 i = 0; i < NumWheels; ++i) WheelBoneIndices[i] = -1;
-	if (SkeletalBody)
-	{
-		TArray<FTransform> BoneGlobals;
-		SkeletalBody->GetCurrentBoneGlobalTransforms(BoneGlobals);
-
-		// body(actor) 는 scale 이 없다 — InitBody 가 MakeRigidTransform 으로 배치한다. 따라서 frame
-		// 변환도 scale 을 뺀 rigid 행렬로 해야 actor frame 과 일치한다. (bind pose 에 스케일이 섞여
-		// 있으면 B⁻¹ 에 역스케일이 끼어 wheel offset 이 깨지고 → sprung mass 가 invalid → setup 실패.)
-		auto RigidMat = [](const FTransform& T)
-		{
-			return FTransform(T.Location, T.Rotation, FVector(1.0f, 1.0f, 1.0f)).ToMatrix();
-		};
-
-		if (bHijack && ChassisBoneIndex >= 0 && ChassisBoneIndex < static_cast<int32>(BoneGlobals.size()))
-		{
-			ChassisBoneInvComponent = RigidMat(BoneGlobals[ChassisBoneIndex]).GetInverse();
-		}
-
-		for (int32 i = 0; i < NumWheels && i < static_cast<int32>(WheelSetups.size()); ++i)
-		{
-			const FString& BoneName = WheelSetups[i].BoneName;
-			if (BoneName.empty()) continue;
-			const int32 BoneIdx = SkeletalBody->FindBoneIndex(BoneName);
-			WheelBoneIndices[i] = BoneIdx;
-			if (BoneIdx >= 0 && BoneIdx < static_cast<int32>(BoneGlobals.size()))
-			{
-				// wheel bone 위치를 chassis bone(= actor 원점) frame 으로 변환: W_i * B⁻¹.
-				const FMatrix WheelRelChassis = RigidMat(BoneGlobals[BoneIdx]) * ChassisBoneInvComponent;
-				WheelCenters[i] = PxVec3(WheelRelChassis.M[3][0], WheelRelChassis.M[3][1], WheelRelChassis.M[3][2]);
-			}
-		}
-	}
-
 	const PxVec3 ChassisCM(0.0f, 0.0f, CenterOfMassOffsetZ);
-
-	IPhysicsScene* EngineScene = nullptr;
-	if (AActor* Owner = GetOwner())
-	{
-		if (UWorld* World = Owner->GetWorld())
-		{
-			EngineScene = World->GetPhysicsScene();
-		}
-	}
-	if (bHijack && !EngineScene)
-	{
-		UE_LOG("[WheeledVehicleMC] CreateVehicle: physics scene unavailable for chassis hijack.");
-		return false;
-	}
 
 	const PxU32 OwnerUUID = GetOwner() ? GetOwner()->GetUUID() : 0;
 
@@ -311,10 +224,10 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	ChassisSimFilter.word1 = ObjectTypeBit(ECollisionChannel::WorldStatic) | ObjectTypeBit(ECollisionChannel::WorldDynamic);
 	ChassisSimFilter.word3 = OwnerUUID;
 
-	// --- 휠 convex 는 항상 cook (mutation 전에 먼저 — 실패 시 깨끗이 abort) ---
+	// --- chassis/wheel convex cook (mutation 전에 먼저 — 실패 시 깨끗이 abort) ---
 	PxConvexMesh* WheelMesh   = CreateWheelConvex(Cooking, Physics, WheelRadius, WheelWidth);
-	PxConvexMesh* ChassisMesh = bHijack ? nullptr : CreateChassisConvex(Cooking, Physics, HalfX, HalfY, HalfZ);
-	if (!WheelMesh || (!bHijack && !ChassisMesh))
+	PxConvexMesh* ChassisMesh = CreateChassisConvex(Cooking, Physics, HalfX, HalfY, HalfZ);
+	if (!WheelMesh || !ChassisMesh)
 	{
 		UE_LOG("[WheeledVehicleMC] CreateVehicle: convex cooking failed.");
 		if (WheelMesh)   WheelMesh->release();
@@ -322,55 +235,19 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 		return false;
 	}
 
-	// --- chassis actor + chassis shapes ---
-	PxRigidDynamic* Actor = nullptr;
-	if (bHijack)
+	// --- chassis actor + chassis shape (parametric box convex — actor 를 우리가 만들고 소유) ---
+	PxRigidDynamic* Actor = Physics->createRigidDynamic(PxTransform(PxIdentity));
+	PxShape* ChassisShape = PxRigidActorExt::createExclusiveShape(*Actor, PxConvexMeshGeometry(ChassisMesh), *Material);
+	ChassisShape->setSimulationFilterData(ChassisSimFilter);
+	ChassisShape->setQueryFilterData(VehicleQryFilter);
+	ChassisShape->setLocalPose(PxTransform(PxIdentity));
+
+	// 스폰 위치 — UpdatedComponent 월드 트랜스폼.
+	if (USceneComponent* Updated = GetUpdatedComponent())
 	{
-		// mesh 의 root FBodyInstance 를 차량 body 로 hijack: 외부 구동 표시 + dynamic 전환.
-		Actor = static_cast<PxRigidDynamic*>(ChassisBI->GetPhysicsActorHandle().Internal);
-		if (!Actor)
-		{
-			UE_LOG("[WheeledVehicleMC] CreateVehicle: chassis FBodyInstance has no PhysX actor.");
-			WheelMesh->release();
-			return false;
-		}
-		ChassisBI->bExternallyControlled = true;
-		ChassisBI->SetInstanceSimulatePhysics(EngineScene, true);
-
-		// chassis bone 이 component 원점에서 떨어져 있어도 ChassisBoneInvComponent(B⁻¹) frame 변환이
-		// wheel offset 과 readback 을 맞춰주므로 별도 보정 불필요.
-
-		// InitBody 가 찍은 raw-body 필터를 차량 필터로 교체 (이미 붙어있는 chassis shapes 전체).
-		const PxU32 ChassisShapeCount = Actor->getNbShapes();
-		if (ChassisShapeCount > 0)
-		{
-			TArray<PxShape*> Shapes;
-			Shapes.resize(ChassisShapeCount);
-			Actor->getShapes(Shapes.data(), ChassisShapeCount);
-			for (PxU32 s = 0; s < ChassisShapeCount; ++s)
-			{
-				Shapes[s]->setSimulationFilterData(ChassisSimFilter);
-				Shapes[s]->setQueryFilterData(VehicleQryFilter);
-			}
-		}
-		// 위치는 InitBody 가 chassis bone 월드 포즈로 이미 배치했다 — setGlobalPose 불필요.
-	}
-	else
-	{
-		// parametric: 우리가 actor 를 만들고 소유한다.
-		Actor = Physics->createRigidDynamic(PxTransform(PxIdentity));
-		PxShape* ChassisShape = PxRigidActorExt::createExclusiveShape(*Actor, PxConvexMeshGeometry(ChassisMesh), *Material);
-		ChassisShape->setSimulationFilterData(ChassisSimFilter);
-		ChassisShape->setQueryFilterData(VehicleQryFilter);
-		ChassisShape->setLocalPose(PxTransform(PxIdentity));
-
-		// 스폰 위치 — UpdatedComponent 월드 트랜스폼.
-		if (USceneComponent* Updated = GetUpdatedComponent())
-		{
-			const FVector P = Updated->GetWorldLocation();
-			const FQuat   Q = FQuat::FromMatrix(Updated->GetWorldMatrix());
-			Actor->setGlobalPose(PxTransform(PxVec3(P.X, P.Y, P.Z), PxQuat(Q.X, Q.Y, Q.Z, Q.W)));
-		}
+		const FVector P = Updated->GetWorldLocation();
+		const FQuat   Q = FQuat::FromMatrix(Updated->GetWorldMatrix());
+		Actor->setGlobalPose(PxTransform(PxVec3(P.X, P.Y, P.Z), PxQuat(Q.X, Q.Y, Q.Z, Q.W)));
 	}
 
 	// --- wheel shapes: 항상 procedural, chassis shapes 다음 인덱스에 추가 ---
@@ -388,15 +265,9 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	WheelMesh->release();
 	if (ChassisMesh) ChassisMesh->release();
 
-	// --- mass/inertia: hijack 은 asset(InitBody) 질량, parametric 은 ChassisMass.
-	//     관성 텐서는 chassis(sim) shape 들로 계산하고 CoM 은 의도한 낮춤 값 유지.
+	// --- mass/inertia: ChassisMass. 관성 텐서는 chassis(sim) shape 로 계산하고 CoM 은 낮춤 값 유지.
 	//     (wheels 는 eSIMULATION_SHAPE=false → 관성 계산에서 자동 제외.) ---
-	float Mass = bHijack ? Actor->getMass() : ChassisMass;
-	if (Mass <= 1.0f)
-	{
-		if (bHijack) UE_LOG("[WheeledVehicleMC] CreateVehicle: chassis body mass=%.2f looks unset; using ChassisMass=%.1f.", Mass, ChassisMass);
-		Mass = ChassisMass;
-	}
+	const float Mass = ChassisMass;
 	PxRigidBodyExt::setMassAndUpdateInertia(*Actor, Mass, &ChassisCM);
 
 	// --- wheels sim data ---
@@ -484,10 +355,7 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	{
 		UE_LOG("[WheeledVehicleMC] CreateVehicle: PxVehicleDrive4W::setup failed (invalid wheel/sim data) — aborting.");
 		Vehicle->free();
-		if (!bHijack && Actor)
-		{
-			Actor->release();
-		}
+		Actor->release();
 		return false;
 	}
 
@@ -495,30 +363,14 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	Vehicle->mDriveDynData.forceGearChange(PxVehicleGearsData::eFIRST);
 	Vehicle->mDriveDynData.setUseAutoGears(true);
 
-	// parametric 은 actor 를 scene 에 추가 (hijack 은 InitBody 가 이미 추가).
-	// 어느 경우든 actor 는 BodyMappings 밖 — scene post-sync 가 transform 을 안 건드린다.
-	if (!bHijack)
-	{
-		PScene->addActor(*Actor);
-	}
-
-	auto T = Actor->getGlobalPose();
-	const FMatrix BodyWorld = FTransform(
-		FVector(T.p.x, T.p.y, T.p.z),
-		FQuat(T.q.x, T.q.y, T.q.z, T.q.w),
-		FVector(1.0f, 1.0f, 1.0f)).ToMatrix();
-	const auto Pos = BodyWorld.GetLocation();
+	// actor 를 scene 에 추가. actor 는 BodyMappings 밖이라 scene post-sync 가 transform 을 안 건드린다 —
+	// 이 vehicle(manager Tick) 이 유일한 writer, AWheeledVehicle::Tick 이 readback 한다.
+	PScene->addActor(*Actor);
 
 	PVehicle      = Vehicle;
 	PVehicleActor = Actor;
-	HijackedBody  = ChassisBI;   // null 이면 parametric (우리가 actor 소유)
 
-	FTransform Second;
-	GetChassisWorldTransform(Second);
-	const auto Pos2 = Second.ToMatrix().GetLocation();
-
-	UE_LOG("[WheeledVehicleMC] CreateVehicle: PxVehicleDrive4W created (%s chassis, mass=%.1f kg).",
-		bHijack ? "asset" : "parametric", Mass);
+	UE_LOG("[WheeledVehicleMC] CreateVehicle: PxVehicleDrive4W created (parametric chassis, mass=%.1f kg).", Mass);
 	return true;
 }
 
@@ -530,53 +382,20 @@ void UWheeledVehicleMovementComponent::DestroyVehicle()
 		PVehicle = nullptr;
 	}
 
-	// parametric 모드(HijackedBody==null)만 우리가 actor 를 소유 → release.
-	// hijack 모드는 mesh 의 FBodyInstance/component 가 actor 를 소유/해제한다 — 건드리지 않는다
-	// (teardown 순서상 이미 해제됐을 수 있으므로 HijackedBody 를 deref 하지도 않는다).
-	if (PVehicleActor && !HijackedBody)
+	// parametric — actor 는 우리가 소유 → release.
+	if (PVehicleActor)
 	{
 		PVehicleActor->release();
 	}
 	PVehicleActor = nullptr;
-	HijackedBody  = nullptr;
 }
 
 // ============================================================
-// Wheel pose 출력 — skeletal mesh 의 wheel bone 에 반영 (AWheeledVehicle::Tick → 여기)
+// Wheel pose 출력 — manager 의 이번 프레임 wheel local pose(chassis 공간)를 그대로 반환.
+// AWheeledVehicle::Tick 이 받아 각 wheel static mesh 컴포넌트의 relative transform 에 적용한다.
 // ============================================================
-void UWheeledVehicleMovementComponent::UpdateWheelBonesFromSimulation()
+int32 UWheeledVehicleMovementComponent::GetWheelPoses(FTransform* OutPoses, int32 Max) const
 {
-	if (!VehicleManager || !SkeletalBody) return;
-
-	FTransform Poses[NumWheels];
-	const int32 Count = VehicleManager->GetWheelLocalPoses(this, Poses, NumWheels);
-	for (int32 i = 0; i < Count; ++i)
-	{
-		ApplyWheelPose(i, Poses[i]);
-	}
+	if (!VehicleManager || !OutPoses || Max <= 0) return 0;
+	return VehicleManager->GetWheelLocalPoses(this, OutPoses, Max);
 }
-
-void UWheeledVehicleMovementComponent::ApplyWheelPose(int32 WheelIndex, const FTransform& LocalPose)
-{
-	if (WheelIndex < 0 || WheelIndex >= NumWheels) return;
-	if (!SkeletalBody) return;
-
-	const int32 BoneIdx = WheelBoneIndices[WheelIndex];
-	if (BoneIdx < 0) return;
-
-	// PhysX wheelQueryResults[w].localPose 는 vehicle actor(=skeletal mesh component) 공간.
-	// 여기서는 wheel bone 이 root bone(컴포넌트 원점)의 직계 자식이라 가정 → component-space ≈ bone-local.
-	// 중간 본/offset 이 있는 일반 계층에서는 parent component-space 로의 변환이 필요 (follow-up).
-	SkeletalBody->SetBoneLocalTransformByIndex(BoneIdx, LocalPose);
-}
-
-//void UWheeledVehicleMovementComponent::EnsureWheelSetUp(TArray<FBodyInstance*>& InBI)
-//{
-//	for (uint32 i = 0; i < InBI.size(); i++)
-//	{
-//		auto* BI = InBI[i];
-//		if (!BI) continue;
-//
-//		auto& Handle = BI->ActorHandle;
-//	}
-//}

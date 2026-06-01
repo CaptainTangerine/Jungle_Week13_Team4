@@ -209,30 +209,6 @@ void FPhysXVehicleManager::Tick(float DeltaTime)
 }
 
 
-// Deprecated. Will migrate to AWheeledVehicle::Tick()
-void FPhysXVehicleManager::PostTick(float DeltaTime)
-{
-	if (!SqData) return;
-
-	for (uint16 i = 0; i < SqData->ActiveVehicles.size(); ++i)
-	{
-		UWheeledVehicleMovementComponent* MC = SqData->ActiveVehicles[i];
-		if (!MC) continue;
-
-		const PxVehicleWheelQueryResult& VR = SqData->VehicleResults[i];
-		if (!VR.wheelQueryResults) continue;
-
-		for (uint32 w = 0; w < VR.nbWheelQueryResults; ++w)
-		{
-			const PxTransform& L = VR.wheelQueryResults[w].localPose;
-			MC->ApplyWheelPose((int32)w,
-				FTransform(FVector(L.p.x, L.p.y, L.p.z),
-					FQuat(L.q.x, L.q.y, L.q.z, L.q.w),
-					FVector(1.f, 1.f, 1.f)));
-		}
-	}
-}
-
 void FPhysXVehicleManager::Release()
 {
 	// FrictionPairs 만 manager 소유 — 나머지 핸들(Physics/Scene/Cooking/Material)은 Scene 소유.

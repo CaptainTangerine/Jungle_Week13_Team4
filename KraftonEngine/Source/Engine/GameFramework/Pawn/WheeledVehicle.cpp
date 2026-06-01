@@ -1,11 +1,14 @@
 #include "WheeledVehicle.h"
 
-#include "Component/Primitive/SkeletalMeshComponent.h"
+#include "Component/Primitive/StaticMeshComponent.h"
 #include "Component/Movement/WheeledVehicleMovementComponent.h"
 #include "Component/Input/InputComponent.h"
 #include "Component/Camera/SpringArmComponent.h"
 #include "Component/Camera/CameraComponent.h"
+#include "Object/FName.h"
 #include "Math/Transform.h"
+
+#include <string>
 
 void AWheeledVehicle::BeginPlay()
 {
@@ -31,35 +34,55 @@ void AWheeledVehicle::InitDefaultComponents()
 
 void AWheeledVehicle::EnsureComponents()
 {
-	// 1) 차체 skeletal mesh = Root. 최초엔 생성, 이후엔 재획득 (uniquely-typed → GetComponentByClass 로 충분).
-	VehicleBody = Cast<USkeletalMeshComponent>(GetRootComponent());
-	if (!VehicleBody)
+	// 1) 차체 static mesh = Root. 최초엔 생성, 이후엔 root 재획득.
+	BodyMesh = Cast<UStaticMeshComponent>(GetRootComponent());
+	if (!BodyMesh)
 	{
-		VehicleBody = GetComponentByClass<USkeletalMeshComponent>();
-	}
-	if (!VehicleBody)
-	{
-		VehicleBody = AddComponent<USkeletalMeshComponent>();
-		SetRootComponent(VehicleBody);
-		// TODO: 차체 skeletal mesh 지정 (editor 의 Skeletal Mesh 프로퍼티 또는 코드).
-		//       mesh/wheel bone 이 없으면 MC 가 parametric wheel 위치로 fallback (chassis 는 정상 구동).
+		BodyMesh = AddComponent<UStaticMeshComponent>();
+		BodyMesh->SetFName(FName("VehicleBody"));
+		SetRootComponent(BodyMesh);
+		// TODO: 차체 static mesh 지정 (editor 의 Static Mesh 프로퍼티 또는 코드). 없어도 물리는 정상 구동.
 	}
 
-	// 2) Movement component.
+	// 2) Wheel static mesh ×4 — body/wheel 이 모두 StaticMesh 라 FName("Wheel_i") 로 재획득/생성.
+	//    BodyMesh(=Root, chassis) 에 부착 → Tick 이 chassis-local pose 를 relative transform 으로 적용.
+	for (int32 i = 0; i < NumWheels; ++i)
+	{
+		const FName WheelName(FString("Wheel_") + std::to_string(i));
+		WheelMesh[i] = nullptr;
+		for (UActorComponent* Comp : GetComponents())
+		{
+			UStaticMeshComponent* SM = Cast<UStaticMeshComponent>(Comp);
+			if (SM && SM != BodyMesh && SM->GetFName() == WheelName)
+			{
+				WheelMesh[i] = SM;
+				break;
+			}
+		}
+		if (!WheelMesh[i])
+		{
+			WheelMesh[i] = AddComponent<UStaticMeshComponent>();
+			WheelMesh[i]->SetFName(WheelName);
+			WheelMesh[i]->AttachToComponent(BodyMesh);
+			// TODO: wheel static mesh 지정 (editor 또는 코드).
+		}
+	}
+
+	// 3) Movement component.
 	VehicleMC = GetComponentByClass<UWheeledVehicleMovementComponent>();
 	if (!VehicleMC)
 	{
 		VehicleMC = AddComponent<UWheeledVehicleMovementComponent>();
 	}
-	VehicleMC->SetUpdatedComponent(VehicleBody);
+	VehicleMC->SetUpdatedComponent(BodyMesh);
 
-	// 3) 3인칭 chase 카메라 — VehicleBody → SpringArm → Camera. APawn::PossessedBy 가 Camera 를 활성화.
+	// 4) 3인칭 chase 카메라 — BodyMesh → SpringArm → Camera. APawn::PossessedBy 가 Camera 를 활성화.
 	//    uniquely-typed 라 재획득은 GetComponentByClass 로 충분.
 	SpringArm = GetComponentByClass<USpringArmComponent>();
 	if (!SpringArm)
 	{
 		SpringArm = AddComponent<USpringArmComponent>();
-		SpringArm->AttachToComponent(VehicleBody);
+		SpringArm->AttachToComponent(BodyMesh);
 		SpringArm->TargetArmLength          = 8.0f;                       // m — 차체 뒤 거리
 		SpringArm->SocketOffset             = FVector(0.0f, 0.0f, 3.0f);  // 차체 위로
 		SpringArm->bEnableCameraLag         = true;
@@ -67,7 +90,7 @@ void AWheeledVehicle::EnsureComponents()
 	}
 	// bUsePawnControlRotation 은 UPROPERTY 가 아니라 직렬화되지 않는다 → 로드 후 default(true)로
 	// 되돌아간다(그러면 ControlRotation 을 쓰는데 차량은 갱신 안 해 카메라가 스폰 방향에 고정).
-	// 매번 명시적으로 false 로 둬서 SpringArm 이 차체(VehicleBody) heading 을 따라가게 한다.
+	// 매번 명시적으로 false 로 둬서 SpringArm 이 차체(BodyMesh) heading 을 따라가게 한다.
 	if (SpringArm) SpringArm->bUsePawnControlRotation = false;
 
 	Camera = GetComponentByClass<UCameraComponent>();
@@ -81,19 +104,27 @@ void AWheeledVehicle::EnsureComponents()
 void AWheeledVehicle::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	if (!VehicleMC || !VehicleBody) return;
+	if (!VehicleMC || !BodyMesh) return;
 
-	// Output readback (post-fetch): chassis world pose 를 Root 에 반영.
-	// chassis 는 BodyMappings 밖이라 scene post-sync 가 안 건드림 — 이 Tick 이 유일 writer.
+	// Output readback (post-fetch): chassis world pose 를 Root(BodyMesh) 에 반영.
+	// chassis actor 는 BodyMappings 밖이라 scene post-sync 가 안 건드림 — 이 Tick 이 유일 writer.
 	FTransform Chassis;
 	if (VehicleMC->GetChassisWorldTransform(Chassis))
 	{
-		VehicleBody->SetWorldLocation(Chassis.Location);
-		VehicleBody->SetRelativeRotation(Chassis.Rotation);   // Root: relative == world
+		BodyMesh->SetWorldLocation(Chassis.Location);
+		BodyMesh->SetRelativeRotation(Chassis.Rotation);   // Root: relative == world
 	}
 
-	// Wheel bone pose 반영 (suspension 변위 + steer/spin) — manager 의 이번 프레임 결과를 본에 쓴다.
-	VehicleMC->UpdateWheelBonesFromSimulation();
+	// Wheel pose 반영 (suspension 변위 + steer/spin) — chassis-local pose 를 각 WheelMesh 의
+	// relative transform 에 적용. scale 은 에디터 값 유지를 위해 location/rotation 만 쓴다.
+	FTransform WheelPoses[NumWheels];
+	const int32 Count = VehicleMC->GetWheelPoses(WheelPoses, NumWheels);
+	for (int32 i = 0; i < Count && i < NumWheels; ++i)
+	{
+		if (!WheelMesh[i]) continue;
+		WheelMesh[i]->SetRelativeLocation(WheelPoses[i].Location);
+		WheelMesh[i]->SetRelativeRotation(WheelPoses[i].Rotation);
+	}
 }
 
 void AWheeledVehicle::SetupInputComponent()

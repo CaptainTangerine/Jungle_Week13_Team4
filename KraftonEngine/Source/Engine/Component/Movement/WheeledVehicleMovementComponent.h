@@ -13,17 +13,14 @@ namespace physx
 }
 
 class FPhysXVehicleManager;
-class USkeletalMeshComponent;
-struct FBodyInstance;
 
-// 휠 1개의 setup — 매핑되는 skeletal mesh bone + 스티어/핸드브레이크 적용 여부 (UE FWheelSetup 패턴).
+// 휠 1개의 setup — 스티어/핸드브레이크 적용 여부 (UE FWheelSetup 의 minimal subset).
+// 휠 위치는 parametric (chassis 박스 4코너) 로 계산하므로 bone/mesh 매핑은 없다.
 USTRUCT()
 struct FWheelSetup
 {
 	GENERATED_BODY()
 
-	UPROPERTY(Edit, Save, Category="Wheel", DisplayName="Bone Name")
-	FString BoneName;
 	UPROPERTY(Edit, Save, Category="Wheel", DisplayName="Affected By Steering")
 	bool bAffectedBySteering = false;
 	UPROPERTY(Edit, Save, Category="Wheel", DisplayName="Affected By Handbrake")
@@ -81,11 +78,9 @@ public:
 	// (chassis = PxRigidDynamic, 컴포넌트 소유). 미생성 시 false.
 	bool GetChassisWorldTransform(FTransform& Out) const;
 
-	// WheelIndex 바퀴의 시뮬레이션 local pose 를 skeletal mesh 의 wheel bone 에 적용.
-	void ApplyWheelPose(int32 WheelIndex, const FTransform& LocalPose);
-	// 이번 프레임 wheel pose 들을 manager 에서 가져와 wheel bone 에 일괄 반영.
-	// AWheeledVehicle::Tick 이 호출 (output readback — post-fetch).
-	void UpdateWheelBonesFromSimulation();
+	// 이번 프레임 각 wheel 의 chassis-local pose 를 OutPoses 에 채운다 (PxVehicle wheelQueryResults.localPose,
+	// vehicle actor 공간). 반환 = 채운 개수. AWheeledVehicle::Tick 이 wheel static mesh 에 적용한다.
+	int32 GetWheelPoses(FTransform* OutPoses, int32 Max) const;
 
 	static constexpr int32 NumWheels = 4;
 
@@ -95,21 +90,16 @@ protected:
 	// PxVehicle 해제 + 핸들 정리.
 	void DestroyVehicle();
 
-	// Functional hijack. Ensure kinematic body for wheels
-	//void EnsureWheelSetUp(TArray<FBodyInstance*>& InBI);
-
 	// Scene 이 소유한 vehicle manager 를 찾아 자신을 register/unregister 한다 (핸드셰이크).
 	void RegisterWithManager();
 	void UnregisterFromManager();
 	FPhysXVehicleManager* ResolveVehicleManager() const;
 
 	// --- PhysX 핸들 (비-reflected) ---
+	// parametric: PVehicleActor(PxRigidDynamic) 는 우리가 만들고 소유/해제한다 (source of truth).
 	physx::PxVehicleDrive4W* PVehicle      = nullptr;
 	physx::PxRigidDynamic*   PVehicleActor = nullptr;   // GetChassisWorldTransform 가 읽음
 	FPhysXVehicleManager*    VehicleManager = nullptr;
-	// non-null 이면 chassis 를 mesh 의 FBodyInstance 에서 hijack 했다는 뜻 (actor 소유는 mesh).
-	// null 이면 parametric — PVehicleActor 를 우리가 소유/해제한다.
-	FBodyInstance*           HijackedBody  = nullptr;
 
 	// --- 현재 입력 상태 (manager PreTick 이 읽음) ---
 	float ThrottleInput   = 0.0f;
@@ -117,27 +107,15 @@ protected:
 	float SteeringInput   = 0.0f;
 	bool  bHandbrakeInput = false;
 
-	// wheel → bone 매핑 + per-wheel 속성 (UE WheelSetups 패턴). 순서 = PxVehicleDrive4WWheelOrder
-	// (0=FL, 1=FR, 2=RL, 3=RR), 정확히 NumWheels(4) 개. CreateVehicle 가 이 본들의 component-space
-	// 위치에서 wheel 위치를 읽고 출력 시 같은 본에 pose 를 쓴다.
+	// per-wheel 속성 (steer/handbrake). 순서 = PxVehicleDrive4WWheelOrder (0=FL, 1=FR, 2=RL, 3=RR),
+	// 정확히 NumWheels(4) 개. wheel 위치는 chassis 박스 4코너에서 parametric 으로 계산된다.
 	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Setups")
 	TArray<FWheelSetup> WheelSetups = {
-		FWheelSetup{ "Wheel_FL", true,  false },
-		FWheelSetup{ "Wheel_FR", true,  false },
-		FWheelSetup{ "Wheel_RL", false, true  },
-		FWheelSetup{ "Wheel_RR", false, true  },
+		FWheelSetup{ true,  false },
+		FWheelSetup{ true,  false },
+		FWheelSetup{ false, true  },
+		FWheelSetup{ false, true  },
 	};
-
-	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Setup")
-	FString ChassisSetUp = FString("Chassis");
-
-	// CreateVehicle 가 해석/캐시 (비-reflected). SkeletalBody = UpdatedComponent cast.
-	USkeletalMeshComponent* SkeletalBody = nullptr;
-	int32 WheelBoneIndices[NumWheels] = { -1, -1, -1, -1 };
-	// hijack 시 PxRigidDynamic 은 chassis bone 의 world 포즈에 놓인다. B = chassis bone 의 component-space
-	// 글로벌, 이 값은 B⁻¹ — body(actor)→component readback 과 wheel offset 의 frame 변환에 쓴다.
-	// parametric(actor=component 원점) 이면 Identity.
-	FMatrix ChassisBoneInvComponent = FMatrix::Identity;
 
 	// --- Editor-tunable setup (UE FVehicleEngineData / FWheelSetup 의 minimal subset) ---
 	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Mass", Min=1.0f, Max=10000.0f, Speed=1.0f)
@@ -175,13 +153,4 @@ protected:
 	// 무게중심 Z 오프셋 (actor 중심 기준) — 보통 음수로 낮춰 전복 안정성↑.
 	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="CoM Offset Z", Min=-5.0f, Max=5.0f, Speed=0.01f)
 	float CenterOfMassOffsetZ = -0.5f;  // m
-
-
-	// Static mesh fallback in case the user does not want to use skeletal mesh
-	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Use Static Mesh")
-	bool bUseStaticMesh = false;
-
-	UStaticMesh* SM_Body = nullptr;
-	UStaticMesh* SM_Wheel = nullptr;
-
 };

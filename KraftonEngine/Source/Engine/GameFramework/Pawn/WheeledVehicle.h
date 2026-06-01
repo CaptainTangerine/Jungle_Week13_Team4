@@ -3,26 +3,26 @@
 
 #include "Source/Engine/GameFramework/Pawn/WheeledVehicle.generated.h"
 
-class USkeletalMeshComponent;
+class UStaticMeshComponent;
 class UWheeledVehicleMovementComponent;
 class USpringArmComponent;
 class UCameraComponent;
 
 // ============================================================
-// AWheeledVehicle — PxVehicleDrive4W 기반 차량 Pawn (Unreal-style).
+// AWheeledVehicle — PxVehicleDrive4W 기반 차량 Pawn (parametric).
 //
-//   Root: USkeletalMeshComponent (VehicleBody, 차체+바퀴 한 메시)  ← MC 의 UpdatedComponent
-//     · 바퀴는 별도 컴포넌트가 아니라 이 메시의 wheel bone 들 (UE WheelSetup.BoneName 패턴).
+//   Root: UStaticMeshComponent (BodyMesh, 차체 visual)  ← MC 의 UpdatedComponent
+//   WheelMesh[4]: UStaticMeshComponent (바퀴 visual, BodyMesh 에 부착)
 //   UWheeledVehicleMovementComponent (VehicleMC)
 //
-// 차체 visual 은 default CollisionEnabled=NoCollision 이라 PhysX body 를 안 만든다 —
-// 차량 물리는 전적으로 MC::CreateVehicle 의 PxRigidDynamic + PxVehicleDrive4W 가 담당.
-//   - wheel 위치(setup): MC 가 wheel bone 의 component-space 위치에서 가져온다.
-//   - wheel 출력: AWheeledVehicle::Tick 이 MC::UpdateWheelBonesFromSimulation 으로 wheel bone 에 pose 적용
-//                 (AnimationMode=None → BoneEdit pose 경로).
+// 물리는 전적으로 MC::CreateVehicle 의 parametric PxRigidDynamic + PxVehicleDrive4W 가 담당
+// (chassis = 박스 convex, wheels = 박스 4코너에서 절차적으로 계산). static mesh 들은 순수 visual:
+//   - 차체: AWheeledVehicle::Tick 이 chassis world pose 를 BodyMesh 에 반영.
+//   - 바퀴: MC::GetWheelPoses (chassis-local) 를 각 WheelMesh 의 relative transform 에 반영.
 //
 // 직렬화: actor→component 멤버 포인터는 직렬화 제외 → EnsureComponents() 가 생성 또는 재획득 +
 //   UpdatedComponent 재연결을 idempotent 하게 처리하고 BeginPlay/PostDuplicate 양쪽에서 호출.
+//   바퀴는 동일 타입(StaticMesh)이라 FName("Wheel_i") 로 재획득한다.
 //   PhysX body 는 transient — MC 가 BeginPlay 에 tunable(UPROPERTY Save)로 재생성.
 // ============================================================
 UCLASS()
@@ -33,6 +33,8 @@ public:
 	AWheeledVehicle() = default;
 	~AWheeledVehicle() override = default;
 
+	static constexpr int32 NumWheels = 4;
+
 	void BeginPlay() override;
 	void Tick(float DeltaTime) override;
 	void PostDuplicate() override;
@@ -41,7 +43,7 @@ public:
 	// 를 설정·저장할 수 있게 한다 (다른 placeable 액터의 InitDefaultComponents 패턴).
 	void InitDefaultComponents();
 
-	USkeletalMeshComponent*           GetVehicleBody()     const { return VehicleBody; }
+	UStaticMeshComponent*             GetVehicleBody()     const { return BodyMesh; }
 	UWheeledVehicleMovementComponent* GetVehicleMovement() const { return VehicleMC; }
 
 protected:
@@ -50,7 +52,8 @@ protected:
 	// 컴포넌트 생성(최초) 또는 재획득(load/dup) + MC UpdatedComponent 재연결. idempotent.
 	void EnsureComponents();
 
-	USkeletalMeshComponent*           VehicleBody = nullptr;   // 차체 = Root (바퀴 = 본)
+	UStaticMeshComponent*             BodyMesh    = nullptr;   // 차체 visual = Root (← MC UpdatedComponent)
+	UStaticMeshComponent*             WheelMesh[NumWheels] = { nullptr, nullptr, nullptr, nullptr };
 	UWheeledVehicleMovementComponent* VehicleMC   = nullptr;
 	USpringArmComponent*              SpringArm   = nullptr;   // 3인칭 chase 카메라 암 (차체에 부착)
 	UCameraComponent*                 Camera      = nullptr;   // PossessedBy 가 활성화
