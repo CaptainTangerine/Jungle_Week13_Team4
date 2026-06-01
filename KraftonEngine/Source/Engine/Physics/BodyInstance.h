@@ -22,6 +22,10 @@ struct FBodyInstance : public FBodyInstanceCore
 	float PhysicsBlendWeight = 0.0f;
 	float PhysicsBlendWeightTarget = 0.0f;
 
+	// Set when another system owns this actor's simulation state (for example,
+	// PhysX vehicles hijacking a skeletal PhysicsAsset chassis body).
+	bool bExternallyControlled = false;
+
 	bool InitBody(UBodySetup* Setup, const FTransform& Transform, IPhysicsScene* InRBScene, int32 BoneIndex = -1);
 	void TermBody(IPhysicsScene* InRBScene);
 

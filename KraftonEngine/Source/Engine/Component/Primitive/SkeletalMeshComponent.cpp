@@ -737,6 +737,7 @@ void USkeletalMeshComponent::UpdateBodySimulationState()
     for (FBodyInstance* Body : Bodies)
     {
         if (!Body || !Body->IsValidBodyInstance()) continue;
+        if (Body->bExternallyControlled) continue;
         const bool bShouldSimulate = (Body->PhysicsBlendWeight > 0.0f || Body->PhysicsBlendWeightTarget > 0.0f);
         if (bShouldSimulate != Body->bSimulatePhysics)
         {
@@ -832,6 +833,10 @@ void USkeletalMeshComponent::SyncKinematicBodiesToAnim(const TArray<FMatrix>& An
     for (FBodyInstance* Body : Bodies)
     {
         if (!Body || !Body->IsValidBodyInstance())
+        {
+            continue;
+        }
+        if (Body->bExternallyControlled)
         {
             continue;
         }

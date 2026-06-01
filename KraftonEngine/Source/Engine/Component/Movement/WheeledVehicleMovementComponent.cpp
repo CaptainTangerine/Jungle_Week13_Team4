@@ -240,7 +240,7 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 			UE_LOG("Chassis Setup not found. Falling back to root");
 			ChassisBoneIndex = 0;
 		}
-		FBodyInstance* Candidate = SkeletalBody->GetBodies()[ChassisBoneIndex];
+		FBodyInstance* Candidate = SkeletalBody->GetBodyInstance(ChassisBoneIndex);
 		if (Candidate && Candidate->IsValidBodyInstance())
 		{
 			ChassisBI = Candidate;
@@ -304,6 +304,7 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 			WheelMesh->release();
 			return false;
 		}
+		ChassisBI->bExternallyControlled = true;
 		ChassisBI->SetInstanceSimulatePhysics(EngineScene, true);
 
 		// 가정 검증(로그): hijack 시 actor 프레임 == chassis bone 프레임. wheel offset(컴포넌트 공간)과
