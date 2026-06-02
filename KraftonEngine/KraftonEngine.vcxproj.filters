@@ -1367,6 +1367,9 @@
     <ClCompile Include="Source\Engine\Physics\ConstraintInstance.cpp">
       <Filter>Source\Engine\Physics</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Physics\NvClothSystem.cpp">
+      <Filter>Source\Engine\Physics</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Physics\PhysXPhysicsScene.cpp">
       <Filter>Source\Engine\Physics</Filter>
     </ClCompile>
@@ -2613,6 +2616,9 @@
       <Filter>Source\Engine\Physics</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Physics\IPhysicsScene.h">
+      <Filter>Source\Engine\Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\NvClothSystem.h">
       <Filter>Source\Engine\Physics</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Physics\PhysXPhysicsScene.h">

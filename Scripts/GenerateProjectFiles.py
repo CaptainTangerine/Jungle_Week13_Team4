@@ -61,6 +61,7 @@ SCAN_DIRS = ["Source", "ThirdParty"]
 # KraftonEngine.vcxproj just because they live under ThirdParty.
 EXCLUDED_SCAN_DIRS = [
     "ThirdParty\\PhysX",
+    "ThirdParty\\NvCloth",
 ]
 
 # Directories to scan for shader files
@@ -103,6 +104,7 @@ INCLUDE_PATHS = [
     # PhysX SDK is built locally under ThirdParty\\PhysX.
     "ThirdParty\\PhysX\\physx\\include",
     "ThirdParty\\PhysX\\pxshared\\include",
+    "ThirdParty\\NvCloth\\include",
     ".",
 ]
 
@@ -166,6 +168,16 @@ FBX_DEBUG_LIB_DIR   = "ThirdParty\\fbx\\lib\\x64\\debug"
 FBX_RELEASE_LIB_DIR = "ThirdParty\\fbx\\lib\\x64\\release"
 FBX_LIB             = "libfbxsdk.lib"
 FBX_DLL             = "libfbxsdk.dll"
+
+# NvCloth CPU-only external binary package.
+NVCLOTH_DEBUG_LIB_DIR   = "ThirdParty\\NvCloth\\lib\\x64\\debug"
+NVCLOTH_RELEASE_LIB_DIR = "ThirdParty\\NvCloth\\lib\\x64\\release"
+NVCLOTH_DEBUG_BIN_DIR   = "ThirdParty\\NvCloth\\bin\\x64\\debug"
+NVCLOTH_RELEASE_BIN_DIR = "ThirdParty\\NvCloth\\bin\\x64\\release"
+NVCLOTH_DEBUG_LIB       = "NvClothDEBUG_x64.lib"
+NVCLOTH_RELEASE_LIB     = "NvCloth_x64.lib"
+NVCLOTH_DEBUG_DLL       = "NvClothDEBUG_x64.dll"
+NVCLOTH_RELEASE_DLL     = "NvCloth_x64.dll"
 
 # Additional linker settings
 ADDITIONAL_LIB_DIRS = [
@@ -364,6 +376,7 @@ def generate_vcxproj(files: dict[str, list[str]]):
         if is_x64:
             library_paths.append(FMOD_LIB_DIR)
             library_paths.append(FBX_DEBUG_LIB_DIR if cfg == "Debug" else FBX_RELEASE_LIB_DIR)
+            library_paths.append(NVCLOTH_DEBUG_LIB_DIR if cfg == "Debug" else NVCLOTH_RELEASE_LIB_DIR)
             physx_config = physx_config_for(cfg)
             library_paths.extend(f"{root}\\{physx_config}" for root in PHYSX_BIN_ROOTS)
         library_path_value = ";".join(library_paths) + ";$(LibraryPath)" if library_paths else "$(LibraryPath)"
@@ -401,6 +414,7 @@ def generate_vcxproj(files: dict[str, list[str]]):
         # 미정의 시 static 멤버(FbxSurfaceMaterial::sDiffuse 등)가 LNK2001로 실패한다.
         if is_x64:
             base_defs.append("FBXSDK_SHARED")
+        base_defs.append(f"WITH_NVCLOTH={1 if is_x64 else 0}")
         extra_defs = props.get("extra_defines", [])
         # WITH_EDITOR defaults to 1 unless explicitly overridden in extra_defines
         if not any(d.startswith("WITH_EDITOR=") for d in extra_defs):
@@ -436,6 +450,7 @@ def generate_vcxproj(files: dict[str, list[str]]):
             # fmod: Debug면 logging 버전(fmodL_vc.lib), 그 외 release 버전(fmod_vc.lib)
             all_deps.append(FMOD_DEBUG_LIB if cfg == "Debug" else FMOD_RELEASE_LIB)
             all_deps.append(FBX_LIB)
+            all_deps.append(NVCLOTH_DEBUG_LIB if cfg == "Debug" else NVCLOTH_RELEASE_LIB)
             all_deps.extend(PHYSX_DEPENDENCIES)
         if all_deps:
             ET.SubElement(link, "AdditionalDependencies").text = (
@@ -447,6 +462,8 @@ def generate_vcxproj(files: dict[str, list[str]]):
             fmod_dll = FMOD_DEBUG_DLL if cfg == "Debug" else FMOD_RELEASE_DLL
             physx_config = physx_config_for(cfg)
             fbx_lib_dir = FBX_DEBUG_LIB_DIR if cfg == "Debug" else FBX_RELEASE_LIB_DIR
+            nvcloth_bin_dir = NVCLOTH_DEBUG_BIN_DIR if cfg == "Debug" else NVCLOTH_RELEASE_BIN_DIR
+            nvcloth_dll = NVCLOTH_DEBUG_DLL if cfg == "Debug" else NVCLOTH_RELEASE_DLL
             physx_copy_commands = [
                 f'if exist "$(ProjectDir){root}\\{physx_config}\\{dll}" '
                 f'xcopy /Y "$(ProjectDir){root}\\{physx_config}\\{dll}" "$(OutDir)"'
@@ -458,6 +475,7 @@ def generate_vcxproj(files: dict[str, list[str]]):
                 f'xcopy /Y "$(ProjectDir){rmlui_dir}\\*.dll" "$(OutDir)"\n'
                 f'xcopy /Y "$(ProjectDir){FMOD_LIB_DIR}\\{fmod_dll}" "$(OutDir)"\n'
                 + "\n".join(physx_copy_commands) + "\n"
+                f'xcopy /Y "$(ProjectDir){nvcloth_bin_dir}\\{nvcloth_dll}" "$(OutDir)"\n'
                 f'xcopy /Y "$(ProjectDir){LUA_BIN_DIR}\\{LUA_DLL}" "$(OutDir)"\n'
                 f'xcopy /Y "$(ProjectDir){fbx_lib_dir}\\{FBX_DLL}" "$(OutDir)"'
             )

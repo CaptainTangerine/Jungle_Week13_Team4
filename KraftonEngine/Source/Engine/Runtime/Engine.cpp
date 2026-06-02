@@ -16,6 +16,7 @@
 #include "GameFramework/World.h"
 #include "GameFramework/AActor.h"
 #include "Core/TickFunction.h"
+#include "Physics/NvClothSystem.h"
 #include "Lua/LuaScriptManager.h"
 #include "UI/UIManager.h"
 #include "Audio/AudioManager.h"
@@ -75,6 +76,7 @@ void UEngine::Init(FWindowsWindow* InWindow)
 	UUIManager::Get().Initialize(Device);
 
 	FLogManager::Get().Initialize();
+	FNvClothSystem::Get().Initialize();
 	FDirectoryWatcher::Get().Initialize();
 	FLuaScriptManager::Initialize();
 	FAudioManager::Get().Initialize();
@@ -93,6 +95,7 @@ void UEngine::Shutdown()
 	UUIManager::Get().Shutdown();
 	FLuaScriptManager::Shutdown();
 	FAudioManager::Get().Shutdown();
+	FNvClothSystem::Get().Shutdown();
 	FDirectoryWatcher::Get().Shutdown();
 	FLogManager::Get().Shutdown();
 	RenderPipeline.reset();
