@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Core/Types/CoreTypes.h"
+#include "Component/Camera/CameraComponent.h"
 #include "Component/Camera/FPostProcessSettings.h"
 
 enum class EViewMode : int32
@@ -112,8 +113,8 @@ struct FViewportRenderOptions
 	float BloomIntensity = 0.6f;
 	float BloomBlurRadius = 1.0f;
 
-	// DOF 전용 설정
-	FPostProcessSettings PostProcessSettings;
+	// Post Process 전용 설정
+	FPostProcessSettings PostProcessSettings = {};
 
 	// Tone Mapping / Gamma Correction 전용 설정
 	float Gamma = 2.4f;
@@ -127,4 +128,13 @@ struct FViewportRenderOptions
 	// Mesh editor bone weight visualization
 	bool bWeightBoneHeatMap = false;
 	int32 WeightBoneHeatMapBoneIndex = -1;
+
+
+public:
+	void OverridePostProcess(const UCameraComponent* Camera)
+	{
+		if (Camera) PostProcessSettings = Camera->GetPostProcessSettings();
+	}
+
+	void SetPostProcess(const FPostProcessSettings& InSettings) { PostProcessSettings = InSettings; } 
 };

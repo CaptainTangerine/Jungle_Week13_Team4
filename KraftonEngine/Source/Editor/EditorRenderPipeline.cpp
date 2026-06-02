@@ -1,4 +1,4 @@
-#include "EditorRenderPipeline.h"
+﻿#include "EditorRenderPipeline.h"
 #include "Editor/EditorEngine.h"
 #include "Editor/Viewport/Level/LevelEditorViewportClient.h"
 #include "Editor/Viewport/EditorPreviewViewportClient.h"
@@ -290,6 +290,7 @@ void FEditorRenderPipeline::BuildFrame(FLevelEditorViewportClient* VC, const FMi
 	Frame.bIsLightView = VC->IsViewingFromLight();
 	Frame.WorldType = World->GetWorldType();
 	Frame.SetRenderOptions(VC->GetRenderOptions());
+	Frame.RenderOptions.OverridePostProcess(ActiveCamera);
 	Frame.OcclusionCulling = &GetOcclusionForViewport(VC);
 	Frame.LODContext = World->PrepareLODContext();
 

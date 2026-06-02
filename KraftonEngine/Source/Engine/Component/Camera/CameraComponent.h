@@ -63,5 +63,5 @@ private:
 	FCameraState CameraState;
 
 	UPROPERTY(Edit, Save, Category="Post Process", DisplayName="Post Process Settings", Type=Struct)
-	FPostProcessSettings PostProcessSettings;
+	FPostProcessSettings PostProcessSettings = {};
 };

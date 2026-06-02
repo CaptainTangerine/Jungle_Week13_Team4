@@ -1,4 +1,4 @@
-#include "Engine/Runtime/GameRenderPipeline.h"
+﻿#include "Engine/Runtime/GameRenderPipeline.h"
 
 #include "Engine/Runtime/GameEngine.h"
 #include "GameFramework/GameMode/PlayerController.h"
@@ -120,6 +120,9 @@ void FGameRenderPipeline::BuildFrame(FViewport* VP, const FMinimalViewInfo& POV,
 	}
 
 	UCameraComponent* ActiveCamera = CamManager ? CamManager->GetActiveCamera() : nullptr;
+	Frame.RenderOptions.OverridePostProcess(ActiveCamera);
+	Frame.RenderOptions.ShowFlags.bDOF =
+		ActiveCamera && ActiveCamera->GetPostProcessSettings().Aperture > 0.0f;
 	if (UCineCameraComponent* CineCamera = Cast<UCineCameraComponent>(ActiveCamera))
 	{
 		const FCineLetterboxSettings& LetterboxSettings = CineCamera->GetLetterboxSettings();
