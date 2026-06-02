@@ -130,11 +130,39 @@ void FPhysXVehicleManager::PreTick(float DeltaTime)
 		PxVehicleDrive4W* Vehicle = MC->GetPxVehicle();
 		if (!Vehicle) continue;
 
-		// 아날로그 그대로 — accel/brake/handbrake ∈ [0,1], steer ∈ [-1,1] (컴포넌트가 이미 clamp).
-		// handbrake 만 본질적으로 boolean → 1/0 으로 변환.
+		// Arcade auto-reverse: throttle 은 [-1,1] 전/후진 통합 축.
+		// PhysX accel 은 항상 '현재 기어 방향'으로만 민다 → 후진하려면 eREVERSE 로 기어를 강제해야 한다.
+		// 진행 방향과 입력이 반대면 먼저 제동(brake), 거의 멈춘 뒤에 반대 기어로 전환한다.
+		const float Axis         = MC->GetThrottleInput();        // +전진 / -후진
+		const float ForwardSpeed = Vehicle->computeForwardSpeed(); // m/s, +면 차체 전방
+		const float SpeedDeadzone = 0.5f;                          // m/s — 정지 간주 임계
+
+		float Accel = 0.0f;
+		float Brake = MC->GetBrakeInput();                         // 명시적 풋브레이크(있으면)와 합산
+		PxVehicleGearsData::Enum DesiredGear = PxVehicleGearsData::eFIRST;   // 기본 전진 기어
+
+		if (Axis > 0.01f)        // 전진 의도
+		{
+			if (ForwardSpeed < -SpeedDeadzone) Brake += Axis;     // 후진 중 → 제동
+			else { DesiredGear = PxVehicleGearsData::eFIRST;   Accel = Axis; }
+		}
+		else if (Axis < -0.01f)  // 후진 의도
+		{
+			if (ForwardSpeed > SpeedDeadzone)  Brake += -Axis;    // 전진 중 → 제동
+			else { DesiredGear = PxVehicleGearsData::eREVERSE; Accel = -Axis; }
+		}
+
+		// autobox 는 전진 기어만 올리고 reverse 로는 못 넘어간다 → reverse↔first 전환만 직접 강제.
+		PxVehicleDriveDynData& Dyn = Vehicle->mDriveDynData;
+		const PxU32 CurGear = Dyn.getCurrentGear();
+		if (DesiredGear == PxVehicleGearsData::eREVERSE && CurGear != PxVehicleGearsData::eREVERSE)
+			Dyn.forceGearChange(PxVehicleGearsData::eREVERSE);
+		else if (DesiredGear != PxVehicleGearsData::eREVERSE && CurGear == PxVehicleGearsData::eREVERSE)
+			Dyn.forceGearChange(PxVehicleGearsData::eFIRST);
+
 		PxVehicleDrive4WRawInputData RawInputData;
-		RawInputData.setAnalogAccel(MC->GetThrottleInput());
-		RawInputData.setAnalogBrake(MC->GetBrakeInput());
+		RawInputData.setAnalogAccel(Accel);
+		RawInputData.setAnalogBrake(std::min(Brake, 1.0f));
 		RawInputData.setAnalogSteer(MC->GetSteeringInput());
 		RawInputData.setAnalogHandbrake(MC->GetHandbrakeInput() ? 1.0f : 0.0f);
 

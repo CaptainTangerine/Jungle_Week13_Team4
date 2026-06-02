@@ -133,9 +133,10 @@ void AWheeledVehicle::SetupInputComponent()
 
 	// 키보드 매핑 — W=accel, S=brake, A/D=steer, Space=handbrake.
 	InputComponent->AddAxisMapping("Throttle", 'W',  1.0f);
-	InputComponent->AddAxisMapping("Brake",    'S',  1.0f);
+	InputComponent->AddAxisMapping("Throttle", 'S', -1.0f);
 	InputComponent->AddAxisMapping("Steer",    'D',  1.0f);
 	InputComponent->AddAxisMapping("Steer",    'A', -1.0f);
+	InputComponent->AddAxisMapping("Brake",    0xA0, 1.0f);
 	InputComponent->AddActionMapping("Handbrake", 0x20);   // VK_SPACE
 
 	// BindAxis 는 매 frame 합산값(0 포함)으로 호출 → 키를 떼면 자동으로 0 이 전달된다.

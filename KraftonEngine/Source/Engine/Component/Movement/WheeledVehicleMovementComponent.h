@@ -56,7 +56,8 @@ public:
 	void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction) override;
 
 	// --- 입력 (UE UWheeledVehicleMovementComponent API) ---
-	// throttle/brake/handbrake 는 [0,1], steer 는 [-1,1] 로 clamp 되어 보관된다.
+	// throttle 은 [-1,1] (전/후진 통합 축, +전진/-후진), brake/handbrake 는 [0,1],
+	// steer 는 [-1,1] 로 clamp 되어 보관된다.
 	void SetThrottleInput(float Throttle);
 	void SetBrakeInput(float Brake);
 	void SetSteeringInput(float Steering);

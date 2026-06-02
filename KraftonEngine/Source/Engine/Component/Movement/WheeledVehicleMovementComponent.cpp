@@ -64,7 +64,9 @@ namespace
 // ============================================================
 void UWheeledVehicleMovementComponent::SetThrottleInput(float Throttle)
 {
-	ThrottleInput = std::clamp(Throttle, 0.0f, 1.0f);
+	// 전/후진 통합 축: +1=전진, -1=후진. gear(eFIRST/eREVERSE) + accel/brake 변환은
+	// FPhysXVehicleManager::PreTick 이 현재 전진속도와 함께 arcade auto-reverse 로 판단한다.
+	ThrottleInput = std::clamp(Throttle, -0.5f, 1.0f);
 }
 
 void UWheeledVehicleMovementComponent::SetBrakeInput(float Brake)
