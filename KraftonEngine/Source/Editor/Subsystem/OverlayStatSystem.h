@@ -33,6 +33,8 @@ public:
 	void ShowParticles(bool bEnable = true) { bShowParticles = bEnable; }
 	void ShowShadow(bool bEnable = true) { bShowShadow = bEnable; }
 	void ShowSkinning(bool bEnable = true) { bShowSkinning = bEnable; }
+	void ShowPhysics(bool bEnable = true) { bShowPhysics = bEnable; }
+	void ShowCollision(bool bEnable = true) { bShowCollision = bEnable; }
 	bool ToggleFPS() { bShowFPS = !bShowFPS; return bShowFPS; }
 	bool ToggleMemory() { bShowMemory = !bShowMemory; return bShowMemory; }
 	bool ToggleParticles() { bShowParticles = !bShowParticles; return bShowParticles; }
@@ -49,6 +51,8 @@ public:
 		bShowParticles = false;
 		bShowShadow = false;
 		bShowSkinning = false;
+		bShowPhysics = false;
+		bShowCollision = false;
 	}
 
 	const FOverlayStatLayout& GetLayout() const { return Layout; }
@@ -65,6 +69,7 @@ private:
 	void BuildParticlesLines(const UEditorEngine& Editor, TArray<FString>& OutLines) const;
 	void BuildShadowLines(TArray<FString>& OutLines) const;
 	void BuildSkinningLines(TArray<FString>& OutLines) const;
+	void BuildPhysicsLines(TArray<FString>& OutLines) const;
 
 	bool bShowFPS = false;
 	bool bShowPickingTime = false; // WM_LBUTTONDOWN , VK_LBUTTON 입력 시점이 아닌 오브젝트 충돌 판정에 걸린 시간을 측정합니다.

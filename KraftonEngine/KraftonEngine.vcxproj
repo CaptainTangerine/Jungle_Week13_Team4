@@ -709,6 +709,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Engine\Profiling\GPUProfiler.cpp" />
     <ClCompile Include="Source\Engine\Profiling\StartupProfiler.cpp" />
     <ClCompile Include="Source\Engine\Profiling\Stats\MemoryStats.cpp" />
+    <ClCompile Include="Source\Engine\Profiling\Stats\PhysicsStats.cpp" />
     <ClCompile Include="Source\Engine\Profiling\Stats\ShadowStats.cpp" />
     <ClCompile Include="Source\Engine\Profiling\Stats\Stats.cpp" />
     <ClCompile Include="Source\Engine\Profiling\Time\Timer.cpp" />
@@ -1140,6 +1141,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Engine\Profiling\GPUProfiler.h" />
     <ClInclude Include="Source\Engine\Profiling\StartupProfiler.h" />
     <ClInclude Include="Source\Engine\Profiling\Stats\MemoryStats.h" />
+    <ClInclude Include="Source\Engine\Profiling\Stats\PhysicsStats.h" />
     <ClInclude Include="Source\Engine\Profiling\Stats\ShadowStats.h" />
     <ClInclude Include="Source\Engine\Profiling\Stats\Stats.h" />
     <ClInclude Include="Source\Engine\Profiling\Time\PlatformTime.h" />

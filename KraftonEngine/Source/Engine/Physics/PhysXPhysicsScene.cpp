@@ -14,6 +14,7 @@
 #include "Physics/Asset/ConstraintSetup.h"
 #include "Physics/IPhysicsBodySync.h"
 #include "Profiling/Stats/Stats.h"
+#include "Profiling/Stats/PhysicsStats.h"
 #include "Core/ProjectSettings.h"
 #include "Core/Logging/Log.h"
 
@@ -1686,6 +1687,18 @@ void FPhysXPhysicsScene::FinishSimulation()
 		SCOPE_STAT_CAT("Physics.FetchBlock", "Physics");
 		Scene->fetchResults(true);
 	}
+
+	// ── Sim 통계 수집 (stat physics 오버레이용) ──
+	// getSimulationStatistics 는 fetchResults 완료 이후에만 유효한 직전 step 의 결과를 준다.
+	// 타이밍은 위 SCOPE_STAT_CAT 가 FStatManager 스냅샷에 넣으므로 여기서는 카운트만.
+#if STATS
+	{
+		PxSimulationStatistics SimStats;
+		Scene->getSimulationStatistics(SimStats);
+		PHYSICS_STATS_SET_CONSTRAINTS(SimStats.nbActiveConstraints);
+		PHYSICS_STATS_SET_SIMULATING_BODIES(SimStats.nbActiveDynamicBodies);
+	}
+#endif
 
 	// ── Post-simulate: PhysX → Engine Transform 동기화 ──
 	// RootComp에만 transform 적용 → 자식 컴포넌트는 attach로 자동 따라감.

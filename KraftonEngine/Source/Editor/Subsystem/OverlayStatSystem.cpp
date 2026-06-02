@@ -7,6 +7,7 @@
 #include "Engine/Profiling/Time/Timer.h"
 #include "Engine/Profiling/Stats/MemoryStats.h"
 #include "Engine/Profiling/Stats/ShadowStats.h"
+#include "Engine/Profiling/Stats/PhysicsStats.h"
 #include "Engine/Profiling/Stats/Stats.h"
 #include "Engine/Profiling/GPUProfiler.h"
 #include "Slate/SWindow.h"
@@ -373,6 +374,69 @@ void FOverlayStatSystem::BuildSkinningLines(TArray<FString>& OutLines) const
 #endif
 }
 
+void FOverlayStatSystem::BuildPhysicsLines(TArray<FString>& OutLines) const
+{
+#if STATS
+	char Buffer[160] = {};
+
+	// 타이밍: 물리 씬이 simulate()/fetchResults() 를 SCOPE_STAT_CAT(..., "Physics") 로
+	// 감싸므로 CPU 스냅샷에서 직접 읽는다. BuildShadowLines 가 GPU 스냅샷을 읽는 패턴과 동일.
+	//   Physics.SimulateKick : simulate() 디스패치(메인 스레드 킥오프) 비용
+	//   Physics.FetchBlock   : fetchResults(true) 가 step 완료까지 블록한 시간 = step 시간
+	double SimulateKickMs = 0.0;
+	double FetchBlockMs = 0.0;
+	bool bHasTiming = false;
+
+	const TArray<FStatEntry>& CPUSnapshot = FStatManager::Get().GetSnapshot();
+	for (const FStatEntry& Entry : CPUSnapshot)
+	{
+		// CallCount==0 → 이번 프레임 측정 안 됨(=시뮬 안 함). 카테고리만 보고 live 로 치면
+		// 정지 중에도 0.000 ms 가 떠 오해를 부른다 — BuildSkinningLines 와 동일하게 스킵.
+		if (Entry.CallCount == 0)
+		{
+			continue;
+		}
+		if (!Entry.Category || strcmp(Entry.Category, "Physics") != 0)
+		{
+			continue;
+		}
+		bHasTiming = true;
+
+		if (Entry.Name && strcmp(Entry.Name, "Physics.SimulateKick") == 0)
+		{
+			SimulateKickMs = Entry.LastTime * 1000.0;
+		}
+		else if (Entry.Name && strcmp(Entry.Name, "Physics.FetchBlock") == 0)
+		{
+			FetchBlockMs = Entry.LastTime * 1000.0;
+		}
+	}
+
+	if (bHasTiming)
+	{
+		// 메인(물리) 스레드가 이번 프레임 물리에 쓴 총 시간 = 킥오프 + fetch 블록.
+		const double PhysicsThreadMs = SimulateKickMs + FetchBlockMs;
+		snprintf(Buffer, sizeof(Buffer), "Physics Thread Time : %.3f ms", PhysicsThreadMs);
+		OutLines.push_back(FString(Buffer));
+		snprintf(Buffer, sizeof(Buffer), "Simulation Step Time : %.3f ms", FetchBlockMs);
+		OutLines.push_back(FString(Buffer));
+	}
+	else
+	{
+		OutLines.push_back(FString("Physics Thread Time : (not stepping)"));
+		OutLines.push_back(FString("Simulation Step Time : (not stepping)"));
+	}
+
+	// 카운트: 물리 씬이 fetchResults 직후 PxSimulationStatistics 에서 채운 값.
+	snprintf(Buffer, sizeof(Buffer), "Active Constraints : %u", FPhysicsStats::NumActiveConstraints);
+	OutLines.push_back(FString(Buffer));
+	snprintf(Buffer, sizeof(Buffer), "Simulating Bodies : %u", FPhysicsStats::NumSimulatingBodies);
+	OutLines.push_back(FString(Buffer));
+#else
+	OutLines.push_back(FString("Physics stats unavailable (STATS=0)"));
+#endif
+}
+
 void FOverlayStatSystem::BuildLines(const UEditorEngine& Editor, TArray<FOverlayStatLine>& OutLines) const
 {
 	OutLines.clear();
@@ -399,6 +463,10 @@ void FOverlayStatSystem::BuildLines(const UEditorEngine& Editor, TArray<FOverlay
 		EstimatedLineCount += 8;
 	}
 	if (bShowSkinning)
+	{
+		EstimatedLineCount += 4;
+	}
+	if (bShowPhysics)
 	{
 		EstimatedLineCount += 4;
 	}
@@ -451,6 +519,13 @@ void FOverlayStatSystem::BuildLines(const UEditorEngine& Editor, TArray<FOverlay
 	{
 		Lines.clear();
 		BuildSkinningLines(Lines);
+		AppendGroup(Lines);
+	}
+
+	if (bShowPhysics)
+	{
+		Lines.clear();
+		BuildPhysicsLines(Lines);
 		AppendGroup(Lines);
 	}
 }
@@ -565,5 +640,12 @@ void FOverlayStatSystem::RenderImGui(const UEditorEngine& Editor, const FRect& V
 		Lines.clear();
 		BuildSkinningLines(Lines);
 		RenderWindow("##StatSkinningOverlay", "Stat Skinning", ImVec4(0.05f, 0.10f, 0.08f, 0.62f), Lines);
+	}
+
+	if (bShowPhysics)
+	{
+		Lines.clear();
+		BuildPhysicsLines(Lines);
+		RenderWindow("##StatPhysicsOverlay", "Stat Physics", ImVec4(0.10f, 0.05f, 0.05f, 0.62f), Lines);
 	}
 }
