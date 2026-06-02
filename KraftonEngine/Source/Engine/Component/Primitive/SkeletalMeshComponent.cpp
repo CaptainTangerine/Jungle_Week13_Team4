@@ -860,9 +860,11 @@ void USkeletalMeshComponent::SyncKinematicBodiesToAnim(const TArray<FMatrix>& An
         {
             continue;
         }
-        // dynamic(weight>0) 바디는 제외 — SetKinematicTarget 이 강제로 키네마틱 전환시켜
-        // 시뮬레이션을 깨뜨린다. 키네마틱 바디만 anim 을 추종시킨다.
-        if (Body->PhysicsBlendWeight > 0.0f)
+        // 다이내믹 바디는 제외 — SetKinematicTarget 이 강제로 키네마틱 전환시켜 시뮬레이션을
+        // 깨뜨린다. 판정 기준은 UpdateBodySimulationState 와 동일한 bSimulatePhysics 를 쓴다.
+        // (weight>0 만으로 판단하면, 전환 시작 프레임처럼 weight==0 이지만 target>0 이라
+        //  이미 다이내믹으로 전환된 바디를 다시 키네마틱으로 강제해 영구 고정된다.)
+        if (Body->bSimulatePhysics)
         {
             continue;
         }
