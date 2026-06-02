@@ -75,6 +75,10 @@ void FClothAssetEditorWidget::Open(UObject* Object)
 	FAssetEditorWidget::Open(Object);
 
 	UClothAsset* ClothAsset = Cast<UClothAsset>(EditedObject);
+	if (FClothAssetManager::Get().UpgradeLegacyDefaultQuadTo32x32(ClothAsset))
+	{
+		MarkDirty();
+	}
 
 	FWorldContext& WorldContext = GEngine->CreateWorldContext(EWorldType::EditorPreview, PreviewWorldHandle);
 	WorldContext.World->SetWorldType(EWorldType::EditorPreview);
@@ -498,7 +502,7 @@ void FClothAssetEditorWidget::ImportPendingSource(UClothAsset* ClothAsset)
 	}
 
 	FClothAssetBuildOptions BuildOptions;
-	BuildOptions.bBuildDebugPinnedGrid96x96 = false;
+	BuildOptions.bBuildDefaultPinnedGrid32x32 = false;
 
 	FString Error;
 	if (FClothAssetManager::Get().ReplaceFromMeshSourceFile(ClothAsset, PendingImportSourcePath, PendingImportOptions, &Error, BuildOptions))

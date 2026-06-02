@@ -10,7 +10,7 @@ class UStaticMesh;
 
 struct FClothAssetBuildOptions
 {
-	bool bBuildDebugPinnedGrid96x96 = true;
+	bool bBuildDefaultPinnedGrid32x32 = true;
 	bool bWeldVertices = true;
 	float WeldPositionTolerance = 0.001f;
 	bool bBuildBendConstraints = true;

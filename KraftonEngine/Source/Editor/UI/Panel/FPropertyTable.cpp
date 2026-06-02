@@ -3,6 +3,9 @@
 #include "ImGui/imgui.h"
 
 #include "Component/ActorComponent.h"
+#include "Component/Primitive/ClothComponent.h"
+#include "Component/Primitive/SkeletalMeshComponent.h"
+#include "Component/SceneComponent.h"
 #include "GameFramework/AActor.h"
 #include "Core/Property/ClassProperty.h"
 #include "Core/Property/ArrayProperty.h"
@@ -229,6 +232,68 @@ namespace
 		}
 
 		return Choices;
+	}
+
+	USkeletalMeshComponent* FindSkeletalMeshComponentForBoneProperty(const FPropertyValue& Prop)
+	{
+		if (UClothComponent* ClothComponent = Cast<UClothComponent>(Prop.Object))
+		{
+			if (USkeletalMeshComponent* MasterPoseComponent = ClothComponent->GetMasterPoseComponent())
+			{
+				return MasterPoseComponent;
+			}
+		}
+
+		if (USceneComponent* SceneComponent = Cast<USceneComponent>(Prop.Object))
+		{
+			for (USceneComponent* Parent = SceneComponent->GetParent(); Parent; Parent = Parent->GetParent())
+			{
+				if (USkeletalMeshComponent* ParentMesh = Cast<USkeletalMeshComponent>(Parent))
+				{
+					return ParentMesh;
+				}
+			}
+		}
+
+		AActor* OwnerActor = GetPropertyOwnerActor(Prop);
+		if (!OwnerActor)
+		{
+			return nullptr;
+		}
+
+		for (UActorComponent* Component : OwnerActor->GetComponents())
+		{
+			if (USkeletalMeshComponent* MeshComponent = Cast<USkeletalMeshComponent>(Component))
+			{
+				return MeshComponent;
+			}
+		}
+
+		return nullptr;
+	}
+
+	TArray<FString> GetBoneNameChoices(const FPropertyValue& Prop)
+	{
+		TArray<FString> Names;
+		Names.push_back("None");
+
+		USkeletalMeshComponent* MeshComponent = FindSkeletalMeshComponentForBoneProperty(Prop);
+		USkeletalMesh* Mesh = MeshComponent ? MeshComponent->GetSkeletalMesh() : nullptr;
+		FSkeletalMesh* MeshAsset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+		if (!MeshAsset)
+		{
+			return Names;
+		}
+
+		for (const FBone& Bone : MeshAsset->Bones)
+		{
+			if (!Bone.Name.empty())
+			{
+				Names.push_back(Bone.Name);
+			}
+		}
+
+		return Names;
 	}
 
 	FString GetObjectReferenceChoiceLabel(const UObject* Object)
@@ -1254,9 +1319,16 @@ bool FPropertyTable::RenderValue(TArray<FPropertyValue>& Props, int32& Index, co
 			Names = FResourceManager::Get().GetSubUVResourceNames();
 		else if (AssetType == "Texture")
 			Names = FResourceManager::Get().GetTextureNames();
+		else if (AssetType == "BoneName")
+			Names = GetBoneNameChoices(Prop);
 
 		if (!Names.empty())
 		{
+			if (Current.empty())
+			{
+				Current = "None";
+			}
+
 			if (ImGui::BeginCombo("##Value", Current.c_str()))
 			{
 				for (const auto& Name : Names)

@@ -15,6 +15,7 @@
 #include "Serialization/WindowsArchive.h"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 
 namespace
@@ -90,6 +91,68 @@ namespace
 				return FPaths::ToUtf8(Candidate.generic_wstring());
 			}
 		}
+	}
+
+	bool IsNearlyEqual(float A, float B, float Tolerance = 0.01f)
+	{
+		return std::abs(A - B) <= Tolerance;
+	}
+
+	bool IsNearlyEqual(const FVector& A, const FVector& B, float Tolerance = 0.01f)
+	{
+		return IsNearlyEqual(A.X, B.X, Tolerance)
+			&& IsNearlyEqual(A.Y, B.Y, Tolerance)
+			&& IsNearlyEqual(A.Z, B.Z, Tolerance);
+	}
+
+	bool IsLegacyDefaultQuadClothAsset(const UClothAsset& Asset)
+	{
+		if (Asset.GetParticleCount() != 4 || Asset.GetIndexCount() != 6)
+		{
+			return false;
+		}
+
+		static const FVector LegacyPositions[4] =
+		{
+			FVector(-50.0f, 0.0f, 50.0f),
+			FVector(50.0f, 0.0f, 50.0f),
+			FVector(-50.0f, 0.0f, -50.0f),
+			FVector(50.0f, 0.0f, -50.0f),
+		};
+		static const uint32 LegacyIndices[6] = { 0, 1, 2, 1, 3, 2 };
+
+		const TArray<FVector>& Positions = Asset.GetRestPositions();
+		const TArray<uint32>& Indices = Asset.GetIndices();
+		for (uint32 Index = 0; Index < 4; ++Index)
+		{
+			if (!IsNearlyEqual(Positions[Index], LegacyPositions[Index]))
+			{
+				return false;
+			}
+		}
+		for (uint32 Index = 0; Index < 6; ++Index)
+		{
+			if (Indices[Index] != LegacyIndices[Index])
+			{
+				return false;
+			}
+		}
+
+		const TArray<float>& InvMasses = Asset.GetInvMasses();
+		const TArray<float>& PinMask = Asset.GetPinMask();
+		for (uint32 Index = 0; Index < 4; ++Index)
+		{
+			if (Index < InvMasses.size() && !IsNearlyEqual(InvMasses[Index], 1.0f))
+			{
+				return false;
+			}
+			if (Index < PinMask.size() && !IsNearlyEqual(PinMask[Index], 0.0f))
+			{
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	UMaterial* ResolveImportedMaterial(const FStaticMesh& Mesh, const TArray<FStaticMaterial>& Materials)
@@ -240,7 +303,9 @@ UClothAsset* FClothAssetManager::Load(const FString& Path)
 	auto It = LoadedClothAssets.find(NormalizedPath);
 	if (It != LoadedClothAssets.end())
 	{
-		return It->second;
+		UClothAsset* Asset = It->second;
+		UpgradeLegacyDefaultQuadTo32x32(Asset);
+		return Asset;
 	}
 
 	if (!FAssetPackage::IsAssetPackagePath(NormalizedPath))
@@ -275,6 +340,7 @@ UClothAsset* FClothAssetManager::Load(const FString& Path)
 	}
 
 	Asset->SetSourcePath(NormalizedPath);
+	UpgradeLegacyDefaultQuadTo32x32(Asset);
 	LoadedClothAssets[NormalizedPath] = Asset;
 	return Asset;
 }
@@ -284,6 +350,56 @@ UClothAsset* FClothAssetManager::Find(const FString& Path) const
 	const FString NormalizedPath = NormalizeProjectPath(Path);
 	auto It = LoadedClothAssets.find(NormalizedPath);
 	return It != LoadedClothAssets.end() ? It->second : nullptr;
+}
+
+bool FClothAssetManager::UpgradeLegacyDefaultQuadTo32x32(UClothAsset* Asset)
+{
+	if (!Asset || !IsLegacyDefaultQuadClothAsset(*Asset))
+	{
+		return false;
+	}
+
+	const FString PackagePath = Asset->GetSourcePath();
+	UMaterial* Material = Asset->GetMaterial();
+
+	UClothAsset* TempAsset = UObjectManager::Get().CreateObject<UClothAsset>();
+	TempAsset->SetSourcePath(PackagePath);
+
+	TArray<FVector> Positions;
+	TArray<FVector4> Colors;
+	TArray<FVector2> UVs;
+	TArray<uint32> Indices;
+
+	FClothAssetBuildOptions BuildOptions;
+	BuildOptions.bBuildDefaultPinnedGrid32x32 = true;
+
+	FString Error;
+	if (!FClothAssetBuilder::BuildFromRawMesh(Positions, Colors, UVs, Indices, Material, *TempAsset, BuildOptions, &Error))
+	{
+		UE_LOG("Failed to upgrade legacy default ClothAsset quad to 32x32 grid: %s", Error.c_str());
+		UObjectManager::Get().DestroyObject(TempAsset);
+		return false;
+	}
+
+	Asset->FabricData = std::move(TempAsset->FabricData);
+	Asset->RestPositions = std::move(TempAsset->RestPositions);
+	Asset->InvMasses = std::move(TempAsset->InvMasses);
+	Asset->Indices = std::move(TempAsset->Indices);
+	Asset->UVs = std::move(TempAsset->UVs);
+	Asset->PinMask = std::move(TempAsset->PinMask);
+	Asset->SetMaterial(TempAsset->GetMaterial());
+	Asset->SetSourcePath(PackagePath);
+
+	UObjectManager::Get().DestroyObject(TempAsset);
+
+	const FString NormalizedPath = NormalizeProjectPath(PackagePath);
+	if (!NormalizedPath.empty() && NormalizedPath != "None")
+	{
+		LoadedClothAssets[NormalizedPath] = Asset;
+	}
+
+	UE_LOG("Upgraded legacy default ClothAsset quad to 32x32 grid: %s", PackagePath.c_str());
+	return true;
 }
 
 bool FClothAssetManager::Save(UClothAsset* Asset, const FAssetImportMetadata* MetadataOverride)

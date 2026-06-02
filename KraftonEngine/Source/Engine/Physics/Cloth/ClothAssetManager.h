@@ -18,6 +18,7 @@ class FClothAssetManager : public TSingleton<FClothAssetManager>
 public:
 	UClothAsset* Load(const FString& Path);
 	UClothAsset* Find(const FString& Path) const;
+	bool UpgradeLegacyDefaultQuadTo32x32(UClothAsset* Asset);
 
 	bool Save(UClothAsset* Asset, const struct FAssetImportMetadata* MetadataOverride = nullptr);
 

@@ -12,6 +12,7 @@
 #include "NvCloth/Solver.h"
 
 #include <foundation/PxErrorCallback.h>
+#include <cmath>
 #include <malloc.h>
 
 namespace
@@ -52,6 +53,10 @@ namespace
 	FNvClothAllocator GNvClothAllocator;
 	FNvClothErrorCallback GNvClothErrorCallback;
 	FNvClothAssertHandler GNvClothAssertHandler;
+
+	constexpr float GClothFixedTimeStep = 1.0f / 60.0f;
+	constexpr int GClothMaxSubSteps = 4;
+	constexpr float GClothMaxFrameDelta = GClothFixedTimeStep * static_cast<float>(GClothMaxSubSteps);
 }
 #endif
 
@@ -61,6 +66,8 @@ bool FNvClothSystem::Initialize()
 	{
 		return true;
 	}
+
+	FixedStepAccumulator = 0.0f;
 
 #if WITH_NVCLOTH
 	UE_LOG("[NvCloth] Initializing callbacks");
@@ -100,6 +107,7 @@ bool FNvClothSystem::Initialize()
 void FNvClothSystem::Shutdown()
 {
 	RegisteredComponents.clear();
+	FixedStepAccumulator = 0.0f;
 
 #if WITH_NVCLOTH
 	if (Solver)
@@ -134,11 +142,12 @@ void FNvClothSystem::Tick(float DeltaTime)
 
 	if (!bHasPendingSimulationInput)
 	{
+		FixedStepAccumulator = 0.0f;
 		return;
 	}
 
 #if WITH_NVCLOTH
-	Simulate(DeltaTime);
+	SimulateFixedSteps(DeltaTime);
 #endif
 
 	for (UClothComponent* Component : RegisteredComponents)
@@ -215,5 +224,33 @@ bool FNvClothSystem::Simulate(float DeltaTime)
 	Solver->endSimulation();
 
 	return !Solver->hasError();
+}
+
+bool FNvClothSystem::SimulateFixedSteps(float DeltaTime)
+{
+	if (!Solver || DeltaTime <= 0.0f || !std::isfinite(DeltaTime))
+	{
+		return false;
+	}
+
+	const float FrameDelta = std::clamp(DeltaTime, 0.0f, GClothMaxFrameDelta);
+	FixedStepAccumulator = std::min(FixedStepAccumulator + FrameDelta, GClothMaxFrameDelta);
+
+	bool bSimulated = false;
+	int StepCount = 0;
+	while (FixedStepAccumulator + 1.0e-6f >= GClothFixedTimeStep && StepCount < GClothMaxSubSteps)
+	{
+		if (!Simulate(GClothFixedTimeStep))
+		{
+			FixedStepAccumulator = 0.0f;
+			return bSimulated;
+		}
+
+		FixedStepAccumulator -= GClothFixedTimeStep;
+		bSimulated = true;
+		++StepCount;
+	}
+
+	return bSimulated;
 }
 #endif

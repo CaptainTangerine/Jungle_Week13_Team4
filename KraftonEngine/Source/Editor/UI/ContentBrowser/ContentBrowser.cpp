@@ -644,7 +644,7 @@ void FEditorContentBrowserWidget::DrawContents()
 			if (ImGui::MenuItem("Cloth Asset"))
 			{
 				FString CreatedPath;
-				if (FAssetFactory::CreateClothAsset(FPaths::ToUtf8(BrowserContext.CurrentPath), "NewClothAsset", CreatedPath))
+				if (FAssetFactory::CreateClothAsset(FPaths::ToUtf8(BrowserContext.CurrentPath), FString(), CreatedPath))
 				{
 					Refresh();
 					if (BrowserContext.EditorEngine)

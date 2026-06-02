@@ -41,6 +41,27 @@ namespace
 		return std::isfinite(Value);
 	}
 
+	float GetNvClothSolverFrequency(float InSolverFrequency, int32 InSolverIterationCount)
+	{
+		constexpr float ReferenceFrameRate = 60.0f;
+		const float IterationFrequency = static_cast<float>(std::max(InSolverIterationCount, 1)) * ReferenceFrameRate;
+		return std::max(std::max(InSolverFrequency, 1.0f), IterationFrequency);
+	}
+
+	float GetEffectiveCollisionThickness(float InCollisionThickness)
+	{
+		constexpr float MaxCollisionThickness = 0.25f;
+		const float SafeThickness = IsFiniteFloat(InCollisionThickness) ? InCollisionThickness : 0.0f;
+		return std::clamp(SafeThickness, 0.0f, MaxCollisionThickness);
+	}
+
+	float GetEffectivePinCollisionIgnoreRadius(float InIgnoreRadius)
+	{
+		constexpr float MaxIgnoreRadius = 0.5f;
+		const float SafeRadius = IsFiniteFloat(InIgnoreRadius) ? InIgnoreRadius : 0.0f;
+		return std::clamp(SafeRadius, 0.0f, MaxIgnoreRadius);
+	}
+
 	FVector SafeNormal(FVector Value, const FVector& Fallback)
 	{
 		if (Value.IsNearlyZero())
@@ -54,15 +75,14 @@ namespace
 	bool HasAnyNvClothCollision(
 		const TArray<FVector4>& Spheres,
 		const TArray<FVector4>& Planes,
-		const TArray<uint32>& Convexes,
-		const TArray<FVector>& Triangles)
+		const TArray<uint32>& Convexes)
 	{
-		return !Spheres.empty() || (!Planes.empty() && !Convexes.empty()) || !Triangles.empty();
+		return !Spheres.empty() || (!Planes.empty() && !Convexes.empty());
 	}
 
 	bool HasNvClothCollisionSource(const UBodySetup* BodySetup)
 	{
-		return BodySetup && (BodySetup->AggGeom.GetElementCount() > 0 || BodySetup->TriMesh.HasSourceMesh());
+		return BodySetup && BodySetup->AggGeom.GetElementCount() > 0;
 	}
 
 	FMatrix MakeRigidPoseMatrix(const FMatrix& Mat)
@@ -110,6 +130,16 @@ namespace
 			|| std::strcmp(PropertyName, "Enable Simulation") == 0
 			|| std::strcmp(PropertyName, "SolverFrequency") == 0
 			|| std::strcmp(PropertyName, "Solver Frequency") == 0
+			|| std::strcmp(PropertyName, "SolverIterationCount") == 0
+			|| std::strcmp(PropertyName, "Solver Iteration Count") == 0
+			|| std::strcmp(PropertyName, "bEnableContinuousCollision") == 0
+			|| std::strcmp(PropertyName, "Continuous Collision") == 0
+			|| std::strcmp(PropertyName, "CollisionThickness") == 0
+			|| std::strcmp(PropertyName, "Collision Thickness") == 0
+			|| std::strcmp(PropertyName, "bIgnoreCollisionAtPinnedParticles") == 0
+			|| std::strcmp(PropertyName, "Ignore Pin Overlap Collision") == 0
+			|| std::strcmp(PropertyName, "PinCollisionIgnoreRadius") == 0
+			|| std::strcmp(PropertyName, "Pin Collision Ignore Radius") == 0
 			|| std::strcmp(PropertyName, "Gravity") == 0
 			|| std::strcmp(PropertyName, "Damping") == 0
 			|| std::strcmp(PropertyName, "TetherScale") == 0
@@ -142,6 +172,16 @@ namespace
 			|| std::strcmp(PropertyName, "Motion Constraint Bias") == 0;
 	}
 
+	bool IsAttachmentPropertyName(const char* PropertyName)
+	{
+		return std::strcmp(PropertyName, "AttachBoneName") == 0
+			|| std::strcmp(PropertyName, "Attach Bone Name") == 0
+			|| std::strcmp(PropertyName, "AttachBoneOffset") == 0
+			|| std::strcmp(PropertyName, "Attach Bone Offset") == 0
+			|| std::strcmp(PropertyName, "AttachBoneRotationOffset") == 0
+			|| std::strcmp(PropertyName, "Attach Bone Rotation Offset") == 0;
+	}
+
 #if WITH_NVCLOTH
 	template <typename T>
 	nv::cloth::Range<const T> MakeNvConstRange(const TArray<T>& Values)
@@ -165,15 +205,16 @@ namespace
 		const FMatrix& BodyWorld,
 		const FVector& ShapeScale,
 		const FMatrix& ClothWorldInv,
+		float CollisionThickness,
 		TArray<FVector4>& OutSpheres,
 		TArray<uint32>& OutCapsules,
 		TArray<FVector4>& OutPlanes,
-		TArray<uint32>& OutConvexes,
-		TArray<FVector>& OutTriangles)
+		TArray<uint32>& OutConvexes)
 	{
 		const float AbsScaleX = std::max(std::abs(ShapeScale.X), 0.001f);
 		const float AbsScaleY = std::max(std::abs(ShapeScale.Y), 0.001f);
 		const float AbsScaleZ = std::max(std::abs(ShapeScale.Z), 0.001f);
+		const float InflatedThickness = GetEffectiveCollisionThickness(CollisionThickness);
 
 		auto ScalePosition = [&](const FVector& Position)
 		{
@@ -183,25 +224,18 @@ namespace
 		for (const FKSphereElem& Sphere : BodySetup.AggGeom.SphereElems)
 		{
 			const float RadiusScale = std::max({ AbsScaleX, AbsScaleY, AbsScaleZ });
-			const float Radius = std::max(Sphere.Radius * RadiusScale, 0.001f);
+			const float Radius = std::max(Sphere.Radius * RadiusScale + InflatedThickness, 0.001f);
 			const FVector CenterWorld = BodyWorld.TransformPositionWithW(ScalePosition(Sphere.Center));
 			const FVector CenterLocal = ClothWorldInv.TransformPositionWithW(CenterWorld);
 			OutSpheres.push_back(FVector4(CenterLocal, Radius));
 		}
 
-		auto AppendTriangle = [&](const FMatrix& ShapeWorld, const FVector& A, const FVector& B, const FVector& C)
-		{
-			OutTriangles.push_back(ClothWorldInv.TransformPositionWithW(ShapeWorld.TransformPositionWithW(A)));
-			OutTriangles.push_back(ClothWorldInv.TransformPositionWithW(ShapeWorld.TransformPositionWithW(B)));
-			OutTriangles.push_back(ClothWorldInv.TransformPositionWithW(ShapeWorld.TransformPositionWithW(C)));
-		};
-
 		for (const FKBoxElem& Box : BodySetup.AggGeom.BoxElems)
 		{
 			const FVector HalfExtent(
-				std::max(Box.HalfExtent.X * AbsScaleX, 0.001f),
-				std::max(Box.HalfExtent.Y * AbsScaleY, 0.001f),
-				std::max(Box.HalfExtent.Z * AbsScaleZ, 0.001f));
+				std::max(Box.HalfExtent.X * AbsScaleX + InflatedThickness, 0.001f),
+				std::max(Box.HalfExtent.Y * AbsScaleY + InflatedThickness, 0.001f),
+				std::max(Box.HalfExtent.Z * AbsScaleZ + InflatedThickness, 0.001f));
 
 			const FMatrix BoxLocal = FTransform(ScalePosition(Box.Center), Box.Rotation, FVector::OneVector).ToMatrix();
 			const FMatrix BoxWorld = BoxLocal * BodyWorld;
@@ -234,36 +268,13 @@ namespace
 				{
 					OutConvexes.push_back(ConvexMask);
 				}
-				continue;
 			}
-
-			const FVector P000(-HalfExtent.X, -HalfExtent.Y, -HalfExtent.Z);
-			const FVector P001(-HalfExtent.X, -HalfExtent.Y, HalfExtent.Z);
-			const FVector P010(-HalfExtent.X, HalfExtent.Y, -HalfExtent.Z);
-			const FVector P011(-HalfExtent.X, HalfExtent.Y, HalfExtent.Z);
-			const FVector P100(HalfExtent.X, -HalfExtent.Y, -HalfExtent.Z);
-			const FVector P101(HalfExtent.X, -HalfExtent.Y, HalfExtent.Z);
-			const FVector P110(HalfExtent.X, HalfExtent.Y, -HalfExtent.Z);
-			const FVector P111(HalfExtent.X, HalfExtent.Y, HalfExtent.Z);
-
-			AppendTriangle(BoxWorld, P100, P110, P111);
-			AppendTriangle(BoxWorld, P100, P111, P101);
-			AppendTriangle(BoxWorld, P000, P001, P011);
-			AppendTriangle(BoxWorld, P000, P011, P010);
-			AppendTriangle(BoxWorld, P010, P011, P111);
-			AppendTriangle(BoxWorld, P010, P111, P110);
-			AppendTriangle(BoxWorld, P000, P100, P101);
-			AppendTriangle(BoxWorld, P000, P101, P001);
-			AppendTriangle(BoxWorld, P001, P101, P111);
-			AppendTriangle(BoxWorld, P001, P111, P011);
-			AppendTriangle(BoxWorld, P000, P010, P110);
-			AppendTriangle(BoxWorld, P000, P110, P100);
 		}
 
 		for (const FKSphylElem& Capsule : BodySetup.AggGeom.SphylElems)
 		{
-			const float Radius = std::max(Capsule.Radius * std::max(AbsScaleY, AbsScaleZ), 0.001f);
-			const float HalfLength = std::max(Capsule.Length * 0.5f * AbsScaleX, 0.0f);
+			const float Radius = std::max(Capsule.Radius * std::max(AbsScaleX, AbsScaleZ) + InflatedThickness, 0.001f);
+			const float HalfLength = std::max(Capsule.Length * 0.5f * AbsScaleY, 0.0f);
 
 			const FMatrix CapsuleLocal = FTransform(ScalePosition(Capsule.Center), Capsule.Rotation, FVector::OneVector).ToMatrix();
 			const FMatrix CapsuleWorld = CapsuleLocal * BodyWorld;
@@ -279,27 +290,6 @@ namespace
 			OutCapsules.push_back(SphereIndex + 1);
 		}
 
-		if (BodySetup.TriMesh.HasSourceMesh())
-		{
-			for (uint32 IndexOffset = 0; IndexOffset + 2 < static_cast<uint32>(BodySetup.TriMesh.Indices.size()); IndexOffset += 3)
-			{
-				const int32 IA = BodySetup.TriMesh.Indices[IndexOffset + 0];
-				const int32 IB = BodySetup.TriMesh.Indices[IndexOffset + 1];
-				const int32 IC = BodySetup.TriMesh.Indices[IndexOffset + 2];
-				if (IA < 0 || IB < 0 || IC < 0
-					|| IA >= static_cast<int32>(BodySetup.TriMesh.Vertices.size())
-					|| IB >= static_cast<int32>(BodySetup.TriMesh.Vertices.size())
-					|| IC >= static_cast<int32>(BodySetup.TriMesh.Vertices.size()))
-				{
-					continue;
-				}
-
-				const FVector A = ScalePosition(BodySetup.TriMesh.Vertices[IA]);
-				const FVector B = ScalePosition(BodySetup.TriMesh.Vertices[IB]);
-				const FVector C = ScalePosition(BodySetup.TriMesh.Vertices[IC]);
-				AppendTriangle(BodyWorld, A, B, C);
-			}
-		}
 	}
 #endif
 }
@@ -318,6 +308,7 @@ void UClothComponent::BeginPlay()
 {
 	UPrimitiveComponent::BeginPlay();
 	ResolveClothAsset();
+	UpdateBoneAttachment();
 	UseRestPoseRenderData();
 	InitializeSimulation();
 }
@@ -352,6 +343,11 @@ void UClothComponent::PostEditProperty(const char* PropertyName)
 	{
 		ResetSimulation();
 	}
+	else if (IsAttachmentPropertyName(PropertyName))
+	{
+		UpdateBoneAttachment();
+		ResetSimulation();
+	}
 }
 
 void UClothComponent::SetClothAsset(UClothAsset* InAsset)
@@ -378,7 +374,20 @@ void UClothComponent::SetClothAsset(UClothAsset* InAsset)
 void UClothComponent::SetMasterPoseComponent(USkeletalMeshComponent* InMaster)
 {
 	MasterPoseComponent = InMaster;
+	UpdateBoneAttachment();
 	UpdateCollisionFromPhysicsScene();
+}
+
+void UClothComponent::SetAttachBoneName(FName InBoneName)
+{
+	if (AttachBoneName == InBoneName)
+	{
+		return;
+	}
+
+	AttachBoneName = InBoneName;
+	UpdateBoneAttachment();
+	ResetSimulation();
 }
 
 UMaterial* UClothComponent::GetResolvedMaterial() const
@@ -424,6 +433,45 @@ UClothAsset* UClothComponent::ResolveClothAsset()
 		ClothAssetPath.SetCachedObject(ClothAsset);
 	}
 	return ClothAsset;
+}
+
+void UClothComponent::UpdateBoneAttachment()
+{
+	const FString BoneName = AttachBoneName.ToString();
+	if (BoneName.empty() || BoneName == "None")
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* SourceMesh = MasterPoseComponent ? MasterPoseComponent : Cast<USkeletalMeshComponent>(GetParent());
+	if (!SourceMesh)
+	{
+		return;
+	}
+
+	const int32 BoneIndex = SourceMesh->FindBoneIndex(BoneName);
+	if (BoneIndex < 0)
+	{
+		return;
+	}
+
+	TArray<FMatrix> BoneGlobals;
+	SourceMesh->GetCurrentBoneGlobalMatrices(BoneGlobals);
+	if (BoneIndex >= static_cast<int32>(BoneGlobals.size()))
+	{
+		return;
+	}
+
+	const FMatrix BoneOffset = FTransform(AttachBoneOffset, AttachBoneRotationOffset, FVector::OneVector).ToMatrix();
+	const FMatrix DesiredWorld = BoneOffset * BoneGlobals[BoneIndex] * SourceMesh->GetWorldMatrix();
+
+	FMatrix DesiredRelative = DesiredWorld;
+	if (USceneComponent* Parent = GetParent())
+	{
+		DesiredRelative = DesiredWorld * Parent->GetWorldMatrix().GetInverse();
+	}
+
+	SetRelativeTransform(FTransform(MakeRigidPoseMatrix(DesiredRelative)));
 }
 
 FMeshDataView UClothComponent::GetMeshDataView() const
@@ -499,6 +547,7 @@ void UClothComponent::UpdateWorldAABB() const
 void UClothComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
 {
 	UPrimitiveComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	UpdateBoneAttachment();
 
 	if (!ClothAsset)
 	{
@@ -531,6 +580,8 @@ bool UClothComponent::PrepareSimulationInput()
 	}
 
 #if WITH_NVCLOTH
+	UpdateBoneAttachment();
+
 	if (!Cloth && !InitializeSimulation())
 	{
 		bHasPendingSimulationInput = false;
@@ -566,6 +617,9 @@ void UClothComponent::ApplySimulationResult()
 	}
 
 	bHasPendingSimulationInput = false;
+#if WITH_NVCLOTH
+	RestorePinnedParticles();
+#endif
 	RebuildRenderMeshFromSimulation();
 	MarkWorldBoundsDirty();
 	MarkProxyDirty(EDirtyFlag::Mesh);
@@ -579,6 +633,7 @@ bool UClothComponent::InitializeSimulation()
 	}
 
 #if WITH_NVCLOTH
+	UpdateBoneAttachment();
 	ReleaseSimulation();
 	DebugSimulationLogFrames = 0;
 	CollisionSyncLogFrames = 0;
@@ -653,10 +708,10 @@ bool UClothComponent::InitializeSimulation()
 		PhaseConfigs.push_back(Config);
 	}
 	Cloth->setPhaseConfig(MakeNvConstRange(PhaseConfigs));
-	Cloth->setSolverFrequency(SolverFrequency);
+	Cloth->setSolverFrequency(GetNvClothSolverFrequency(SolverFrequency, SolverIterationCount));
 	Cloth->setGravity(ToPxVec3(Gravity));
 	Cloth->setDamping(ToPxVec3(Damping));
-	Cloth->enableContinuousCollision(true);
+	Cloth->enableContinuousCollision(bEnableContinuousCollision);
 	Cloth->setCollisionMassScale(1.0f);
 	Cloth->setFriction(0.5f);
 	Cloth->setTetherConstraintScale(std::max(0.0f, TetherScale));
@@ -730,7 +785,9 @@ void UClothComponent::ReleaseSimulation()
 	CollisionCapsules.clear();
 	CollisionPlanes.clear();
 	CollisionConvexes.clear();
-	CollisionTriangles.clear();
+	PreviousCollisionSpheres.clear();
+	PreviousCollisionPlanes.clear();
+	bHasPreviousCollisionFrame = false;
 #endif
 }
 
@@ -803,6 +860,41 @@ void UClothComponent::ApplyMotionConstraints()
 	const float Stiffness = IsFiniteFloat(MotionConstraintStiffness) ? std::clamp(MotionConstraintStiffness, 0.0f, 1.0f) : 0.0f;
 	Cloth->setMotionConstraintScaleBias(Scale, Bias);
 	Cloth->setMotionConstraintStiffness(Stiffness);
+#endif
+}
+
+void UClothComponent::RestorePinnedParticles()
+{
+#if WITH_NVCLOTH
+	if (!Cloth || InitialParticles.empty())
+	{
+		return;
+	}
+
+	const uint32 ParticleCount = std::min(Cloth->getNumParticles(), static_cast<uint32>(InitialParticles.size()));
+	if (ParticleCount == 0)
+	{
+		return;
+	}
+
+	auto CurrentParticles = Cloth->getCurrentParticles();
+	auto PreviousParticles = Cloth->getPreviousParticles();
+	if (CurrentParticles.size() < ParticleCount || PreviousParticles.size() < ParticleCount)
+	{
+		return;
+	}
+
+	for (uint32 Index = 0; Index < ParticleCount; ++Index)
+	{
+		const FVector4& InitialParticle = InitialParticles[Index];
+		if (InitialParticle.W > 0.0f)
+		{
+			continue;
+		}
+
+		CurrentParticles[Index] = physx::PxVec4(InitialParticle.X, InitialParticle.Y, InitialParticle.Z, InitialParticle.W);
+		PreviousParticles[Index] = physx::PxVec4(InitialParticle.X, InitialParticle.Y, InitialParticle.Z, InitialParticle.W);
+	}
 #endif
 }
 
@@ -963,7 +1055,6 @@ bool UClothComponent::BuildNvClothCollisionFromPhysicsBodies()
 	CollisionCapsules.clear();
 	CollisionPlanes.clear();
 	CollisionConvexes.clear();
-	CollisionTriangles.clear();
 
 	if (!Cloth)
 	{
@@ -990,37 +1081,57 @@ bool UClothComponent::BuildNvClothCollisionFromPhysicsBodies()
 			return;
 		}
 
-		const TArray<FBodyInstance*>& Bodies = SkeletalMeshComponent->GetBodies();
-		if (Bodies.empty())
+		UPhysicsAsset* PhysicsAsset = SkeletalMeshComponent->GetPhysicsAsset();
+		if (!PhysicsAsset || PhysicsAsset->BodySetups.empty())
 		{
 			return;
 		}
 
-		uint32 ComponentBodyCount = 0;
-		for (FBodyInstance* Body : Bodies)
+		TArray<FMatrix> BoneGlobals;
+		SkeletalMeshComponent->GetCurrentBoneGlobalMatrices(BoneGlobals);
+		if (BoneGlobals.empty())
 		{
-			if (!Body || !Body->IsValidBodyInstance())
-			{
-				continue;
-			}
+			return;
+		}
 
-			UBodySetup* BodySetup = Body->GetBodySetup();
+		const FMatrix ComponentWorld = SkeletalMeshComponent->GetWorldMatrix();
+		const FVector ComponentScale = SkeletalMeshComponent->GetWorldScale();
+		uint32 ComponentBodyCount = 0;
+		for (UBodySetup* BodySetup : PhysicsAsset->BodySetups)
+		{
 			if (!HasNvClothCollisionSource(BodySetup))
 			{
 				continue;
 			}
 
-			const FTransform BodyWorldTransform = Body->GetUnrealWorldTransform(PhysicsScene);
+			const int32 BoneIndex = SkeletalMeshComponent->FindBoneIndex(BodySetup->BoneName.ToString());
+			if (BoneIndex < 0 || BoneIndex >= static_cast<int32>(BoneGlobals.size()))
+			{
+				continue;
+			}
+
+			FMatrix BodyWorld = MakeRigidPoseMatrix(BoneGlobals[BoneIndex] * ComponentWorld);
+			FVector ShapeScale = ComponentScale;
+
+			if (FBodyInstance* Body = SkeletalMeshComponent->GetBodyInstance(BoneIndex))
+			{
+				if (Body->IsValidBodyInstance() && Body->PhysicsBlendWeight > 0.0f)
+				{
+					BodyWorld = Body->GetUnrealWorldTransform(PhysicsScene).ToMatrix();
+					ShapeScale = Body->Scale3D;
+				}
+			}
+
 			AppendBodySetupNvClothCollision(
 				*BodySetup,
-				BodyWorldTransform.ToMatrix(),
-				Body->Scale3D,
+				BodyWorld,
+				ShapeScale,
 				ClothWorldInv,
+				CollisionThickness,
 				CollisionSpheres,
 				CollisionCapsules,
 				CollisionPlanes,
-				CollisionConvexes,
-				CollisionTriangles);
+				CollisionConvexes);
 			++SyncedSkeletalBodyCount;
 			++ComponentBodyCount;
 		}
@@ -1050,11 +1161,11 @@ bool UClothComponent::BuildNvClothCollisionFromPhysicsBodies()
 			MakeRigidPoseMatrix(StaticMeshComponent->GetWorldMatrix()),
 			StaticMeshComponent->GetWorldScale(),
 			ClothWorldInv,
+			CollisionThickness,
 			CollisionSpheres,
 			CollisionCapsules,
 			CollisionPlanes,
-			CollisionConvexes,
-			CollisionTriangles);
+			CollisionConvexes);
 		++SyncedStaticComponentCount;
 		++SyncedStaticBodySetupCount;
 	};
@@ -1085,7 +1196,9 @@ bool UClothComponent::BuildNvClothCollisionFromPhysicsBodies()
 		}
 	}
 
-	if (!HasAnyNvClothCollision(CollisionSpheres, CollisionPlanes, CollisionConvexes, CollisionTriangles))
+	FilterPinnedOverlappingCollision();
+
+	if (!HasAnyNvClothCollision(CollisionSpheres, CollisionPlanes, CollisionConvexes))
 	{
 		return false;
 	}
@@ -1095,16 +1208,14 @@ bool UClothComponent::BuildNvClothCollisionFromPhysicsBodies()
 	if (CollisionSyncLogFrames < 5)
 	{
 		const FVector4 FirstSphere = !CollisionSpheres.empty() ? CollisionSpheres[0] : FVector4(0.0f, 0.0f, 0.0f, 0.0f);
-		UE_LOG("[NvCloth] Collision sync: source=WorldPxSceneBodies skeletalComponents=%u skeletalBodies=%u staticComponents=%u staticBodySetups=%u spheres=%u capsules=%u planes=%u convexes=%u triangles=%u firstSphere=(%.2f, %.2f, %.2f r=%.2f)",
+		UE_LOG("[NvCloth] Collision sync: source=WorldBodySetups skeletalComponents=%u skeletalBodies=%u staticComponents=%u staticBodySetups=%u spheres=%u capsules=%u boxes=%u firstSphere=(%.2f, %.2f, %.2f r=%.2f)",
 			SyncedSkeletalComponentCount,
 			SyncedSkeletalBodyCount,
 			SyncedStaticComponentCount,
 			SyncedStaticBodySetupCount,
 			static_cast<uint32>(CollisionSpheres.size()),
 			static_cast<uint32>(CollisionCapsules.size() / 2),
-			static_cast<uint32>(CollisionPlanes.size()),
 			static_cast<uint32>(CollisionConvexes.size()),
-			static_cast<uint32>(CollisionTriangles.size() / 3),
 			FirstSphere.X,
 			FirstSphere.Y,
 			FirstSphere.Z,
@@ -1121,7 +1232,6 @@ bool UClothComponent::BuildNvClothCollisionFromPhysicsAsset(UPhysicsAsset* Physi
 	CollisionCapsules.clear();
 	CollisionPlanes.clear();
 	CollisionConvexes.clear();
-	CollisionTriangles.clear();
 
 	if (!PhysicsAsset || !MasterPoseComponent)
 	{
@@ -1154,14 +1264,16 @@ bool UClothComponent::BuildNvClothCollisionFromPhysicsAsset(UPhysicsAsset* Physi
 			BoneWorld,
 			ShapeScale,
 			ClothWorldInv,
+			CollisionThickness,
 			CollisionSpheres,
 			CollisionCapsules,
 			CollisionPlanes,
-			CollisionConvexes,
-			CollisionTriangles);
+			CollisionConvexes);
 	}
 
-	if (!HasAnyNvClothCollision(CollisionSpheres, CollisionPlanes, CollisionConvexes, CollisionTriangles))
+	FilterPinnedOverlappingCollision();
+
+	if (!HasAnyNvClothCollision(CollisionSpheres, CollisionPlanes, CollisionConvexes))
 	{
 		ClearNvClothCollision();
 		return false;
@@ -1172,12 +1284,10 @@ bool UClothComponent::BuildNvClothCollisionFromPhysicsAsset(UPhysicsAsset* Physi
 	if (CollisionSyncLogFrames < 5)
 	{
 		const FVector4 FirstSphere = !CollisionSpheres.empty() ? CollisionSpheres[0] : FVector4(0.0f, 0.0f, 0.0f, 0.0f);
-		UE_LOG("[NvCloth] Collision sync: source=PhysicsAssetBonePose spheres=%u capsules=%u planes=%u convexes=%u triangles=%u firstSphere=(%.2f, %.2f, %.2f r=%.2f)",
+		UE_LOG("[NvCloth] Collision sync: source=PhysicsAssetBonePose spheres=%u capsules=%u boxes=%u firstSphere=(%.2f, %.2f, %.2f r=%.2f)",
 			static_cast<uint32>(CollisionSpheres.size()),
 			static_cast<uint32>(CollisionCapsules.size() / 2),
-			static_cast<uint32>(CollisionPlanes.size()),
 			static_cast<uint32>(CollisionConvexes.size()),
-			static_cast<uint32>(CollisionTriangles.size() / 3),
 			FirstSphere.X,
 			FirstSphere.Y,
 			FirstSphere.Z,
@@ -1188,6 +1298,206 @@ bool UClothComponent::BuildNvClothCollisionFromPhysicsAsset(UPhysicsAsset* Physi
 	return true;
 }
 
+void UClothComponent::FilterPinnedOverlappingCollision()
+{
+	if (!bIgnoreCollisionAtPinnedParticles || InitialParticles.empty())
+	{
+		return;
+	}
+
+	TArray<FVector> PinnedPositions;
+	PinnedPositions.reserve(InitialParticles.size());
+	for (const FVector4& Particle : InitialParticles)
+	{
+		if (Particle.W <= 0.0f)
+		{
+			PinnedPositions.emplace_back(Particle.X, Particle.Y, Particle.Z);
+		}
+	}
+
+	if (PinnedPositions.empty())
+	{
+		return;
+	}
+
+	const float ExtraRadius = GetEffectivePinCollisionIgnoreRadius(PinCollisionIgnoreRadius);
+	auto SphereTouchesPinnedParticle = [&](const FVector4& Sphere)
+	{
+		const FVector Center(Sphere.X, Sphere.Y, Sphere.Z);
+		const float Radius = std::max(0.0f, Sphere.W) + ExtraRadius;
+		const float RadiusSq = Radius * Radius;
+		for (const FVector& Pin : PinnedPositions)
+		{
+			if (FVector::DistSquared(Pin, Center) <= RadiusSq)
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+
+	auto PointSegmentDistanceSquared = [](const FVector& Point, const FVector& A, const FVector& B)
+	{
+		const FVector AB = B - A;
+		const float LengthSq = AB.Dot(AB);
+		if (LengthSq <= 1.0e-6f)
+		{
+			return FVector::DistSquared(Point, A);
+		}
+
+		const float T = std::clamp((Point - A).Dot(AB) / LengthSq, 0.0f, 1.0f);
+		const FVector Closest = A + AB * T;
+		return FVector::DistSquared(Point, Closest);
+	};
+
+	auto CapsuleTouchesPinnedParticle = [&](const FVector4& A, const FVector4& B)
+	{
+		const FVector PointA(A.X, A.Y, A.Z);
+		const FVector PointB(B.X, B.Y, B.Z);
+		const float Radius = std::max(std::max(0.0f, A.W), std::max(0.0f, B.W)) + ExtraRadius;
+		const float RadiusSq = Radius * Radius;
+		for (const FVector& Pin : PinnedPositions)
+		{
+			if (PointSegmentDistanceSquared(Pin, PointA, PointB) <= RadiusSq)
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+
+	TArray<FVector4> OldSpheres = std::move(CollisionSpheres);
+	TArray<uint32> OldCapsules = std::move(CollisionCapsules);
+	CollisionSpheres.clear();
+	CollisionCapsules.clear();
+	CollisionSpheres.reserve(OldSpheres.size());
+	CollisionCapsules.reserve(OldCapsules.size());
+
+	TArray<char> SphereUsedByCapsule(OldSpheres.size(), 0);
+	for (uint32 CapsuleOffset = 0; CapsuleOffset + 1 < static_cast<uint32>(OldCapsules.size()); CapsuleOffset += 2)
+	{
+		const uint32 A = OldCapsules[CapsuleOffset];
+		const uint32 B = OldCapsules[CapsuleOffset + 1];
+		if (A < OldSpheres.size())
+		{
+			SphereUsedByCapsule[A] = 1;
+		}
+		if (B < OldSpheres.size())
+		{
+			SphereUsedByCapsule[B] = 1;
+		}
+	}
+
+	for (uint32 SphereIndex = 0; SphereIndex < static_cast<uint32>(OldSpheres.size()); ++SphereIndex)
+	{
+		if (SphereUsedByCapsule[SphereIndex] || SphereTouchesPinnedParticle(OldSpheres[SphereIndex]))
+		{
+			continue;
+		}
+		CollisionSpheres.push_back(OldSpheres[SphereIndex]);
+	}
+
+	for (uint32 CapsuleOffset = 0; CapsuleOffset + 1 < static_cast<uint32>(OldCapsules.size()); CapsuleOffset += 2)
+	{
+		const uint32 A = OldCapsules[CapsuleOffset];
+		const uint32 B = OldCapsules[CapsuleOffset + 1];
+		if (A >= OldSpheres.size() || B >= OldSpheres.size())
+		{
+			continue;
+		}
+
+		if (CapsuleTouchesPinnedParticle(OldSpheres[A], OldSpheres[B]))
+		{
+			continue;
+		}
+
+		const uint32 NewSphereIndex = static_cast<uint32>(CollisionSpheres.size());
+		CollisionSpheres.push_back(OldSpheres[A]);
+		CollisionSpheres.push_back(OldSpheres[B]);
+		CollisionCapsules.push_back(NewSphereIndex);
+		CollisionCapsules.push_back(NewSphereIndex + 1);
+	}
+
+	TArray<FVector4> OldPlanes = std::move(CollisionPlanes);
+	TArray<uint32> OldConvexes = std::move(CollisionConvexes);
+	CollisionPlanes.clear();
+	CollisionConvexes.clear();
+	CollisionPlanes.reserve(OldPlanes.size());
+	CollisionConvexes.reserve(OldConvexes.size());
+
+	auto ConvexTouchesPinnedParticle = [&](uint32 ConvexMask)
+	{
+		if (ConvexMask == 0)
+		{
+			return false;
+		}
+
+		for (const FVector& Pin : PinnedPositions)
+		{
+			bool bInsideConvex = true;
+			for (uint32 PlaneIndex = 0; PlaneIndex < 32; ++PlaneIndex)
+			{
+				if ((ConvexMask & (1u << PlaneIndex)) == 0)
+				{
+					continue;
+				}
+
+				if (PlaneIndex >= OldPlanes.size())
+				{
+					bInsideConvex = false;
+					break;
+				}
+
+				const FVector4& Plane = OldPlanes[PlaneIndex];
+				const float Distance = Plane.X * Pin.X + Plane.Y * Pin.Y + Plane.Z * Pin.Z + Plane.W;
+				if (Distance > ExtraRadius)
+				{
+					bInsideConvex = false;
+					break;
+				}
+			}
+
+			if (bInsideConvex)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	};
+
+	for (uint32 ConvexMask : OldConvexes)
+	{
+		if (ConvexTouchesPinnedParticle(ConvexMask))
+		{
+			continue;
+		}
+
+		uint32 NewMask = 0;
+		for (uint32 PlaneIndex = 0; PlaneIndex < 32; ++PlaneIndex)
+		{
+			if ((ConvexMask & (1u << PlaneIndex)) == 0 || PlaneIndex >= OldPlanes.size())
+			{
+				continue;
+			}
+
+			const uint32 NewPlaneIndex = static_cast<uint32>(CollisionPlanes.size());
+			if (NewPlaneIndex >= 32)
+			{
+				break;
+			}
+
+			CollisionPlanes.push_back(OldPlanes[PlaneIndex]);
+			NewMask |= (1u << NewPlaneIndex);
+		}
+
+		if (NewMask != 0)
+		{
+			CollisionConvexes.push_back(NewMask);
+		}
+	}
+}
+
 void UClothComponent::ApplyNvClothCollision()
 {
 	if (!Cloth)
@@ -1195,37 +1505,40 @@ void UClothComponent::ApplyNvClothCollision()
 		return;
 	}
 
-	TArray<physx::PxVec4> NvSpheres;
-	NvSpheres.reserve(CollisionSpheres.size());
-	for (const FVector4& Sphere : CollisionSpheres)
+	auto BuildNvVec4Range = [](const TArray<FVector4>& Source)
 	{
-		NvSpheres.emplace_back(Sphere.X, Sphere.Y, Sphere.Z, Sphere.W);
-	}
+		TArray<physx::PxVec4> Result;
+		Result.reserve(Source.size());
+		for (const FVector4& Value : Source)
+		{
+			Result.emplace_back(Value.X, Value.Y, Value.Z, Value.W);
+		}
+		return Result;
+	};
 
-	TArray<physx::PxVec4> NvPlanes;
-	NvPlanes.reserve(CollisionPlanes.size());
-	for (const FVector4& Plane : CollisionPlanes)
-	{
-		NvPlanes.emplace_back(Plane.X, Plane.Y, Plane.Z, Plane.W);
-	}
+	TArray<physx::PxVec4> NvSpheres = BuildNvVec4Range(CollisionSpheres);
+	TArray<physx::PxVec4> NvStartSpheres = bHasPreviousCollisionFrame && PreviousCollisionSpheres.size() == CollisionSpheres.size()
+		? BuildNvVec4Range(PreviousCollisionSpheres)
+		: NvSpheres;
+	TArray<physx::PxVec4> NvPlanes = BuildNvVec4Range(CollisionPlanes);
+	TArray<physx::PxVec4> NvStartPlanes = bHasPreviousCollisionFrame && PreviousCollisionPlanes.size() == CollisionPlanes.size()
+		? BuildNvVec4Range(PreviousCollisionPlanes)
+		: NvPlanes;
 
-	TArray<physx::PxVec3> NvTriangles;
-	NvTriangles.reserve(CollisionTriangles.size());
-	for (const FVector& Vertex : CollisionTriangles)
-	{
-		NvTriangles.emplace_back(Vertex.X, Vertex.Y, Vertex.Z);
-	}
+	TArray<physx::PxVec3> EmptyTriangles;
 
-	const uint32 OldSphereCount = Cloth->getNumSpheres();
 	const uint32 OldCapsuleCount = Cloth->getNumCapsules();
-	const uint32 OldPlaneCount = Cloth->getNumPlanes();
 	const uint32 OldConvexCount = Cloth->getNumConvexes();
 	const uint32 OldTriangleCount = Cloth->getNumTriangles();
-	Cloth->setSpheres(MakeNvConstRange(NvSpheres), 0, OldSphereCount);
+	Cloth->setSpheres(MakeNvConstRange(NvStartSpheres), MakeNvConstRange(NvSpheres));
 	Cloth->setCapsules(MakeNvConstRange(CollisionCapsules), 0, OldCapsuleCount);
-	Cloth->setPlanes(MakeNvConstRange(NvPlanes), 0, OldPlaneCount);
+	Cloth->setPlanes(MakeNvConstRange(NvStartPlanes), MakeNvConstRange(NvPlanes));
 	Cloth->setConvexes(MakeNvConstRange(CollisionConvexes), 0, OldConvexCount);
-	Cloth->setTriangles(MakeNvConstRange(NvTriangles), 0, OldTriangleCount);
+	Cloth->setTriangles(MakeNvConstRange(EmptyTriangles), 0, OldTriangleCount);
+
+	PreviousCollisionSpheres = CollisionSpheres;
+	PreviousCollisionPlanes = CollisionPlanes;
+	bHasPreviousCollisionFrame = true;
 }
 
 void UClothComponent::ClearNvClothCollision()
@@ -1234,7 +1547,9 @@ void UClothComponent::ClearNvClothCollision()
 	CollisionCapsules.clear();
 	CollisionPlanes.clear();
 	CollisionConvexes.clear();
-	CollisionTriangles.clear();
+	PreviousCollisionSpheres.clear();
+	PreviousCollisionPlanes.clear();
+	bHasPreviousCollisionFrame = false;
 
 	if (!Cloth)
 	{

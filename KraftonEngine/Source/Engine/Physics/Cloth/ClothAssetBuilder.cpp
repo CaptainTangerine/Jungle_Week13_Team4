@@ -319,7 +319,7 @@ namespace
 		return AddedBendConstraintCount;
 	}
 
-	FVector CalculateDebugGridCenter(const TArray<FVector>& SourcePositions)
+	FVector CalculateDefaultGridCenter(const TArray<FVector>& SourcePositions)
 	{
 		if (SourcePositions.empty())
 		{
@@ -335,14 +335,12 @@ namespace
 		return Sum * (1.0f / static_cast<float>(SourcePositions.size()));
 	}
 
-	bool BuildDebugPinnedGrid96x96(const TArray<FVector>& SourcePositions, UMaterial* Material, UClothAsset& OutAsset, FString* OutError)
+	bool BuildDefaultPinnedGrid32x32(const TArray<FVector>& SourcePositions, UMaterial* Material, UClothAsset& OutAsset, FString* OutError)
 	{
-		constexpr uint32 GridSide = 96;
-		constexpr uint32 PreviousGridSide = 32;
-		constexpr float PreviousParticleSpacing = 0.2f;
-		constexpr float DebugClothExtent = PreviousParticleSpacing * static_cast<float>(PreviousGridSide - 1);
-		constexpr float DebugParticleSpacing = DebugClothExtent / static_cast<float>(GridSide - 1);
-		constexpr float DebugHalfExtent = DebugClothExtent * 0.5f;
+		constexpr uint32 GridSide = 32;
+		constexpr float ParticleSpacing = 0.2f;
+		constexpr float ClothExtent = ParticleSpacing * static_cast<float>(GridSide - 1);
+		constexpr float HalfExtent = ClothExtent * 0.5f;
 
 		OutAsset.FabricData = FClothFabricCookedData();
 		OutAsset.RestPositions.clear();
@@ -357,7 +355,7 @@ namespace
 		OutAsset.InvMasses.assign(GridSide * GridSide, 1.0f);
 		OutAsset.PinMask.assign(GridSide * GridSide, 0.0f);
 
-		const FVector GridCenter = CalculateDebugGridCenter(SourcePositions);
+		const FVector GridCenter = CalculateDefaultGridCenter(SourcePositions);
 
 		for (uint32 Row = 0; Row < GridSide; ++Row)
 		{
@@ -366,9 +364,9 @@ namespace
 				const float U = static_cast<float>(Col) / static_cast<float>(GridSide - 1);
 				const float V = static_cast<float>(Row) / static_cast<float>(GridSide - 1);
 				const FVector Position(
-					GridCenter.X - DebugHalfExtent + static_cast<float>(Col) * DebugParticleSpacing,
+					GridCenter.X - HalfExtent + static_cast<float>(Col) * ParticleSpacing,
 					GridCenter.Y,
-					GridCenter.Z + DebugHalfExtent - static_cast<float>(Row) * DebugParticleSpacing);
+					GridCenter.Z + HalfExtent - static_cast<float>(Row) * ParticleSpacing);
 				OutAsset.RestPositions.push_back(Position);
 				OutAsset.UVs.push_back(FVector2(
 					U,
@@ -456,7 +454,7 @@ namespace
 
 		if (!OutAsset.HasValidSimulationData())
 		{
-			SetError(OutError, "Generated debug 96x96 ClothAsset data failed validation.");
+			SetError(OutError, "Generated default 32x32 ClothAsset data failed validation.");
 			return false;
 		}
 
@@ -590,12 +588,12 @@ bool FClothAssetBuilder::BuildFromRawMesh(
 	const FClothAssetBuildOptions& Options,
 	FString* OutError)
 {
-	if (Options.bBuildDebugPinnedGrid96x96)
+	if (Options.bBuildDefaultPinnedGrid32x32)
 	{
 		(void)Colors;
 		(void)UVs;
 		(void)Indices;
-		return BuildDebugPinnedGrid96x96(Positions, Material, OutAsset, OutError);
+		return BuildDefaultPinnedGrid32x32(Positions, Material, OutAsset, OutError);
 	}
 
 	const uint32 ParticleCount = static_cast<uint32>(Positions.size());

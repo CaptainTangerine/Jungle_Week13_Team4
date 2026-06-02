@@ -308,7 +308,7 @@ static void ImportMeshSourceAsClothAssetForContentBrowser(ContentBrowserContext&
 
 	FImportOptions ImportOptions = FImportOptions::Default();
 	FClothAssetBuildOptions BuildOptions;
-	BuildOptions.bBuildDebugPinnedGrid96x96 = false;
+	BuildOptions.bBuildDefaultPinnedGrid32x32 = false;
 
 	FString CreatedPath;
 	FString Error;

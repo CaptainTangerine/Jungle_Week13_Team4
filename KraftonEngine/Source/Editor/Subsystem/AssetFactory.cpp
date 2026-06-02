@@ -203,30 +203,18 @@ bool FAssetFactory::CreateClothAsset(const FString& DirectoryPath, const FString
 		return false;
 	}
 
-	const std::filesystem::path AssetPath = BuildUniqueAssetPath(Directory, AssetName.empty() ? FString("NewClothAsset") : AssetName, L".uasset");
+	const std::filesystem::path AssetPath = BuildUniqueAssetPath(Directory, AssetName.empty() ? FString("ClothAsset") : AssetName, L".uasset");
 
 	TArray<FVector> Positions;
-	Positions.push_back(FVector(-50.0f, 0.0f, 50.0f));
-	Positions.push_back(FVector(50.0f, 0.0f, 50.0f));
-	Positions.push_back(FVector(-50.0f, 0.0f, -50.0f));
-	Positions.push_back(FVector(50.0f, 0.0f, -50.0f));
-
 	TArray<FVector4> Colors;
-	Colors.assign(Positions.size(), FVector4(1.0f, 1.0f, 1.0f, 1.0f));
-
 	TArray<FVector2> UVs;
-	UVs.push_back(FVector2(0.0f, 0.0f));
-	UVs.push_back(FVector2(1.0f, 0.0f));
-	UVs.push_back(FVector2(0.0f, 1.0f));
-	UVs.push_back(FVector2(1.0f, 1.0f));
-
-	TArray<uint32> Indices = { 0, 1, 2, 1, 3, 2 };
+	TArray<uint32> Indices;
 
 	UClothAsset* NewAsset = UObjectManager::Get().CreateObject<UClothAsset>();
 	NewAsset->SetSourcePath(FPaths::ToUtf8(AssetPath.wstring()));
 
 	FClothAssetBuildOptions BuildOptions;
-	BuildOptions.bBuildDebugPinnedGrid96x96 = false;
+	BuildOptions.bBuildDefaultPinnedGrid32x32 = true;
 
 	FString Error;
 	if (!FClothAssetBuilder::BuildFromRawMesh(Positions, Colors, UVs, Indices, nullptr, *NewAsset, BuildOptions, &Error))

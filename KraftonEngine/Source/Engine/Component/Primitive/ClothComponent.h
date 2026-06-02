@@ -51,6 +51,8 @@ public:
 
 	void SetMasterPoseComponent(USkeletalMeshComponent* InMaster);
 	USkeletalMeshComponent* GetMasterPoseComponent() const { return MasterPoseComponent; }
+	void SetAttachBoneName(FName InBoneName);
+	const FName& GetAttachBoneName() const { return AttachBoneName; }
 
 	const TArray<FVertexPNCTT>& GetRenderVertices() const { return RenderVertices; }
 	const TArray<uint32>& GetRenderIndices() const { return RenderIndices; }
@@ -69,9 +71,11 @@ private:
 	UClothAsset* ResolveClothAsset();
 	bool InitializeSimulation();
 	void ReleaseSimulation();
+	void UpdateBoneAttachment();
 	void UpdateClothFrame();
 	void UpdateCollisionFromPhysicsScene();
 	void ApplyMotionConstraints();
+	void RestorePinnedParticles();
 	void RebuildRenderMeshFromSimulation();
 	void RecalculateRenderNormalsAndTangents();
 	void UseRestPoseRenderData();
@@ -79,6 +83,7 @@ private:
 #if WITH_NVCLOTH
 	bool BuildNvClothCollisionFromPhysicsBodies();
 	bool BuildNvClothCollisionFromPhysicsAsset(UPhysicsAsset* PhysicsAsset);
+	void FilterPinnedOverlappingCollision();
 	void ApplyNvClothCollision();
 	void ClearNvClothCollision();
 #endif
@@ -87,11 +92,35 @@ private:
 	UPROPERTY(Edit, Save, Category="Cloth", DisplayName="Cloth Asset", AssetType="ClothAsset")
 	FSoftObjectPtr ClothAssetPath = "None";
 
+	UPROPERTY(Edit, Save, Category="Cloth", DisplayName="Attach Bone Name", AssetType="BoneName")
+	FName AttachBoneName;
+
+	UPROPERTY(Edit, Save, Category="Cloth", DisplayName="Attach Bone Offset", Type=Vec3, Min=0.0f, Max=0.0f, Speed=0.1f)
+	FVector AttachBoneOffset = FVector::ZeroVector;
+
+	UPROPERTY(Edit, Save, Category="Cloth", DisplayName="Attach Bone Rotation Offset", Type=Rotator, Min=0.0f, Max=0.0f, Speed=0.1f)
+	FRotator AttachBoneRotationOffset = FRotator(0.0f, 0.0f, 0.0f);
+
 	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Enable Simulation")
 	bool bEnableSimulation = true;
 
 	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Solver Frequency", Min=1.f, Speed=1.f)
-	float SolverFrequency = 60.0f;
+	float SolverFrequency = 240.0f;
+
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Solver Iteration Count", Min=1, Max=16, Speed=1)
+	int32 SolverIterationCount = 4;
+
+	UPROPERTY(Edit, Save, Category="Cloth|Collision", DisplayName="Continuous Collision")
+	bool bEnableContinuousCollision = true;
+
+	UPROPERTY(Edit, Save, Category="Cloth|Collision", DisplayName="Collision Thickness", Min=0.1f, Max=1.f, Speed=0.1f)
+	float CollisionThickness = 0.5f;
+
+	UPROPERTY(Edit, Save, Category="Cloth|Collision", DisplayName="Ignore Pin Overlap Collision")
+	bool bIgnoreCollisionAtPinnedParticles = true;
+
+	UPROPERTY(Edit, Save, Category="Cloth|Collision", DisplayName="Pin Collision Ignore Radius", Min=0.f, Max=0.5f, Speed=0.01f)
+	float PinCollisionIgnoreRadius = 0.05f;
 
 	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Gravity")
 	FVector Gravity = FVector(0.0f, 0.0f, -980.0f);
@@ -158,6 +187,8 @@ private:
 	TArray<uint32> CollisionCapsules;
 	TArray<FVector4> CollisionPlanes;
 	TArray<uint32> CollisionConvexes;
-	TArray<FVector> CollisionTriangles;
+	TArray<FVector4> PreviousCollisionSpheres;
+	TArray<FVector4> PreviousCollisionPlanes;
+	bool bHasPreviousCollisionFrame = false;
 #endif
 };

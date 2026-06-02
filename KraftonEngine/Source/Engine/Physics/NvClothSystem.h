@@ -40,6 +40,7 @@ public:
 	bool AddCloth(nv::cloth::Cloth* Cloth);
 	void RemoveCloth(nv::cloth::Cloth* Cloth);
 	bool Simulate(float DeltaTime);
+	bool SimulateFixedSteps(float DeltaTime);
 #endif
 
 private:
@@ -48,6 +49,7 @@ private:
 
 	bool bInitialized = false;
 	TArray<UClothComponent*> RegisteredComponents;
+	float FixedStepAccumulator = 0.0f;
 
 #if WITH_NVCLOTH
 	nv::cloth::Factory* Factory = nullptr;
