@@ -364,16 +364,20 @@ void UWorld::Tick(float DeltaTime, ELevelTick TickType)
 	const bool bRunPhysics = bHasBegunPlay && PhysicsScene;
 	if (bRunPhysics)
 	{
-		SCOPE_STAT_CAT("PhysicsScene", "1_WorldTick");
+		SCOPE_STAT_CAT("Physics.Start", "1_WorldTick");   // pre-sync + simulate 킥오프
 		PhysicsScene->StartSimulation(DeltaTime);
 	}
 
 	// simulate 와 오버랩되는 구간 — 여기 등록된 틱은 PhysX 워커와 동시에 메인 스레드에서 돈다.
-	TickManager.RunTickGroups(DeltaTime, TickType, TG_DuringPhysics, TG_DuringPhysics);
+	// 이 구간 시간이 fetchResults 블록(Physics.FetchBlock)보다 작으면 simulate 를 다 못 숨긴다.
+	{
+		SCOPE_STAT_CAT("Physics.OverlapWindow", "1_WorldTick");
+		TickManager.RunTickGroups(DeltaTime, TickType, TG_DuringPhysics, TG_DuringPhysics);
+	}
 
 	if (bRunPhysics)
 	{
-		SCOPE_STAT_CAT("PhysicsScene", "1_WorldTick");
+		SCOPE_STAT_CAT("Physics.Finish", "1_WorldTick");  // fetchResults 블록 + post-sync + 이벤트
 		PhysicsScene->FinishSimulation();
 	}
 

@@ -35,7 +35,7 @@ class FProjectSettings : public TSingleton<FProjectSettings>
 	// --- Physics ---
 	struct FPhysicsOption
 	{
-		uint32 WorkerThreadCount = 2;
+		uint32 WorkerThreadCount = 0;   // 0 = auto (hardware_concurrency - 2, 최소 1)
 		bool bEnableCCD = true;
 		bool bEnablePCM = true;
 		bool bEnableActiveActors = true;

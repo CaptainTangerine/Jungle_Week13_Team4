@@ -136,7 +136,7 @@ void FProjectSettings::LoadFromFile(const FString& Path)
 		if (P.hasKey(PSKey::WorkerThreadCount))
 		{
 			int v = P[PSKey::WorkerThreadCount].ToInt();
-			Physics.WorkerThreadCount = static_cast<uint32>((std::max)(1, (std::min)(v, 32)));
+			Physics.WorkerThreadCount = static_cast<uint32>((std::max)(0, (std::min)(v, 32)));  // 0 = auto
 		}
 		if (P.hasKey(PSKey::bEnableCCD))
 			Physics.bEnableCCD = P[PSKey::bEnableCCD].ToBool();

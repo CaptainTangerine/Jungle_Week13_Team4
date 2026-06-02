@@ -13,12 +13,14 @@
 #include "Physics/Asset/BodySetup.h"
 #include "Physics/Asset/ConstraintSetup.h"
 #include "Physics/IPhysicsBodySync.h"
+#include "Profiling/Stats/Stats.h"
 #include "Core/ProjectSettings.h"
 #include "Core/Logging/Log.h"
 
 // PhysX headers
 #include <PxPhysicsAPI.h>
 #include <algorithm>
+#include <thread>
 #include <cmath>
 #include <cstring>
 
@@ -905,7 +907,15 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 	}
 
 	const auto& PhysicsSettings = FProjectSettings::Get().Physics;
-	const uint32 WorkerThreadCount = (std::max)(1u, PhysicsSettings.WorkerThreadCount);
+	// WorkerThreadCount==0 → auto: 메인/렌더 스레드 여유분(2)을 빼고 남은 코어를 워커로(최소 1).
+	// PhysX simulate 의 솔버/브로드페이즈가 이 워커들로 병렬화된다.
+	uint32 WorkerThreadCount = PhysicsSettings.WorkerThreadCount;
+	if (WorkerThreadCount == 0)
+	{
+		const unsigned HardwareConcurrency = std::thread::hardware_concurrency();
+		WorkerThreadCount = (HardwareConcurrency > 3) ? (HardwareConcurrency - 2) : 1;
+	}
+	WorkerThreadCount = (std::max)(1u, (std::min)(WorkerThreadCount, 32u));
 
 	// CPU Dispatcher
 	Dispatcher = PxDefaultCpuDispatcherCreate(static_cast<PxU32>(WorkerThreadCount));
@@ -1653,8 +1663,12 @@ void FPhysXPhysicsScene::StartSimulation(float DeltaTime)
 
 	// ── Simulate (async 윈도우 시작) ──
 	// 이후 FinishSimulation 의 fetchResults 까지는 어떤 PxActor 도 건드리면 안 된다.
+	// simulate() 는 워커에 디스패치만 하고 곧 반환 — 거의 0 에 가까워야 정상(킥오프 비용).
 	CurrentSimDeltaTime = DeltaTime;
-	Scene->simulate(DeltaTime);
+	{
+		SCOPE_STAT_CAT("Physics.SimulateKick", "Physics");
+		Scene->simulate(DeltaTime);
+	}
 }
 
 void FPhysXPhysicsScene::FinishSimulation()
@@ -1663,7 +1677,12 @@ void FPhysXPhysicsScene::FinishSimulation()
 	const float DeltaTime = CurrentSimDeltaTime;
 	CurrentSimDeltaTime = 0.0f;
 
-	Scene->fetchResults(true);
+	// fetchResults(true) 는 시뮬 완료까지 메인 스레드를 블록한다. 이 시간이 곧 오버랩으로
+	// 숨길 수 있는 시간의 상한 — TG_DuringPhysics 에 물리 비의존 작업을 얼마나 넣을지의 기준.
+	{
+		SCOPE_STAT_CAT("Physics.FetchBlock", "Physics");
+		Scene->fetchResults(true);
+	}
 
 	// ── Post-simulate: PhysX → Engine Transform 동기화 ──
 	// RootComp에만 transform 적용 → 자식 컴포넌트는 attach로 자동 따라감.

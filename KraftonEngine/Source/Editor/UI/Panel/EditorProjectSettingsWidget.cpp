@@ -95,7 +95,7 @@ void EditorProjectSettingsWidget::Render()
 	{
 		ImGui::TextUnformatted("Backend: PhysX");
 		int WorkerThreadCount = static_cast<int>(PS.Physics.WorkerThreadCount);
-		if (ImGui::SliderInt("Worker Threads", &WorkerThreadCount, 1, 32))
+		if (ImGui::SliderInt("Worker Threads (0=auto)", &WorkerThreadCount, 0, 32))
 		{
 			PS.Physics.WorkerThreadCount = static_cast<uint32>(WorkerThreadCount);
 		}
