@@ -1417,12 +1417,39 @@ void FPhysXPhysicsScene::SetActorKinematic(FPhysicsActorHandle Actor, bool bKine
 	if (bKinematic)
 	{
 		SetDynamicCCDEnabled(Dynamic, false);
+		Dynamic->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
+		Dynamic->wakeUp();
+		return;
 	}
-	Dynamic->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, bKinematic);
-	if (!bKinematic)
+
+	// kinematic → dynamic 전환. setKinematicTarget 으로 구동되던 바디는 "타깃 이동량/dt" 의
+	// 속도를 갖는데, anim catch-up(예: 직전 래그돌로 바닥에 쓰러진 바디를 한 프레임에 현재
+	// 포즈로 끌어당김)이나 점프 중 빠른 추종이면 이 implied velocity 가 폭발적으로 커진다.
+	// eKINEMATIC 만 해제하면 그 속도가 그대로 남아 랙돌 솔버가 발산(폭발)한다.
+	// → 전환 직전 속도를 읽어 합리적 상한으로 클램프해 다시 설정한다(모멘텀은 보존, 스파이크만 컷).
+	// 상한은 정상 이동/낙하 속도(보통 < ~20 m/s)보다 충분히 크고, catch-up 스파이크(수백/s)
+	// 보다 작게 잡는다. 필요 시 튜닝.
+	constexpr float MaxRagdollLinearSpeed  = 20.0f;   // m/s
+	constexpr float MaxRagdollAngularSpeed = 10.0f;   // rad/s
+
+	PxVec3 LinVel = Dynamic->getLinearVelocity();
+	PxVec3 AngVel = Dynamic->getAngularVelocity();
+
+	Dynamic->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, false);
+	SetDynamicCCDEnabled(Dynamic, true);
+
+	const float LinLen = LinVel.magnitude();
+	if (LinLen > MaxRagdollLinearSpeed)
 	{
-		SetDynamicCCDEnabled(Dynamic, true);
+		LinVel *= (MaxRagdollLinearSpeed / LinLen);
 	}
+	const float AngLen = AngVel.magnitude();
+	if (AngLen > MaxRagdollAngularSpeed)
+	{
+		AngVel *= (MaxRagdollAngularSpeed / AngLen);
+	}
+	Dynamic->setLinearVelocity(LinVel);
+	Dynamic->setAngularVelocity(AngVel);
 	Dynamic->wakeUp();
 }
 
@@ -1572,6 +1599,18 @@ FPhysicsConstraintHandle FPhysXPhysicsScene::CreateConstraint(const FConstraintC
 	}
 
 	Joint->setConstraintFlag(PxConstraintFlag::eCOLLISION_ENABLED, false);
+
+	// Projection — 반복 솔버가 한 프레임에 못 잡은 조인트 분리(특히 kinematic→dynamic 전환 시
+	// 본별 상대속도가 클 때)를 매 프레임 기하적으로 도로 끌어다 붙인다. 이게 없으면 한 번 벌어진
+	// 바디가 복구되지 않고 누적돼 래그돌이 "터지는" 것처럼 분리된다.
+	//   Linear tolerance: 이 거리(m) 이상 벌어지면 snap. Angular: 이 각(rad) 이상 틀어지면 snap.
+	// 너무 작게 잡으면 지터가 생길 수 있어 적당히. (필요 시 튜닝)
+	constexpr float ProjLinearTolerance  = 0.05f;            // 5 cm
+	constexpr float ProjAngularTolerance = 0.2618f;          // ~15도
+	Joint->setProjectionLinearTolerance(ProjLinearTolerance);
+	Joint->setProjectionAngularTolerance(ProjAngularTolerance);
+	Joint->setConstraintFlag(PxConstraintFlag::ePROJECTION, true);
+
 	Joint->userData = Params.UserData;
 	RawConstraints.push_back(Joint);
 
