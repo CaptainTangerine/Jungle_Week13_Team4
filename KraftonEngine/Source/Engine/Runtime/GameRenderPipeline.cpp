@@ -120,9 +120,6 @@ void FGameRenderPipeline::BuildFrame(FViewport* VP, const FMinimalViewInfo& POV,
 	}
 
 	UCameraComponent* ActiveCamera = CamManager ? CamManager->GetActiveCamera() : nullptr;
-	Frame.RenderOptions.OverridePostProcess(ActiveCamera);
-	Frame.RenderOptions.ShowFlags.bDOF =
-		ActiveCamera && ActiveCamera->GetPostProcessSettings().Aperture > 0.0f;
 	if (UCineCameraComponent* CineCamera = Cast<UCineCameraComponent>(ActiveCamera))
 	{
 		const FCineLetterboxSettings& LetterboxSettings = CineCamera->GetLetterboxSettings();
@@ -156,6 +153,10 @@ void FGameRenderPipeline::BuildFrame(FViewport* VP, const FMinimalViewInfo& POV,
 		Frame.CursorViewportX = UINT32_MAX;
 		Frame.CursorViewportY = UINT32_MAX;
 	}
+
+	Frame.RenderOptions.OverridePostProcess(ActiveCamera);
+	Frame.RenderOptions.ShowFlags.bDOF =
+		ActiveCamera && ActiveCamera->GetPostProcessSettings().Aperture > 0.0f;
 }
 
 void FGameRenderPipeline::CollectCommands(FScene* Scene, FRenderer& Renderer, FCollectOutput& Output)
