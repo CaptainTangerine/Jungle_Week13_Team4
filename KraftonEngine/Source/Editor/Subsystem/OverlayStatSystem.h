@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Core/Types/CoreTypes.h"
 #include "Math/Vector.h"
@@ -38,6 +38,8 @@ public:
 	bool ToggleParticles() { bShowParticles = !bShowParticles; return bShowParticles; }
 	bool ToggleShadow() { bShowShadow = !bShowShadow; return bShowShadow; }
 	bool ToggleSkinning() { bShowSkinning = !bShowSkinning; return bShowSkinning; }
+	bool TogglePhysics() { bShowPhysics = !bShowPhysics; return bShowPhysics; }
+	bool ToggleCollision() { bShowCollision = !bShowCollision; return bShowCollision; }
 	void RecordPickingAttempt(double ElapsedMs);
 	void HideAll()
 	{
@@ -70,6 +72,8 @@ private:
 	bool bShowParticles = false;
 	bool bShowShadow = false;
 	bool bShowSkinning = false;
+	bool bShowPhysics = false;
+	bool bShowCollision = false;
 	double LastPickingTimeMs = 0.0;
 	double AccumulatedPickingTimeMs = 0.0;
 	uint32 PickingAttemptCount = 0;
