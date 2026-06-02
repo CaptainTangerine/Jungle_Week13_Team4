@@ -3,12 +3,7 @@
 Texture2D SceneTexture : register(t0);
 Texture2D DepthTexture : register(t1);
 
-// CoC-aware downsample: this pass runs at reduced resolution, so each output
-// texel covers a 2x2 block of full-res depth. A single point sample would let a
-// blurry-background neighbour wash out a sharp foreground edge, so we gather the
-// 2x2 full-res depths and keep the largest-magnitude (signed) CoC. Colour uses a
-// single bilinear tap (= average of the block), which is fine for the blur path.
-//
+
 // rgb = scene color, a = signed CoC.
 float4 PS(PS_Input_UV input) : SV_TARGET
 {

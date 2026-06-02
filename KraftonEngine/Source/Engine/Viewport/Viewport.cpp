@@ -378,8 +378,8 @@ bool FViewport::CreateDOFResources()
 	ReleaseDOFResources();
 
 	// CoC/Blur run at reduced resolution; Composite upscales the blurred layer.
-	uint32 DOFWidth = Width / EDOF::Downscale;
-	uint32 DOFHeight = Height / EDOF::Downscale;
+	uint32 DOFWidth = ceil(Width / EDOF::Downscale);
+	uint32 DOFHeight = ceil(Height / EDOF::Downscale);
 	if (DOFWidth == 0) DOFWidth = 1;
 	if (DOFHeight == 0) DOFHeight = 1;
 
