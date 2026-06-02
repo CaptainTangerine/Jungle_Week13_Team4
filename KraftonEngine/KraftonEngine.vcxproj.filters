@@ -2135,6 +2135,9 @@
     <ClInclude Include="Source\Engine\Component\Camera\CineCameraComponent.h">
       <Filter>Source\Engine\Component\Camera</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Component\Camera\FPostProcessSettings.h">
+      <Filter>Source\Engine\Component\Camera</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Component\Camera\SpringArmComponent.h">
       <Filter>Source\Engine\Component\Camera</Filter>
     </ClInclude>
@@ -2643,6 +2646,9 @@
       <Filter>Source\Engine\Physics</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Physics\ConstraintInstance.h">
+      <Filter>Source\Engine\Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\IPhysicsBodySync.h">
       <Filter>Source\Engine\Physics</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Physics\IPhysicsScene.h">
