@@ -17,6 +17,8 @@
 #include "Particle/Asset/ParticleSystemManager.h"
 #include "Particle/VectorField/VectorFieldAsset.h"
 #include "Particle/VectorField/VectorFieldManager.h"
+#include "Physics/Cloth/ClothAsset.h"
+#include "Physics/Cloth/ClothAssetManager.h"
 #include "Editor/UI/Asset/Mesh/MeshEditorWidget.h"
 #include "EditorEngine.h"
 #include "Editor/UI/Dialog/FbxImportOptionsDialog.h"
@@ -463,6 +465,9 @@ void FEditorContentBrowserWidget::RefreshContent()
 				case EAssetPackageType::PhysicsAsset:
 					Element = std::make_shared<PhysicsAssetElement>();
 					break;
+				case EAssetPackageType::ClothAsset:
+					Element = std::make_shared<ClothAssetElement>();
+					break;
 				default:
 					Element = std::make_shared<ContentBrowserElement>();
 					break;
@@ -632,6 +637,21 @@ void FEditorContentBrowserWidget::DrawContents()
 						if (UParticleSystem* ParticleSystem = FParticleSystemManager::Get().Load(CreatedPath))
 						{
 							BrowserContext.EditorEngine->OpenAssetEditorForObject(ParticleSystem);
+						}
+					}
+				}
+			}
+			if (ImGui::MenuItem("Cloth Asset"))
+			{
+				FString CreatedPath;
+				if (FAssetFactory::CreateClothAsset(FPaths::ToUtf8(BrowserContext.CurrentPath), "NewClothAsset", CreatedPath))
+				{
+					Refresh();
+					if (BrowserContext.EditorEngine)
+					{
+						if (UClothAsset* ClothAsset = FClothAssetManager::Get().Load(CreatedPath))
+						{
+							BrowserContext.EditorEngine->OpenAssetEditorForObject(ClothAsset);
 						}
 					}
 				}

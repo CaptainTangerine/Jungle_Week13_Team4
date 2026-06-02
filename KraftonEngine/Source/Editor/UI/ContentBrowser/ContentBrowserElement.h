@@ -183,6 +183,18 @@ protected:
 	uint32 GetAccentColor() const override { return IM_COL32(255, 140, 140, 255); }
 };
 
+class ClothAssetElement final : public ContentBrowserElement
+{
+public:
+	virtual const char* GetDragItemType() override { return "ClothAssetContentItem"; }
+	void OnDoubleLeftClicked(ContentBrowserContext& Context) override;
+	void RenderDetail() override;
+
+protected:
+	const char* GetTypeLabel() const override { return "Cloth Asset"; }
+	uint32 GetAccentColor() const override { return IM_COL32(255, 115, 95, 255); }
+};
+
 class PNGElement final : public ContentBrowserElement
 {
 public:

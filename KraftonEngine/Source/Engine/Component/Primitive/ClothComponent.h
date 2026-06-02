@@ -71,6 +71,7 @@ private:
 	void ReleaseSimulation();
 	void UpdateClothFrame();
 	void UpdateCollisionFromPhysicsScene();
+	void ApplyMotionConstraints();
 	void RebuildRenderMeshFromSimulation();
 	void RecalculateRenderNormalsAndTangents();
 	void UseRestPoseRenderData();
@@ -98,6 +99,24 @@ private:
 	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Damping")
 	FVector Damping = FVector(0.8f, 0.8f, 0.8f);
 
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Tether Length Scale", Min=0.f, Speed=0.01f)
+	float TetherScale = 1.0f;
+
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Tether Stiffness", Min=0.f, Max=1.f, Speed=0.01f)
+	float TetherStiffness = 1.0f;
+
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Constraint Stiffness", Min=0.f, Max=1.f, Speed=0.01f)
+	float ConstraintStiffness = 1.0f;
+
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Bend Stiffness", Min=0.f, Max=1.f, Speed=0.01f)
+	float BendStiffness = 0.6f;
+
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Compression Limit", Min=0.f, Speed=0.01f)
+	float CompressionLimit = 1.0f;
+
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Stretch Limit", Min=0.f, Speed=0.01f)
+	float StretchLimit = 1.1f;
+
 	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Linear Inertia")
 	FVector LinearInertia = FVector(1.0f, 1.0f, 1.0f);
 
@@ -106,6 +125,18 @@ private:
 
 	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Centrifugal Inertia")
 	FVector CentrifugalInertia = FVector(1.0f, 1.0f, 1.0f);
+
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Motion Constraint Radius", Min=0.f, Speed=1.f)
+	float MaxParticleDistanceFromRest = 0.0f;
+
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Motion Constraint Stiffness", Min=0.f, Max=1.f, Speed=0.01f)
+	float MotionConstraintStiffness = 0.0f;
+
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Motion Constraint Scale", Min=0.f, Speed=0.01f)
+	float MotionConstraintScale = 1.0f;
+
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Motion Constraint Bias", Speed=1.f)
+	float MotionConstraintBias = 0.0f;
 
 	UClothAsset* ClothAsset = nullptr;
 	USkeletalMeshComponent* MasterPoseComponent = nullptr;

@@ -470,6 +470,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Editor\UI\Asset\Animation\AnimationTimelinePanel.cpp" />
     <ClCompile Include="Source\Editor\UI\Asset\Animation\AnimationTransportBar.cpp" />
     <ClCompile Include="Source\Editor\UI\Asset\CameraShake\CameraShakeEditorWidget.cpp" />
+    <ClCompile Include="Source\Editor\UI\Asset\Cloth\ClothAssetEditorWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\Asset\Curve\FloatCurveEditorWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\Asset\Mesh\MeshEditorWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\Asset\Mesh\StaticMeshEditorWidget.cpp" />
@@ -499,6 +500,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Editor\UI\Util\NotificationToast.cpp" />
     <ClCompile Include="Source\Editor\Viewport\EditorViewportClient.cpp" />
     <ClCompile Include="Source\Editor\Viewport\ViewportCameraTransform.cpp" />
+    <ClCompile Include="Source\Editor\Viewport\Asset\ClothAssetEditorViewportClient.cpp" />
     <ClCompile Include="Source\Editor\Viewport\Asset\MeshEditorViewportClient.cpp" />
     <ClCompile Include="Source\Editor\Viewport\Asset\ParticleEditorViewportClient.cpp" />
     <ClCompile Include="Source\Editor\Viewport\Asset\StaticMeshEditorViewportClient.cpp" />
@@ -846,6 +848,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Editor\UI\Asset\Animation\AnimationTransportBar.h" />
     <ClInclude Include="Source\Editor\UI\Asset\Animation\MorphCurveEditObject.h" />
     <ClInclude Include="Source\Editor\UI\Asset\CameraShake\CameraShakeEditorWidget.h" />
+    <ClInclude Include="Source\Editor\UI\Asset\Cloth\ClothAssetEditorWidget.h" />
     <ClInclude Include="Source\Editor\UI\Asset\Curve\FloatCurveEditorWidget.h" />
     <ClInclude Include="Source\Editor\UI\Asset\Mesh\MeshEditorWidget.h" />
     <ClInclude Include="Source\Editor\UI\Asset\Mesh\StaticMeshEditorWidget.h" />
@@ -879,6 +882,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Editor\Viewport\EditorViewportClient.h" />
     <ClInclude Include="Source\Editor\Viewport\EditorViewportRenderRequest.h" />
     <ClInclude Include="Source\Editor\Viewport\ViewportCameraTransform.h" />
+    <ClInclude Include="Source\Editor\Viewport\Asset\ClothAssetEditorViewportClient.h" />
     <ClInclude Include="Source\Editor\Viewport\Asset\MeshEditorViewportClient.h" />
     <ClInclude Include="Source\Editor\Viewport\Asset\ParticleEditorViewportClient.h" />
     <ClInclude Include="Source\Editor\Viewport\Asset\StaticMeshEditorViewportClient.h" />

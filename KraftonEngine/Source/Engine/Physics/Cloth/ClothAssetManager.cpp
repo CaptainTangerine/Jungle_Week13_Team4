@@ -4,6 +4,11 @@
 #include "Core/Logging/Log.h"
 #include "Mesh/Skeletal/SkeletalMesh.h"
 #include "Mesh/Static/StaticMesh.h"
+#include "Mesh/Static/StaticMeshAsset.h"
+#include "Mesh/Importer/FbxImporter.h"
+#include "Mesh/Importer/MeshImportOptions.h"
+#include "Mesh/Importer/ObjImporter.h"
+#include "Mesh/Importer/Fbx/FbxImportTypes.h"
 #include "Object/Object.h"
 #include "Physics/Cloth/ClothAsset.h"
 #include "Platform/Paths.h"
@@ -85,6 +90,103 @@ namespace
 				return FPaths::ToUtf8(Candidate.generic_wstring());
 			}
 		}
+	}
+
+	UMaterial* ResolveImportedMaterial(const FStaticMesh& Mesh, const TArray<FStaticMaterial>& Materials)
+	{
+		if (!Mesh.Sections.empty())
+		{
+			const int32 MaterialIndex = Mesh.Sections[0].MaterialIndex;
+			if (MaterialIndex >= 0 && MaterialIndex < static_cast<int32>(Materials.size()))
+			{
+				return Materials[MaterialIndex].MaterialInterface;
+			}
+		}
+
+		return !Materials.empty() ? Materials[0].MaterialInterface : nullptr;
+	}
+
+	void ExtractRawMeshData(
+		const FStaticMesh& Mesh,
+		TArray<FVector>& OutPositions,
+		TArray<FVector4>& OutColors,
+		TArray<FVector2>& OutUVs,
+		TArray<uint32>& OutIndices)
+	{
+		OutPositions.clear();
+		OutColors.clear();
+		OutUVs.clear();
+		OutIndices = Mesh.Indices;
+
+		OutPositions.reserve(Mesh.Vertices.size());
+		OutColors.reserve(Mesh.Vertices.size());
+		OutUVs.reserve(Mesh.Vertices.size());
+
+		for (const FNormalVertex& Vertex : Mesh.Vertices)
+		{
+			OutPositions.push_back(Vertex.pos);
+			OutColors.push_back(Vertex.color);
+			OutUVs.push_back(Vertex.tex);
+		}
+	}
+
+	bool ImportStaticMeshSourceForCloth(
+		const FString& SourcePath,
+		const FImportOptions& ImportOptions,
+		TArray<FVector>& OutPositions,
+		TArray<FVector4>& OutColors,
+		TArray<FVector2>& OutUVs,
+		TArray<uint32>& OutIndices,
+		UMaterial*& OutMaterial,
+		FString* OutError)
+	{
+		FString Extension = FPaths::ToUtf8(std::filesystem::path(FPaths::ToWide(SourcePath)).extension().wstring());
+		std::transform(Extension.begin(), Extension.end(), Extension.begin(), ::tolower);
+
+		FStaticMesh Mesh;
+		TArray<FStaticMaterial> Materials;
+		if (Extension == ".obj")
+		{
+			if (!FObjImporter::Import(SourcePath, ImportOptions, Mesh, Materials))
+			{
+				SetError(OutError, "OBJ import failed.");
+				return false;
+			}
+		}
+		else if (Extension == ".fbx")
+		{
+			FFbxStaticMeshImportResult ImportResult;
+			FString ImportMessage;
+			if (!FFbxImporter::ImportStaticMesh(SourcePath, &ImportOptions, ImportResult, &ImportMessage))
+			{
+				SetError(OutError, ImportMessage.empty() ? FString("FBX static mesh import failed.") : ImportMessage);
+				return false;
+			}
+
+			Mesh = std::move(ImportResult.Mesh);
+			Materials = std::move(ImportResult.Materials);
+		}
+		else
+		{
+			SetError(OutError, "ClothAsset import supports only OBJ and FBX source files.");
+			return false;
+		}
+
+		ExtractRawMeshData(Mesh, OutPositions, OutColors, OutUVs, OutIndices);
+		OutMaterial = ResolveImportedMaterial(Mesh, Materials);
+
+		if (OutPositions.empty())
+		{
+			SetError(OutError, "Imported mesh has no vertices.");
+			return false;
+		}
+		if (OutIndices.size() < 3 || OutIndices.size() % 3 != 0)
+		{
+			SetError(OutError, "Imported mesh has no triangle indices.");
+			return false;
+		}
+
+		return true;
 	}
 
 	template <typename SourceMeshType, typename BuildFn>
@@ -226,6 +328,143 @@ bool FClothAssetManager::Save(UClothAsset* Asset, const FAssetImportMetadata* Me
 	LoadedClothAssets[PackagePath] = Asset;
 	RefreshAvailableClothAssets();
 	return true;
+}
+
+bool FClothAssetManager::CreateFromRawMesh(
+	const FString& SourcePath,
+	const TArray<FVector>& Positions,
+	const TArray<FVector4>& Colors,
+	const TArray<FVector2>& UVs,
+	const TArray<uint32>& Indices,
+	UMaterial* Material,
+	FString& OutPackagePath,
+	UClothAsset** OutAsset,
+	FString* OutError,
+	const FClothAssetBuildOptions& Options)
+{
+	OutPackagePath = BuildUniqueClothAssetPath(SourcePath);
+
+	UClothAsset* Asset = UObjectManager::Get().CreateObject<UClothAsset>();
+	Asset->SetSourcePath(OutPackagePath);
+
+	if (!FClothAssetBuilder::BuildFromRawMesh(Positions, Colors, UVs, Indices, Material, *Asset, Options, OutError))
+	{
+		UObjectManager::Get().DestroyObject(Asset);
+		return false;
+	}
+
+	FAssetImportMetadata Metadata;
+	BuildSourceMetadata(SourcePath, Metadata);
+
+	if (!Save(Asset, &Metadata))
+	{
+		SetError(OutError, "Failed to save ClothAsset package.");
+		UObjectManager::Get().DestroyObject(Asset);
+		return false;
+	}
+
+	if (OutAsset)
+	{
+		*OutAsset = Asset;
+	}
+	return true;
+}
+
+bool FClothAssetManager::CreateFromMeshSourceFile(
+	const FString& SourcePath,
+	const FImportOptions& ImportOptions,
+	FString& OutPackagePath,
+	UClothAsset** OutAsset,
+	FString* OutError,
+	const FClothAssetBuildOptions& BuildOptions)
+{
+	TArray<FVector> Positions;
+	TArray<FVector4> Colors;
+	TArray<FVector2> UVs;
+	TArray<uint32> Indices;
+	UMaterial* Material = nullptr;
+
+	if (!ImportStaticMeshSourceForCloth(SourcePath, ImportOptions, Positions, Colors, UVs, Indices, Material, OutError))
+	{
+		return false;
+	}
+
+	return CreateFromRawMesh(SourcePath, Positions, Colors, UVs, Indices, Material, OutPackagePath, OutAsset, OutError, BuildOptions);
+}
+
+bool FClothAssetManager::ReplaceFromRawMesh(
+	UClothAsset* TargetAsset,
+	const FString& SourcePath,
+	const TArray<FVector>& Positions,
+	const TArray<FVector4>& Colors,
+	const TArray<FVector2>& UVs,
+	const TArray<uint32>& Indices,
+	UMaterial* Material,
+	FString* OutError,
+	const FClothAssetBuildOptions& Options)
+{
+	if (!TargetAsset)
+	{
+		SetError(OutError, "Target ClothAsset is null.");
+		return false;
+	}
+
+	const FString PackagePath = NormalizeProjectPath(TargetAsset->GetSourcePath());
+	if (PackagePath.empty() || PackagePath == "None")
+	{
+		SetError(OutError, "Target ClothAsset has no package path.");
+		return false;
+	}
+
+	UClothAsset* TempAsset = UObjectManager::Get().CreateObject<UClothAsset>();
+	TempAsset->SetSourcePath(PackagePath);
+	if (!FClothAssetBuilder::BuildFromRawMesh(Positions, Colors, UVs, Indices, Material, *TempAsset, Options, OutError))
+	{
+		UObjectManager::Get().DestroyObject(TempAsset);
+		return false;
+	}
+
+	TargetAsset->FabricData = std::move(TempAsset->FabricData);
+	TargetAsset->RestPositions = std::move(TempAsset->RestPositions);
+	TargetAsset->InvMasses = std::move(TempAsset->InvMasses);
+	TargetAsset->Indices = std::move(TempAsset->Indices);
+	TargetAsset->UVs = std::move(TempAsset->UVs);
+	TargetAsset->PinMask = std::move(TempAsset->PinMask);
+	TargetAsset->SetMaterial(TempAsset->GetMaterial());
+	TargetAsset->SetSourcePath(PackagePath);
+
+	UObjectManager::Get().DestroyObject(TempAsset);
+
+	FAssetImportMetadata Metadata;
+	BuildSourceMetadata(SourcePath, Metadata);
+	if (!Save(TargetAsset, &Metadata))
+	{
+		SetError(OutError, "Failed to save ClothAsset package.");
+		return false;
+	}
+
+	return true;
+}
+
+bool FClothAssetManager::ReplaceFromMeshSourceFile(
+	UClothAsset* TargetAsset,
+	const FString& SourcePath,
+	const FImportOptions& ImportOptions,
+	FString* OutError,
+	const FClothAssetBuildOptions& BuildOptions)
+{
+	TArray<FVector> Positions;
+	TArray<FVector4> Colors;
+	TArray<FVector2> UVs;
+	TArray<uint32> Indices;
+	UMaterial* Material = nullptr;
+
+	if (!ImportStaticMeshSourceForCloth(SourcePath, ImportOptions, Positions, Colors, UVs, Indices, Material, OutError))
+	{
+		return false;
+	}
+
+	return ReplaceFromRawMesh(TargetAsset, SourcePath, Positions, Colors, UVs, Indices, Material, OutError, BuildOptions);
 }
 
 bool FClothAssetManager::CreateFromStaticMesh(

@@ -661,9 +661,9 @@ static PxShape* AddAggregateGeometryShapes(
 
 	for (const FKSphylElem& Sphyl : GeometryData.SphylElems)
 	{
-		const float RadiusScale = std::max(AbsScaleY, AbsScaleZ);
+		const float RadiusScale = std::max(AbsScaleX, AbsScaleZ);
 		const float Radius = std::max(Sphyl.Radius * RadiusScale, 0.001f);
-		const float HalfHeight = std::max((Sphyl.Length * 0.5f) * AbsScaleX, 0.001f);
+		const float HalfHeight = std::max((Sphyl.Length * 0.5f) * AbsScaleY, 0.001f);
 		PxTransform LocalPose(
 			ToPxVec3(ScalePosition(Sphyl.Center)),
 			ToPxQuat(Sphyl.Rotation.ToQuaternion()));

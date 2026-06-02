@@ -29,6 +29,11 @@ bool FClothFabricCookedData::IsValid(uint32 ParticleCount) const
 		return false;
 	}
 
+	if (!TetherLengths.empty() && TetherLengths.size() != ParticleCount)
+	{
+		return false;
+	}
+
 	if (!Triangles.empty() && Triangles.size() % 3 != 0)
 	{
 		return false;
@@ -42,6 +47,22 @@ bool FClothFabricCookedData::IsValid(uint32 ParticleCount) const
 	for (uint32 Index : ConstraintIndices)
 	{
 		if (Index >= ParticleCount)
+		{
+			return false;
+		}
+	}
+
+	for (uint32 Anchor : Anchors)
+	{
+		if (Anchor >= ParticleCount)
+		{
+			return false;
+		}
+	}
+
+	for (float TetherLength : TetherLengths)
+	{
+		if (TetherLength < 0.0f)
 		{
 			return false;
 		}

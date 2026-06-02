@@ -12,6 +12,7 @@
 #include "Physics/Asset/PhysicsAsset.h"
 #include "Physics/BodyInstance.h"
 #include "Physics/Cloth/ClothAsset.h"
+#include "Physics/Cloth/ClothAssetBuilder.h"
 #include "Physics/Cloth/ClothAssetManager.h"
 #include "Physics/IPhysicsScene.h"
 #include "Render/Proxy/ClothSceneProxy.h"
@@ -35,6 +36,11 @@
 
 namespace
 {
+	bool IsFiniteFloat(float Value)
+	{
+		return std::isfinite(Value);
+	}
+
 	FVector SafeNormal(FVector Value, const FVector& Fallback)
 	{
 		if (Value.IsNearlyZero())
@@ -106,12 +112,34 @@ namespace
 			|| std::strcmp(PropertyName, "Solver Frequency") == 0
 			|| std::strcmp(PropertyName, "Gravity") == 0
 			|| std::strcmp(PropertyName, "Damping") == 0
+			|| std::strcmp(PropertyName, "TetherScale") == 0
+			|| std::strcmp(PropertyName, "Tether Scale") == 0
+			|| std::strcmp(PropertyName, "Tether Length Scale") == 0
+			|| std::strcmp(PropertyName, "TetherStiffness") == 0
+			|| std::strcmp(PropertyName, "Tether Stiffness") == 0
+			|| std::strcmp(PropertyName, "ConstraintStiffness") == 0
+			|| std::strcmp(PropertyName, "Constraint Stiffness") == 0
+			|| std::strcmp(PropertyName, "BendStiffness") == 0
+			|| std::strcmp(PropertyName, "Bend Stiffness") == 0
+			|| std::strcmp(PropertyName, "CompressionLimit") == 0
+			|| std::strcmp(PropertyName, "Compression Limit") == 0
+			|| std::strcmp(PropertyName, "StretchLimit") == 0
+			|| std::strcmp(PropertyName, "Stretch Limit") == 0
 			|| std::strcmp(PropertyName, "LinearInertia") == 0
 			|| std::strcmp(PropertyName, "Linear Inertia") == 0
 			|| std::strcmp(PropertyName, "AngularInertia") == 0
 			|| std::strcmp(PropertyName, "Angular Inertia") == 0
 			|| std::strcmp(PropertyName, "CentrifugalInertia") == 0
-			|| std::strcmp(PropertyName, "Centrifugal Inertia") == 0;
+			|| std::strcmp(PropertyName, "Centrifugal Inertia") == 0
+			|| std::strcmp(PropertyName, "MaxParticleDistanceFromRest") == 0
+			|| std::strcmp(PropertyName, "Max Particle Distance From Rest") == 0
+			|| std::strcmp(PropertyName, "Motion Constraint Radius") == 0
+			|| std::strcmp(PropertyName, "MotionConstraintStiffness") == 0
+			|| std::strcmp(PropertyName, "Motion Constraint Stiffness") == 0
+			|| std::strcmp(PropertyName, "MotionConstraintScale") == 0
+			|| std::strcmp(PropertyName, "Motion Constraint Scale") == 0
+			|| std::strcmp(PropertyName, "MotionConstraintBias") == 0
+			|| std::strcmp(PropertyName, "Motion Constraint Bias") == 0;
 	}
 
 #if WITH_NVCLOTH
@@ -555,6 +583,9 @@ bool UClothComponent::InitializeSimulation()
 	DebugSimulationLogFrames = 0;
 	CollisionSyncLogFrames = 0;
 
+	FClothAssetBuilder::AppendBendConstraintsFromTriangles(*ClothAsset);
+	FClothAssetBuilder::RebuildTethersFromPins(*ClothAsset);
+
 	const uint32 PinnedParticleCount = CountPinnedParticles(ClothAsset);
 	constexpr uint32 DebugGridSide = 96;
 	constexpr uint32 DebugGridParticleCount = DebugGridSide * DebugGridSide;
@@ -615,15 +646,22 @@ bool UClothComponent::InitializeSimulation()
 	for (uint32 PhaseIndex = 0; PhaseIndex < static_cast<uint32>(Data.PhaseIndices.size()); ++PhaseIndex)
 	{
 		nv::cloth::PhaseConfig Config(static_cast<uint16_t>(PhaseIndex));
-		Config.mStiffness = 1.0f;
-		Config.mCompressionLimit = 1.0f;
-		Config.mStretchLimit = 1.1f;
+		const bool bBendPhase = PhaseIndex > 0;
+		Config.mStiffness = bBendPhase ? std::clamp(BendStiffness, 0.0f, 1.0f) : std::clamp(ConstraintStiffness, 0.0f, 1.0f);
+		Config.mCompressionLimit = std::max(0.0f, CompressionLimit);
+		Config.mStretchLimit = std::max(0.0f, StretchLimit);
 		PhaseConfigs.push_back(Config);
 	}
 	Cloth->setPhaseConfig(MakeNvConstRange(PhaseConfigs));
 	Cloth->setSolverFrequency(SolverFrequency);
 	Cloth->setGravity(ToPxVec3(Gravity));
 	Cloth->setDamping(ToPxVec3(Damping));
+	Cloth->enableContinuousCollision(true);
+	Cloth->setCollisionMassScale(1.0f);
+	Cloth->setFriction(0.5f);
+	Cloth->setTetherConstraintScale(std::max(0.0f, TetherScale));
+	Cloth->setTetherConstraintStiffness(std::clamp(TetherStiffness, 0.0f, 1.0f));
+	ApplyMotionConstraints();
 	Cloth->setLinearInertia(ToPxVec3(LinearInertia));
 	Cloth->setAngularInertia(ToPxVec3(AngularInertia));
 	Cloth->setCentrifugalInertia(ToPxVec3(CentrifugalInertia));
@@ -722,6 +760,49 @@ void UClothComponent::UpdateCollisionFromPhysicsScene()
 			ClearNvClothCollision();
 		}
 	}
+#endif
+}
+
+void UClothComponent::ApplyMotionConstraints()
+{
+#if WITH_NVCLOTH
+	if (!Cloth)
+	{
+		return;
+	}
+
+	const bool bHasMotionRadius = IsFiniteFloat(MaxParticleDistanceFromRest) && MaxParticleDistanceFromRest > 0.0f;
+	const uint32 ParticleCount = Cloth->getNumParticles();
+	if (!bHasMotionRadius || ParticleCount == 0 || InitialParticles.size() < ParticleCount)
+	{
+		Cloth->clearMotionConstraints();
+		Cloth->setMotionConstraintScaleBias(1.0f, 0.0f);
+		Cloth->setMotionConstraintStiffness(0.0f);
+		return;
+	}
+
+	auto MotionConstraints = Cloth->getMotionConstraints();
+	if (MotionConstraints.size() != ParticleCount)
+	{
+		Cloth->clearMotionConstraints();
+		Cloth->setMotionConstraintScaleBias(1.0f, 0.0f);
+		Cloth->setMotionConstraintStiffness(0.0f);
+		return;
+	}
+
+	const float Radius = std::max(0.0f, MaxParticleDistanceFromRest);
+	for (uint32 Index = 0; Index < ParticleCount; ++Index)
+	{
+		const FVector4& InitialParticle = InitialParticles[Index];
+		const float ParticleRadius = InitialParticle.W <= 0.0f ? 0.0f : Radius;
+		MotionConstraints[Index] = physx::PxVec4(InitialParticle.X, InitialParticle.Y, InitialParticle.Z, ParticleRadius);
+	}
+
+	const float Scale = IsFiniteFloat(MotionConstraintScale) ? std::max(0.0f, MotionConstraintScale) : 1.0f;
+	const float Bias = IsFiniteFloat(MotionConstraintBias) ? MotionConstraintBias : 0.0f;
+	const float Stiffness = IsFiniteFloat(MotionConstraintStiffness) ? std::clamp(MotionConstraintStiffness, 0.0f, 1.0f) : 0.0f;
+	Cloth->setMotionConstraintScaleBias(Scale, Bias);
+	Cloth->setMotionConstraintStiffness(Stiffness);
 #endif
 }
 

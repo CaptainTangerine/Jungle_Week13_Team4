@@ -3725,7 +3725,7 @@
   "ClassName" : "UWorld",
   "ContextHandle" : "NewScene",
   "ContextName" : "New Scene",
-  "Name" : "Default",
+  "Name" : "Cloth",
   "ObjectId" : 1,
   "PerspectiveCamera" : {
     "FOV" : 1.047198,

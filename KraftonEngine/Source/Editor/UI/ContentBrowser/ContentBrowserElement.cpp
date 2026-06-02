@@ -22,9 +22,13 @@
 #include "Animation/Skeleton/SkeletonManager.h"
 #include "Physics/Asset/PhysicsAsset.h"
 #include "Physics/Asset/PhysicsAssetManager.h"
+#include "Physics/Cloth/ClothAsset.h"
+#include "Physics/Cloth/ClothAssetManager.h"
+#include "Mesh/Importer/MeshImportOptions.h"
 
 // MeshElement::RenderContextMenu 가 정의보다 앞서 호출하므로 전방 선언.
 static void CreatePhysicsAssetForBinding(ContentBrowserContext& Context, const FSkeletonBinding& Binding, const std::filesystem::path& SourcePath);
+static void ImportMeshSourceAsClothAssetForContentBrowser(ContentBrowserContext& Context, const FString& SourcePath);
 #include "Particle/ParticleSystem.h"
 #include "Particle/Asset/ParticleSystemManager.h"
 #include "Particle/VectorField/VectorFieldAsset.h"
@@ -293,6 +297,30 @@ static bool ImportFgaVectorFieldForContentBrowser(ContentBrowserContext& Context
 
 	Context.bPendingContentRefresh = true;
 	return true;
+}
+
+static void ImportMeshSourceAsClothAssetForContentBrowser(ContentBrowserContext& Context, const FString& SourcePath)
+{
+	if (!Context.EditorEngine)
+	{
+		return;
+	}
+
+	FImportOptions ImportOptions = FImportOptions::Default();
+	FClothAssetBuildOptions BuildOptions;
+	BuildOptions.bBuildDebugPinnedGrid96x96 = false;
+
+	FString CreatedPath;
+	FString Error;
+	UClothAsset* ClothAsset = nullptr;
+	if (FClothAssetManager::Get().CreateFromMeshSourceFile(SourcePath, ImportOptions, CreatedPath, &ClothAsset, &Error, BuildOptions) && ClothAsset)
+	{
+		Context.bPendingContentRefresh = true;
+		Context.EditorEngine->OpenAssetEditorForObject(ClothAsset);
+		return;
+	}
+
+	UE_LOG("ClothAsset import failed: Source=%s Error=%s", SourcePath.c_str(), Error.c_str());
 }
 
 bool ContentBrowserElement::RenameTo(const FString& NewStem, FString* OutError)
@@ -643,6 +671,16 @@ void ObjectElement::RenderContextMenu(ContentBrowserContext& Context)
 
 	FString PackagePath = FPaths::ToUtf8(ContentItem.Path.lexically_relative(FPaths::RootDir()).generic_wstring());
 
+	if (Extension == ".obj")
+	{
+		const FString FilePath = FPaths::ToUtf8(ContentItem.Path.wstring());
+		if (ImGui::MenuItem("Import as Cloth Asset"))
+		{
+			ImportMeshSourceAsClothAssetForContentBrowser(Context, FilePath);
+		}
+		return;
+	}
+
 	if (Extension == ".uasset" && FMeshManager::IsStaticMeshPackage(PackagePath))
 	{
 		if (ImGui::MenuItem("Reimport"))
@@ -847,6 +885,11 @@ void MeshElement::RenderContextMenu(ContentBrowserContext& Context)
 				Context.FbxImportDialog = FFbxSceneImportDialogState {};
 				ReimportOrImportStaticFbxForContentBrowser(Context, FilePath);
 			}
+		}
+
+		if (ImGui::MenuItem("Import as Cloth Asset"))
+		{
+			ImportMeshSourceAsClothAssetForContentBrowser(Context, FilePath);
 		}
 		return;
 	}
@@ -1054,6 +1097,57 @@ void PhysicsAssetElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
 	if (UPhysicsAsset* Asset = FPhysicsAssetManager::Get().Load(PackagePath))
 	{
 		Context.EditorEngine->OpenAssetEditorForObject(Asset);
+	}
+}
+
+void ClothAssetElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
+{
+	if (!Context.EditorEngine)
+	{
+		return;
+	}
+
+	const FString PackagePath = FPaths::ToUtf8(ContentItem.Path.lexically_relative(FPaths::RootDir()).generic_wstring());
+	if (UClothAsset* Asset = FClothAssetManager::Get().Load(PackagePath))
+	{
+		Context.EditorEngine->OpenAssetEditorForObject(Asset);
+	}
+}
+
+void ClothAssetElement::RenderDetail()
+{
+	ContentBrowserElement::RenderDetail();
+
+	const FString PackagePath = FPaths::ToUtf8(ContentItem.Path.lexically_relative(FPaths::RootDir()).generic_wstring());
+	UClothAsset* Asset = FClothAssetManager::Get().Load(PackagePath);
+	if (!Asset)
+	{
+		return;
+	}
+
+	uint32 PinnedCount = 0;
+	const TArray<float>& PinMask = Asset->GetPinMask();
+	const TArray<float>& InvMasses = Asset->GetInvMasses();
+	for (uint32 Index = 0; Index < Asset->GetParticleCount(); ++Index)
+	{
+		const bool bPinnedByMask = Index < PinMask.size() && PinMask[Index] > 0.0f;
+		const bool bPinnedByMass = Index < InvMasses.size() && InvMasses[Index] <= 0.0f;
+		if (bPinnedByMask || bPinnedByMass)
+		{
+			++PinnedCount;
+		}
+	}
+
+	ImGui::Spacing();
+	ImGui::TextUnformatted("Cloth Data");
+	if (ImGui::BeginTable("ClothAssetDetailsTable", 2, ImGuiTableFlags_SizingStretchProp))
+	{
+		ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthFixed, 72.0f);
+		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+		DrawDetailRow("Particles", std::to_string(Asset->GetParticleCount()));
+		DrawDetailRow("Triangles", std::to_string(Asset->GetIndexCount() / 3));
+		DrawDetailRow("Pinned", std::to_string(PinnedCount));
+		ImGui::EndTable();
 	}
 }
 

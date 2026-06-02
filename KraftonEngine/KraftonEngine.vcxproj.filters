@@ -64,6 +64,9 @@
     <Filter Include="Source\Editor\UI\Asset\CameraShake">
       <UniqueIdentifier>{e92a4d79-885d-3fed-53fc-d67b7fb36d18}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Editor\UI\Asset\Cloth">
+      <UniqueIdentifier>{5e6fe1b0-47f7-430e-bb3c-0f62f5d81d7a}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source\Editor\UI\Asset\Curve">
       <UniqueIdentifier>{a9a5d4ee-210d-8455-10fc-cd6653ca56e6}</UniqueIdentifier>
     </Filter>
@@ -707,6 +710,9 @@
     <ClCompile Include="Source\Editor\UI\Asset\CameraShake\CameraShakeEditorWidget.cpp">
       <Filter>Source\Editor\UI\Asset\CameraShake</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Editor\UI\Asset\Cloth\ClothAssetEditorWidget.cpp">
+      <Filter>Source\Editor\UI\Asset\Cloth</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Editor\UI\Asset\Curve\FloatCurveEditorWidget.cpp">
       <Filter>Source\Editor\UI\Asset\Curve</Filter>
     </ClCompile>
@@ -793,6 +799,9 @@
     </ClCompile>
     <ClCompile Include="Source\Editor\Viewport\ViewportCameraTransform.cpp">
       <Filter>Source\Editor\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Editor\Viewport\Asset\ClothAssetEditorViewportClient.cpp">
+      <Filter>Source\Editor\Viewport\Asset</Filter>
     </ClCompile>
     <ClCompile Include="Source\Editor\Viewport\Asset\MeshEditorViewportClient.cpp">
       <Filter>Source\Editor\Viewport\Asset</Filter>
@@ -1829,6 +1838,9 @@
     <ClInclude Include="Source\Editor\UI\Asset\CameraShake\CameraShakeEditorWidget.h">
       <Filter>Source\Editor\UI\Asset\CameraShake</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Editor\UI\Asset\Cloth\ClothAssetEditorWidget.h">
+      <Filter>Source\Editor\UI\Asset\Cloth</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Editor\UI\Asset\Curve\FloatCurveEditorWidget.h">
       <Filter>Source\Editor\UI\Asset\Curve</Filter>
     </ClInclude>
@@ -1927,6 +1939,9 @@
     </ClInclude>
     <ClInclude Include="Source\Editor\Viewport\ViewportCameraTransform.h">
       <Filter>Source\Editor\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Editor\Viewport\Asset\ClothAssetEditorViewportClient.h">
+      <Filter>Source\Editor\Viewport\Asset</Filter>
     </ClInclude>
     <ClInclude Include="Source\Editor\Viewport\Asset\MeshEditorViewportClient.h">
       <Filter>Source\Editor\Viewport\Asset</Filter>

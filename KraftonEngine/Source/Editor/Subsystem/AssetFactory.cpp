@@ -12,6 +12,9 @@
 #include "Particle/VectorField/VectorFieldAsset.h"
 #include "Particle/VectorField/VectorFieldManager.h"
 #include "Platform/Paths.h"
+#include "Physics/Cloth/ClothAsset.h"
+#include "Physics/Cloth/ClothAssetBuilder.h"
+#include "Physics/Cloth/ClothAssetManager.h"
 
 #include <filesystem>
 
@@ -185,6 +188,56 @@ bool FAssetFactory::CreateVectorField(const FString& DirectoryPath, const FStrin
 
 	if (!bSaved)
 	{
+		return false;
+	}
+
+	OutCreatedPath = FPaths::ToUtf8(AssetPath.wstring());
+	return true;
+}
+
+bool FAssetFactory::CreateClothAsset(const FString& DirectoryPath, const FString& AssetName, FString& OutCreatedPath)
+{
+	const std::filesystem::path Directory(FPaths::ToWide(DirectoryPath));
+	if (!std::filesystem::exists(Directory) || !std::filesystem::is_directory(Directory))
+	{
+		return false;
+	}
+
+	const std::filesystem::path AssetPath = BuildUniqueAssetPath(Directory, AssetName.empty() ? FString("NewClothAsset") : AssetName, L".uasset");
+
+	TArray<FVector> Positions;
+	Positions.push_back(FVector(-50.0f, 0.0f, 50.0f));
+	Positions.push_back(FVector(50.0f, 0.0f, 50.0f));
+	Positions.push_back(FVector(-50.0f, 0.0f, -50.0f));
+	Positions.push_back(FVector(50.0f, 0.0f, -50.0f));
+
+	TArray<FVector4> Colors;
+	Colors.assign(Positions.size(), FVector4(1.0f, 1.0f, 1.0f, 1.0f));
+
+	TArray<FVector2> UVs;
+	UVs.push_back(FVector2(0.0f, 0.0f));
+	UVs.push_back(FVector2(1.0f, 0.0f));
+	UVs.push_back(FVector2(0.0f, 1.0f));
+	UVs.push_back(FVector2(1.0f, 1.0f));
+
+	TArray<uint32> Indices = { 0, 1, 2, 1, 3, 2 };
+
+	UClothAsset* NewAsset = UObjectManager::Get().CreateObject<UClothAsset>();
+	NewAsset->SetSourcePath(FPaths::ToUtf8(AssetPath.wstring()));
+
+	FClothAssetBuildOptions BuildOptions;
+	BuildOptions.bBuildDebugPinnedGrid96x96 = false;
+
+	FString Error;
+	if (!FClothAssetBuilder::BuildFromRawMesh(Positions, Colors, UVs, Indices, nullptr, *NewAsset, BuildOptions, &Error))
+	{
+		UObjectManager::Get().DestroyObject(NewAsset);
+		return false;
+	}
+
+	if (!FClothAssetManager::Get().Save(NewAsset))
+	{
+		UObjectManager::Get().DestroyObject(NewAsset);
 		return false;
 	}
 
