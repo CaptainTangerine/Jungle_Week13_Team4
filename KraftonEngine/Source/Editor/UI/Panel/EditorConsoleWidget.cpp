@@ -243,6 +243,10 @@ void FEditorConsoleWidget::RegisterDiagnosticsCommands()
 		"Diagnostics", "stat shadow", "Shows the shadow overlay stat.");
 	RegisterCommand("stat skinning", [this](const TArray<FString>& Args) { HandleStatSkinning(Args); },
 		"Diagnostics", "stat skinning", "Shows the skinning CPU overlay stat.");
+	RegisterCommand("stat physics", [this](const TArray<FString>& Args) { HandleStatPhysics(Args); },
+		"Diagnostics", "stat physics", "Shows the physics overlay stat.");
+	RegisterCommand("stat collision", [this](const TArray<FString>& Args) { HandleStatCollision(Args); },
+		"Diagnostics", "stat collision", "Shows the collision overlay stat.");
 	RegisterCommand("stat none", [this](const TArray<FString>& Args) { HandleStatNone(Args); },
 		"Diagnostics", "stat none", "Hides all overlay stats.");
 	RegisterCommand("cause crash", [this](const TArray<FString>& Args) { HandleCauseCrash(Args); },
