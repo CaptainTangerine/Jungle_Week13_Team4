@@ -41,6 +41,7 @@
           "bHiddenInComponentTree" : false,
           "bIsActive" : true,
           "bIsVisible" : true,
+          "bKinematic" : false,
           "bSimulatePhysics" : false,
           "bTickEnable" : true
         }
@@ -88,6 +89,7 @@
           "bHiddenInComponentTree" : false,
           "bIsActive" : true,
           "bIsVisible" : true,
+          "bKinematic" : false,
           "bSimulatePhysics" : false,
           "bTickEnable" : true
         }
@@ -104,7 +106,7 @@
             "ChassisLength" : 4.000000,
             "ChassisMass" : 1500.000000,
             "ChassisWidth" : 2.000000,
-            "EngineMaxOmega" : 600.000000,
+            "EngineMaxOmega" : 1600.000000,
             "EnginePeakTorque" : 500.000000,
             "MaxSteerAngle" : 30.000000,
             "UpdatedComponent" : {
@@ -136,7 +138,7 @@
         }],
       "ObjectId" : 6,
       "Properties" : {
-        "PendingActorLocation" : [0.000000, 0.000000, 2.000000],
+        "PendingActorLocation" : [0.000000, 0.000000, 3.900571],
         "PendingActorRotation" : [-0.000000, 0.000000, 0.000000],
         "PendingActorScale" : [1.000000, 1.000000, 1.000000],
         "PendingActorVisible" : true,
@@ -158,10 +160,10 @@
               "CenterOfMassOffset" : [0.000000, 0.000000, 0.000000],
               "CollisionEnabled" : 0,
               "Mass" : 1.000000,
-              "MaterialSlots" : ["Content/Material/Auto/M_CubeGrid.mat"],
+              "MaterialSlots" : ["Content/Material/Auto/M_OffroadCar_Wheel.001.mat"],
               "ObjectType" : 0,
-              "RelativeTransform.Location" : [1.650000, 1.000000, -0.500000],
-              "RelativeTransform.Scale" : [0.350000, 0.125000, 0.350000],
+              "RelativeTransform.Location" : [1.050000, 1.000000, 0.400000],
+              "RelativeTransform.Scale" : [1.000000, 1.000000, 1.000000],
               "ResponseContainer" : {
                 "Responses[0]" : 2,
                 "Responses[1]" : 2,
@@ -169,7 +171,7 @@
                 "Responses[3]" : 2,
                 "Responses[4]" : 2
               },
-              "StaticMeshPath" : "Content/Data/BasicShape/Cube_StaticMesh.uasset",
+              "StaticMeshPath" : "Content/Data/car/Wheel_StaticMesh.uasset",
               "bAutoActivate" : true,
               "bCastShadow" : true,
               "bCastShadowAsTwoSided" : false,
@@ -178,6 +180,7 @@
               "bHiddenInComponentTree" : false,
               "bIsActive" : true,
               "bIsVisible" : true,
+              "bKinematic" : false,
               "bSimulatePhysics" : false,
               "bTickEnable" : true
             }
@@ -190,10 +193,10 @@
               "CenterOfMassOffset" : [0.000000, 0.000000, 0.000000],
               "CollisionEnabled" : 0,
               "Mass" : 1.000000,
-              "MaterialSlots" : ["Content/Material/Auto/M_CubeGrid.mat"],
+              "MaterialSlots" : ["Content/Material/Auto/M_OffroadCar_Wheel.001.mat"],
               "ObjectType" : 0,
               "RelativeTransform.Location" : [1.650000, -1.000000, -0.500000],
-              "RelativeTransform.Scale" : [0.350000, 0.125000, 0.350000],
+              "RelativeTransform.Scale" : [1.000000, 1.000000, 1.000000],
               "ResponseContainer" : {
                 "Responses[0]" : 2,
                 "Responses[1]" : 2,
@@ -201,7 +204,7 @@
                 "Responses[3]" : 2,
                 "Responses[4]" : 2
               },
-              "StaticMeshPath" : "Content/Data/BasicShape/Cube_StaticMesh.uasset",
+              "StaticMeshPath" : "Content/Data/car/Wheel_StaticMesh.uasset",
               "bAutoActivate" : true,
               "bCastShadow" : true,
               "bCastShadowAsTwoSided" : false,
@@ -210,6 +213,7 @@
               "bHiddenInComponentTree" : false,
               "bIsActive" : true,
               "bIsVisible" : true,
+              "bKinematic" : false,
               "bSimulatePhysics" : false,
               "bTickEnable" : true
             }
@@ -222,10 +226,10 @@
               "CenterOfMassOffset" : [0.000000, 0.000000, 0.000000],
               "CollisionEnabled" : 0,
               "Mass" : 1.000000,
-              "MaterialSlots" : ["Content/Material/Auto/M_CubeGrid.mat"],
+              "MaterialSlots" : ["Content/Material/Auto/M_OffroadCar_Wheel.001.mat"],
               "ObjectType" : 0,
               "RelativeTransform.Location" : [-1.650000, 1.000000, -0.500000],
-              "RelativeTransform.Scale" : [0.350000, 0.125000, 0.350000],
+              "RelativeTransform.Scale" : [1.000000, 1.000000, 1.000000],
               "ResponseContainer" : {
                 "Responses[0]" : 2,
                 "Responses[1]" : 2,
@@ -233,7 +237,7 @@
                 "Responses[3]" : 2,
                 "Responses[4]" : 2
               },
-              "StaticMeshPath" : "Content/Data/BasicShape/Cube_StaticMesh.uasset",
+              "StaticMeshPath" : "Content/Data/car/Wheel_StaticMesh.uasset",
               "bAutoActivate" : true,
               "bCastShadow" : true,
               "bCastShadowAsTwoSided" : false,
@@ -242,6 +246,7 @@
               "bHiddenInComponentTree" : false,
               "bIsActive" : true,
               "bIsVisible" : true,
+              "bKinematic" : false,
               "bSimulatePhysics" : false,
               "bTickEnable" : true
             }
@@ -254,10 +259,10 @@
               "CenterOfMassOffset" : [0.000000, 0.000000, 0.000000],
               "CollisionEnabled" : 0,
               "Mass" : 1.000000,
-              "MaterialSlots" : ["Content/Material/Auto/M_CubeGrid.mat"],
+              "MaterialSlots" : ["Content/Material/Auto/M_OffroadCar_Wheel.001.mat"],
               "ObjectType" : 0,
               "RelativeTransform.Location" : [-1.650000, -1.000000, -0.500000],
-              "RelativeTransform.Scale" : [0.350000, 0.125000, 0.350000],
+              "RelativeTransform.Scale" : [1.000000, 1.000000, 1.000000],
               "ResponseContainer" : {
                 "Responses[0]" : 2,
                 "Responses[1]" : 2,
@@ -265,7 +270,7 @@
                 "Responses[3]" : 2,
                 "Responses[4]" : 2
               },
-              "StaticMeshPath" : "Content/Data/BasicShape/Cube_StaticMesh.uasset",
+              "StaticMeshPath" : "Content/Data/car/Wheel_StaticMesh.uasset",
               "bAutoActivate" : true,
               "bCastShadow" : true,
               "bCastShadowAsTwoSided" : false,
@@ -274,6 +279,7 @@
               "bHiddenInComponentTree" : false,
               "bIsActive" : true,
               "bIsVisible" : true,
+              "bKinematic" : false,
               "bSimulatePhysics" : false,
               "bTickEnable" : true
             }
@@ -335,9 +341,9 @@
           "CenterOfMassOffset" : [0.000000, 0.000000, 0.000000],
           "CollisionEnabled" : 0,
           "Mass" : 1.000000,
-          "MaterialSlots" : ["Content/Material/Auto/BasicShapeMaterial.mat"],
+          "MaterialSlots" : ["Content/Material/Auto/MI_OffroadCar_Main.001.mat", "Content/Material/Auto/MI_OffroadCar_Lights.001.mat", "Content/Material/Auto/MI_OffroadCar_Seats.001.mat", "Content/Material/Auto/MI_OffroadCar_Suspension.001.mat"],
           "ObjectType" : 0,
-          "RelativeTransform.Location" : [0.000000, 0.000000, 2.000000],
+          "RelativeTransform.Location" : [0.000000, 0.000000, 3.900571],
           "RelativeTransform.Scale" : [1.000000, 1.000000, 1.000000],
           "ResponseContainer" : {
             "Responses[0]" : 2,
@@ -346,7 +352,7 @@
             "Responses[3]" : 2,
             "Responses[4]" : 2
           },
-          "StaticMeshPath" : "Content/Data/BasicShape/Cube_StaticMesh.uasset",
+          "StaticMeshPath" : "Content/Data/car/Body_StaticMesh.uasset",
           "bAutoActivate" : true,
           "bCastShadow" : true,
           "bCastShadowAsTwoSided" : false,
@@ -355,6 +361,7 @@
           "bHiddenInComponentTree" : false,
           "bIsActive" : true,
           "bIsVisible" : true,
+          "bKinematic" : false,
           "bSimulatePhysics" : false,
           "bTickEnable" : true
         }
@@ -402,6 +409,7 @@
               "bHiddenInComponentTree" : false,
               "bIsActive" : true,
               "bIsVisible" : true,
+              "bKinematic" : false,
               "bSimulatePhysics" : false,
               "bTickEnable" : true
             }
@@ -434,6 +442,7 @@
           "bHiddenInComponentTree" : false,
           "bIsActive" : true,
           "bIsVisible" : true,
+          "bKinematic" : false,
           "bSimulatePhysics" : true,
           "bTickEnable" : true
         }
@@ -481,6 +490,7 @@
               "bHiddenInComponentTree" : false,
               "bIsActive" : true,
               "bIsVisible" : true,
+              "bKinematic" : false,
               "bSimulatePhysics" : false,
               "bTickEnable" : true
             }
@@ -513,6 +523,7 @@
           "bHiddenInComponentTree" : false,
           "bIsActive" : true,
           "bIsVisible" : true,
+          "bKinematic" : false,
           "bSimulatePhysics" : true,
           "bTickEnable" : true
         }
@@ -560,6 +571,7 @@
               "bHiddenInComponentTree" : false,
               "bIsActive" : true,
               "bIsVisible" : true,
+              "bKinematic" : false,
               "bSimulatePhysics" : false,
               "bTickEnable" : true
             }
@@ -592,6 +604,7 @@
           "bHiddenInComponentTree" : false,
           "bIsActive" : true,
           "bIsVisible" : true,
+          "bKinematic" : false,
           "bSimulatePhysics" : true,
           "bTickEnable" : true
         }
@@ -639,6 +652,7 @@
               "bHiddenInComponentTree" : false,
               "bIsActive" : true,
               "bIsVisible" : true,
+              "bKinematic" : false,
               "bSimulatePhysics" : false,
               "bTickEnable" : true
             }
@@ -671,6 +685,7 @@
           "bHiddenInComponentTree" : false,
           "bIsActive" : true,
           "bIsVisible" : true,
+          "bKinematic" : false,
           "bSimulatePhysics" : true,
           "bTickEnable" : true
         }
@@ -684,9 +699,9 @@
   "PerspectiveCamera" : {
     "FOV" : 1.047198,
     "FarClip" : 1000.000000,
-    "Location" : [-67.284615, 8.550969, 33.678429],
+    "Location" : [-0.702004, 13.568267, 4.789513],
     "NearClip" : 0.100000,
-    "Rotation" : [0.000000, 25.999962, 5.999972]
+    "Rotation" : [0.000000, 6.649965, 273.747864]
   },
   "Version" : 2,
   "WorldSettings" : {
