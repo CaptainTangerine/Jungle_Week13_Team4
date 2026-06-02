@@ -49,7 +49,12 @@ void FSpatialPartition::ClearQueuedActorFlags()
 {
 	for (AActor* Actor : DirtyActors)
 	{
-		if (Actor)
+		// DirtyActors 는 stale(이미 파괴됐지만 큐에서 아직 제거되지 않은) 포인터를 담을 수 있다
+		// (self-destroy / PhysX onContact 경로 등 — DestroyActor 주석 참고). 널 체크만으론
+		// 파괴된(non-null이지만 dangling) 액터를 못 걸러 SetQueuedForPartitionUpdate 에서 freed
+		// 메모리에 써 크래시한다(EndPlay→Reset 경로). IsValid 는 해시 조회만 하므로 dangling 에도
+		// 안전 — 파티션/옥트리의 다른 코드와 동일한 stale 가드 패턴.
+		if (IsValid(Actor))
 		{
 			Actor->SetQueuedForPartitionUpdate(false);
 		}
