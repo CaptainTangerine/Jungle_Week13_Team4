@@ -20,7 +20,9 @@ enum class EMovementMode : uint8
 //   - Jump: 후속 phase (F-5).
 //
 // Floor detection: IPhysicsScene::Raycast — capsule 중심에서 down 으로 (HalfHeight + Probe).
-// Owner 는 ignore 해서 자기 capsule 안 잡힘. Wall sweep 은 없으므로 벽 통과 가능 (minimal).
+// Owner 는 ignore 해서 자기 capsule 안 잡힘.
+// Wall collision: XY/낙하 이동은 capsule sweep(IPhysicsScene::SweepCapsuleByObjectTypes)으로
+//   벽/장애물을 감지해 표면을 따라 미끄러진다(collide-and-slide). bUseWallCollision 으로 토글.
 
 #include "Source/Engine/Component/Movement/CharacterMovementComponent.generated.h"
 
@@ -79,6 +81,12 @@ public:
 	UPROPERTY(Edit, Save, Category="CharacterMovement", DisplayName="Jump Z Velocity", Min=0.0f, Max=50.0f, Speed=0.1f)
 	float JumpZVelocity      = 6.0f;     // m/s — Jump 시 Velocity.Z 에 박는 값
 
+	// true 면 이동(XY/낙하)을 capsule sweep 으로 처리해 벽/장애물을 통과하지 않고 미끄러진다.
+	// false 면 기존 minimal 동작(충돌 검사 없이 직접 SetWorldLocation). 물리 씬/캡슐이 없으면
+	// true 라도 자동으로 직접 이동 fallback.
+	UPROPERTY(Edit, Save, Category="CharacterMovement", DisplayName="Use Wall Collision")
+	bool  bUseWallCollision  = true;
+
 	// UE 패턴 — true 면 매 frame Updated 의 yaw 를 현재 Velocity.XY 방향으로 lerp 회전.
 	// 이동 중에만 회전 (정지 시 마지막 facing 유지). Pawn::bUseControllerRotationYaw 와 동시
 	// 켜면 이쪽이 마지막 우선 (Component Tick 이 Actor Tick 후 호출). 보통 둘 중 하나만.
@@ -100,6 +108,13 @@ protected:
 	// capsule 중심에서 down raycast — bHit + WorldHitLocation 사용.
 	bool  TraceFloor(FHitResult& OutHit) const;
 	float GetCapsuleHalfHeight() const;
+	float GetCapsuleRadius() const;
+
+	// Updated 를 Delta 만큼 이동 — bUseWallCollision 이면 capsule sweep 으로 벽을 감지해 표면을
+	// 따라 미끄러진다(collide-and-slide). 충돌이 있었으면 true. 물리 씬/캡슐 없으면 직접 이동.
+	//   bLiftOffGround : true 면 sweep 캡슐 바닥을 살짝 띄워 서 있는 바닥이 수평 이동을 막지
+	//                    않게 한다(걷기용). 낙하처럼 바닥이 막아야 하는 이동은 false.
+	bool  SweepCapsuleMove(const FVector& Delta, bool bLiftOffGround);
 
 	FVector       AccumulatedInput = FVector(0.0f, 0.0f, 0.0f);
 	FVector       Velocity         = FVector(0.0f, 0.0f, 0.0f);

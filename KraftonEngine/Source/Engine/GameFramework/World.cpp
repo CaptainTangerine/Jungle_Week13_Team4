@@ -234,6 +234,15 @@ bool UWorld::PhysicsRaycastByObjectTypes(const FVector& Start, const FVector& Di
 	return false;
 }
 
+bool UWorld::PhysicsSweepCapsuleByObjectTypes(const FVector& Start, const FQuat& Rot,
+	float Radius, float HalfHeight, const FVector& Dir, float MaxDist, FHitResult& OutHit,
+	uint32 ObjectTypeMask, const AActor* IgnoreActor) const
+{
+	if (PhysicsScene)
+		return PhysicsScene->SweepCapsuleByObjectTypes(Start, Rot, Radius, HalfHeight, Dir, MaxDist, OutHit, ObjectTypeMask, IgnoreActor);
+	return false;
+}
+
 
 void UWorld::InsertActorToOctree(AActor* Actor)
 {

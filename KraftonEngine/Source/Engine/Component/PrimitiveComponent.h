@@ -152,6 +152,13 @@ public:
 	virtual void SetSimulatePhysics(bool bInSimulate);
 	bool GetSimulatePhysics() const { return bSimulatePhysics; }
 
+	// Kinematic — 코드가 트랜스폼을 구동(비시뮬)하지만 물리 씬엔 "움직이는 강체"로 존재.
+	// static 과 달리 다이내믹(랙돌 등)을 정상적으로 밀어내고, sweep/raycast 가 최신 위치를 본다.
+	// 캐릭터 캡슐처럼 SetWorldLocation 으로 움직이는 콜라이더에 사용. SimulatePhysics 가 켜져 있으면
+	// 그쪽이 우선(full 시뮬) — 이 플래그는 무시된다. (QueryCollision 이 켜져 등록될 때만 효과.)
+	void SetKinematic(bool bInKinematic);
+	bool IsKinematic() const { return bKinematic; }
+
 	// --- Physics Force/Velocity API ---
 	void AddForce(const FVector& Force);
 	void AddForceAtLocation(const FVector& Force, const FVector& Location);
@@ -230,6 +237,8 @@ protected:
 	bool bCastShadowAsTwoSided = false;
 	UPROPERTY(Edit, Save, Category="Collision", DisplayName="Simulate Physics")
 	bool bSimulatePhysics = false;
+	UPROPERTY(Edit, Save, Category="Collision", DisplayName="Kinematic")
+	bool bKinematic = false;
 	UPROPERTY(Edit, Save, Category="Collision", DisplayName="Generate Overlap Events")
 	bool bGenerateOverlapEvents = false;
 

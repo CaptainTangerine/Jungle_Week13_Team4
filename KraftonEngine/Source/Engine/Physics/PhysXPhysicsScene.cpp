@@ -1076,7 +1076,11 @@ void FPhysXPhysicsScene::RegisterComponent(UPrimitiveComponent* Comp)
 		UPrimitiveComponent* RootPrim = Cast<UPrimitiveComponent>(OwnerActor->GetRootComponent());
 		if (!RootPrim) RootPrim = Comp;
 
-		const bool bDynamic = RootPrim->GetSimulatePhysics();
+		// 시뮬레이션(full dynamic) 또는 kinematic(코드 구동, 비시뮬) 이면 PxRigidDynamic.
+		// 둘 다 아니면 정적 월드 지오메트리(PxRigidStatic).
+		const bool bSimulate = RootPrim->GetSimulatePhysics();
+		const bool bMakeKinematic = RootPrim->IsKinematic() && !bSimulate;
+		const bool bDynamic = bSimulate || bMakeKinematic;
 		PxTransform BodyXf = GetPxTransform(RootPrim);
 
 		PxRigidActor* Body = bDynamic
@@ -1086,7 +1090,16 @@ void FPhysXPhysicsScene::RegisterComponent(UPrimitiveComponent* Comp)
 
 		if (PxRigidDynamic* DynamicBody = Body->is<PxRigidDynamic>())
 		{
-			SetDynamicCCDEnabled(DynamicBody, true);
+			if (bMakeKinematic)
+			{
+				// 캐릭터 캡슐 등 코드 구동 콜라이더. eUSE_KINEMATIC_TARGET_FOR_SCENE_QUERIES 로
+				// setKinematicTarget 직후(다음 simulate 이전)에도 sweep/raycast 가 타깃 포즈를 보게 한다.
+				// StartSimulation pre-sync 가 매 프레임 RootComp 트랜스폼을 setKinematicTarget 으로 푸시.
+				DynamicBody->setRigidBodyFlag(PxRigidBodyFlag::eUSE_KINEMATIC_TARGET_FOR_SCENE_QUERIES, true);
+				DynamicBody->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
+			}
+			// 시뮬레이션 바디만 CCD. kinematic 은 자체 CCD 불필요(상대 dynamic 측에서 처리).
+			SetDynamicCCDEnabled(DynamicBody, !bMakeKinematic);
 		}
 
 		Body->userData = OwnerActor;
@@ -1219,7 +1232,7 @@ FPhysicsActorHandle FPhysXPhysicsScene::CreateActor(const FActorCreationParams& 
 			//  - solverIterationCounts: 기본 (4,1)은 관절 체인이 길면 수렴 부족 → 지터/발산.
 			//    (8,2)로 상향해 조인트 안정성 확보.
 			//  (값은 스케일에 따라 튜닝 여지 있음.)
-			NewDynamic->setMaxDepenetrationVelocity(10.0f);
+			NewDynamic->setMaxDepenetrationVelocity(5.0f);
 			NewDynamic->setSolverIterationCounts(8, 2);
 		}
 		NewActor = NewDynamic;
@@ -1776,6 +1789,11 @@ PxShape* FPhysXPhysicsScene::AddShapeForComponent(FBodyMapping& Mapping, UPrimit
 		FKSphylElem Elem;
 		Elem.Radius = Radius;
 		Elem.Length = 2.0f * std::max(HalfHeight - Radius, 0.0f);  // 원통부 길이(반구 제외)
+		// UCapsuleComponent 는 세로(Z축) 캡슐이다(HalfHeight = Z 방향, AABB/렌더 모두 Z).
+		// 그러나 FKSphylElem 규약상 장축은 elem-Y 이고(빌더가 PxCapsule X→elem-Y 로 회전,
+		// 디버그 렌더도 Y 기준), Rotation=identity 면 캡슐이 Y 축으로 누워 등록된다.
+		// Roll +90°(X축 회전)로 elem-Y 를 컴포넌트 Z 로 세워 캐릭터 캡슐이 수직이 되게 한다.
+		Elem.Rotation = FRotator(0.0f, 0.0f, 90.0f);
 		PrimitiveGeom.SphylElems.push_back(Elem);
 		bHasPrimitive = true;
 	}
@@ -2138,6 +2156,112 @@ bool FPhysXPhysicsScene::RaycastByObjectTypes(const FVector& Start, const FVecto
 	const PxRaycastHit& Block = Hit.block;
 	OutHit.bHit = true;
 	OutHit.Distance = Block.distance;
+	OutHit.WorldHitLocation = ToFVector(Block.position);
+	OutHit.ImpactNormal = ToFVector(Block.normal);
+	OutHit.WorldNormal = OutHit.ImpactNormal;
+
+	if (Block.shape && Block.shape->userData)
+	{
+		OutHit.HitComponent = static_cast<UPrimitiveComponent*>(Block.shape->userData);
+		OutHit.HitActor = OutHit.HitComponent->GetOwner();
+	}
+	else if (Block.actor && Block.actor->userData)
+	{
+		OutHit.HitActor = static_cast<AActor*>(Block.actor->userData);
+	}
+
+	return true;
+}
+
+// ============================================================
+// Sweep
+// ============================================================
+
+bool FPhysXPhysicsScene::SweepCapsuleByObjectTypes(const FVector& Start, const FQuat& Rot,
+	float Radius, float HalfHeight, const FVector& Dir, float MaxDist, FHitResult& OutHit,
+	uint32 ObjectTypeMask, const AActor* IgnoreActor) const
+{
+	if (!Scene || ObjectTypeMask == 0) return false;
+
+	// PhysX sweep 은 unit direction 을 요구. 길이 0 이면 sweep 의미 없음.
+	const float DirLen = Dir.Length();
+	if (DirLen <= 1e-6f) return false;
+	const FVector UnitDir = Dir * (1.0f / DirLen);
+
+	// 캡슐 지오메트리 — PhysX 캡슐 halfHeight 는 원통부 반길이(반구 제외)다.
+	// 컴포넌트 HalfHeight(반구 포함)에서 Radius 를 빼서 환산 — AddAggregateGeometryShapes
+	// (FKSphylElem Length = 2*(HalfHeight-Radius)) 와 동일 규약으로 맞춘다.
+	const float SafeRadius = std::max(Radius, 0.001f);
+	const float CylHalfHeight = std::max(HalfHeight - SafeRadius, 0.001f);
+	const PxCapsuleGeometry Capsule(SafeRadius, CylHalfHeight);
+
+	// PhysX 캡슐 장축은 로컬 X. 엔진 캡슐 장축(컴포넌트 로컬 +Z, 중력 -Z 기준 up)에 맞추려면
+	// X→Z 정렬 회전을 먼저 적용하고 그 위에 컴포넌트 월드 회전을 곱한다 (장축 = Rot * +Z).
+	static const PxQuat AlignXToZ(-PxHalfPi, PxVec3(0.0f, 1.0f, 0.0f));
+	const PxTransform Pose(ToPxVec3(Start), ToPxQuat(Rot) * AlignXToZ);
+
+	// RaycastByObjectTypes 와 동일한 ObjectType 마스크 필터. shape 의 word0(ObjectType) 비트가
+	// 마스크에 없으면 제외, IgnoreActor 의 shape 제외. Trigger flag shape 는 PhysX 가 자동 제외.
+	struct FObjectTypeSweepFilter : PxQueryFilterCallback
+	{
+		const AActor* IgnoreActor = nullptr;
+		PxU32 ObjectTypeMask = 0;
+
+		FObjectTypeSweepFilter(const AActor* InIgnoreActor, PxU32 InMask)
+			: IgnoreActor(InIgnoreActor)
+			, ObjectTypeMask(InMask)
+		{
+		}
+
+		PxQueryHitType::Enum preFilter(const PxFilterData&, const PxShape* Shape, const PxRigidActor* Actor, PxHitFlags&) override
+		{
+			if (IgnoreActor && Actor && Actor->userData == IgnoreActor)
+			{
+				return PxQueryHitType::eNONE;
+			}
+			if (Shape)
+			{
+				const PxFilterData ShapeData = Shape->getQueryFilterData();
+				const PxU32 ShapeObjectBit = 1u << ShapeData.word0;
+				if ((ShapeObjectBit & ObjectTypeMask) == 0)
+				{
+					return PxQueryHitType::eNONE;
+				}
+			}
+			return PxQueryHitType::eBLOCK;
+		}
+
+		PxQueryHitType::Enum postFilter(const PxFilterData&, const PxQueryHit&) override
+		{
+			return PxQueryHitType::eBLOCK;
+		}
+	};
+
+	PxSweepBuffer Hit;
+	PxQueryFilterData FilterData;
+	FilterData.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
+	FObjectTypeSweepFilter FilterCallback(IgnoreActor, ObjectTypeMask);
+
+	// eMTD: 시작 위치에서 이미 겹쳐 있을 때(초기 침투)에도 depenetration 방향/깊이를 얻는다.
+	// 없으면 초기 침투 시 normal/position 이 미정의로 반환되어 슬라이드 해소에 쓸 수 없다.
+	const PxHitFlags HitFlags = PxHitFlag::eDEFAULT | PxHitFlag::eMTD;
+	const bool bStatus = Scene->sweep(Capsule, Pose, ToPxVec3(UnitDir), MaxDist, Hit, HitFlags, FilterData, &FilterCallback);
+	if (!bStatus || !Hit.hasBlock) return false;
+
+	const PxSweepHit& Block = Hit.block;
+	OutHit.bHit = true;
+
+	// 초기 침투면 distance 가 음수(= 침투 깊이)로 온다 — Distance 0, PenetrationDepth 에 깊이.
+	if (Block.distance < 0.0f)
+	{
+		OutHit.Distance = 0.0f;
+		OutHit.PenetrationDepth = -Block.distance;
+	}
+	else
+	{
+		OutHit.Distance = Block.distance;
+		OutHit.PenetrationDepth = 0.0f;
+	}
 	OutHit.WorldHitLocation = ToFVector(Block.position);
 	OutHit.ImpactNormal = ToFVector(Block.normal);
 	OutHit.WorldNormal = OutHit.ImpactNormal;

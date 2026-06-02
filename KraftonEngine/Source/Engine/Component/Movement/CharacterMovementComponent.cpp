@@ -260,11 +260,13 @@ void UCharacterMovementComponent::TickWalking(float DeltaTime, const FVector& Ro
 	Velocity.Z = 0.0f;
 
 	// XY 이동: input velocity * dt + root motion XY (이미 world frame).
+	// sweep 으로 벽/장애물을 감지해 표면을 따라 미끄러진다(collide-and-slide). Z=0 평면 이동이라
+	// 바닥(거의 수평면)은 보통 안 잡히고, 잡혀도 floor stick 이 아래 Z 를 재확정한다.
 	const FVector XYOffset(
 		Velocity.X * DeltaTime + RootMotionWorldXY.X,
 		Velocity.Y * DeltaTime + RootMotionWorldXY.Y,
 		0.0f);
-	Updated->SetWorldLocation(Updated->GetWorldLocation() + XYOffset);
+	SweepCapsuleMove(XYOffset, /*bLiftOffGround=*/true);
 
 	// Floor 잡혔는지 — 이동 직후 위치에서 다시 trace.
 	FHitResult Floor;
@@ -289,11 +291,13 @@ void UCharacterMovementComponent::TickFalling(float DeltaTime, const FVector& Ro
 	Velocity.Z -= Gravity * DeltaTime;
 
 	// Velocity * dt 의 XY 에 root motion XY 합산. Z 는 gravity 가 책임이라 root motion 무시.
+	// 낙하 중에도 sweep 으로 벽/천장/장애물을 통과하지 않고 미끄러진다. 아래 floor 체크가
+	// 착지(Z 보정 + Walking 전환)를 별도로 처리하므로 여기선 벽 막힘만 담당.
 	const FVector Offset(
 		Velocity.X * DeltaTime + RootMotionWorldXY.X,
 		Velocity.Y * DeltaTime + RootMotionWorldXY.Y,
 		Velocity.Z * DeltaTime);
-	Updated->SetWorldLocation(Updated->GetWorldLocation() + Offset);
+	SweepCapsuleMove(Offset, /*bLiftOffGround=*/false);
 
 	// 올라가는 중 (점프 arc 상승) 엔 floor 체크 skip — 안 그러면 점프 직후 1 frame 의
 	// 작은 상승 (≈ JumpZVelocity * dt) 이 raycast probe 거리 안에 있어 즉시 착지로 잡힘.
@@ -347,6 +351,134 @@ float UCharacterMovementComponent::GetCapsuleHalfHeight() const
 		return Cap->GetScaledCapsuleHalfHeight();
 	}
 	return 0.0f;
+}
+
+float UCharacterMovementComponent::GetCapsuleRadius() const
+{
+	if (UCapsuleComponent* Cap = Cast<UCapsuleComponent>(GetUpdatedComponent()))
+	{
+		return Cap->GetScaledCapsuleRadius();
+	}
+	return 0.0f;
+}
+
+bool UCharacterMovementComponent::SweepCapsuleMove(const FVector& Delta, bool bLiftOffGround)
+{
+	USceneComponent* Updated = GetUpdatedComponent();
+	if (!Updated) return false;
+
+	AActor* Owner = GetOwner();
+	UWorld* World = Owner ? Owner->GetWorld() : nullptr;
+	const float Radius     = GetCapsuleRadius();
+	const float HalfHeight = GetCapsuleHalfHeight();
+
+	const FVector Start = Updated->GetWorldLocation();
+
+	// 물리 씬/캡슐이 없거나 wall collision off → 기존 minimal 동작(직접 이동) fallback.
+	if (!bUseWallCollision || !World || !World->GetPhysicsScene() || Radius <= 0.0f || HalfHeight <= 0.0f)
+	{
+		Updated->SetWorldLocation(Start + Delta);
+		return false;
+	}
+
+	const float TotalDist = Delta.Length();
+	if (TotalDist <= 1e-5f) return false;
+
+	// 벽 후보: 정적 월드(WorldStatic)만. 동적(WorldDynamic=랙돌 등)은 제외 — 캐릭터가 바닥에
+	// 가라앉아 박힌 동적 바디에 끌려다니는 사고를 막고, 목표(맵의 벽 충돌)에 집중한다.
+	// 동적 장애물 충돌이 필요해지면 별도로 신중히 추가.
+	constexpr uint32 WallMask = ObjectTypeBit(ECollisionChannel::WorldStatic);
+	// 표면에서 살짝 떨어뜨려(skin) 다음 sweep 이 접촉 상태에서 시작해 0 거리로 끼는 걸 방지.
+	constexpr float ContactOffset = 0.01f;
+	constexpr int   MaxSlides     = 4;
+	// 초기 침투 시 한 프레임에 밀어내는 최대량(작게) — 깊이 박혀도 부드럽게 빠져나오게 해
+	// 수평 폭주/드래그를 막는다. 박힘은 여러 프레임에 걸쳐 서서히 해소.
+	const float MaxDepenStep = std::max(2.0f * ContactOffset, Radius * 0.05f);
+
+	// 걷기 수평 이동에서 "발밑 바닥(서 있는 면)"이 벽처럼 잡혀 캐릭터가 끼거나 튕기는 것을
+	// 막기 위해 sweep 캡슐 바닥을 살짝 띄운다(중심 ↑c, 반높이 ↓c → 바닥 +2c, 천장 그대로).
+	// 작은 값이라 벽 충돌엔 영향이 거의 없다. 낙하 중엔 바닥이 하강을 막아야 하므로 0.
+	const float GroundClearance = bLiftOffGround
+		? std::max(2.0f * ContactOffset, Radius * 0.02f)
+		: 0.0f;
+	const FVector SweepCenterOffset(0.0f, 0.0f, GroundClearance);
+	const float   SweepHalfHeight = std::max(HalfHeight - GroundClearance, Radius);
+
+	const FQuat Rot = Updated->GetWorldRotation().ToQuaternion();
+
+	// 한 프레임 변위(슬라이드 + 침투 해소)를 "이번 이동량 + 침투 해소 한 스텝 + 약간" 으로
+	// 제한한다. 이보다 크게 튀면(박힘 깊을 때) floor probe 밖으로 나가 TraceFloor 가 바닥을
+	// 놓치고 Falling 에 갇혀 폭주한다. 침투 해소를 작게 두므로 이 상한도 작게 유지된다.
+	const float MoveCap = TotalDist + MaxDepenStep + 2.0f * ContactOffset;
+
+	FVector Position    = Start;
+	FVector Remaining   = Delta;
+	bool    bHitAny     = false;
+
+	for (int Iter = 0; Iter < MaxSlides; ++Iter)
+	{
+		const float Dist = Remaining.Length();
+		if (Dist <= 1e-5f) break;
+		const FVector Dir = Remaining * (1.0f / Dist);
+
+		FHitResult Hit;
+		const bool bBlocked = World->PhysicsSweepCapsuleByObjectTypes(
+			Position + SweepCenterOffset, Rot, Radius, SweepHalfHeight, Dir, Dist, Hit, WallMask, Owner);
+		if (!bBlocked)
+		{
+			Position = Position + Remaining;   // 막힘 없음 — 전부 이동하고 종료.
+			break;
+		}
+
+		const FVector Normal = Hit.ImpactNormal;
+		// 퇴화된 normal(0 또는 비단위) — 더 진행하지 않고 안전하게 종료(잘못된 방향 누적 방지).
+		if (Normal.Dot(Normal) < 0.5f) break;
+
+		bHitAny = true;
+
+		if (Hit.PenetrationDepth > 0.0f)
+		{
+			// 시작부터 겹침(초기 침투). 핵심: 이걸 "이동 차단"으로 처리하면 안 된다 —
+			// 깊이 박혔을 때 내려가려는(낙하) 이동이 통째로 수평 밀어내기로 바뀌어 캐릭터가
+			// 한 방향으로 끌려가며 바닥에 가라앉는다. 대신:
+			//  1) 표면 밖으로 "작게" 한 스텝만 부드럽게 밀어낸다(MaxDepenStep). 깊이 박혀도
+			//     여러 프레임에 걸쳐 서서히 빠져나온다.
+			//  2) 남은 이동 중 표면으로 더 "파고드는" 성분만 제거(접선/바깥 이동은 허용 →
+			//     낙하·정상 이동은 그대로 진행). 그래야 가라앉지 않고 자연히 빠져나온다.
+			//  3) 같은 프레임에 남은 이동을 적용하고 종료(재-sweep 으로 같은 겹침을 다시 잡아
+			//     무한히 밀어내는 ooze 방지).
+			const float Push = std::min(Hit.PenetrationDepth, MaxDepenStep);
+			Position = Position + Normal * Push;
+			const float Into = Remaining.Dot(Normal);
+			if (Into < 0.0f)
+			{
+				Remaining = Remaining - Normal * Into;   // 파고드는 성분만 제거(슬라이드)
+			}
+			Position = Position + Remaining;
+			break;
+		}
+
+		// 표면 직전(skin 만큼 여유)까지 이동.
+		const float Travel = std::max(Hit.Distance - ContactOffset, 0.0f);
+		Position = Position + Dir * Travel;
+
+		// 남은 이동량을 벽 평면에 투영 → 표면을 따라 미끄러짐(slide).
+		FVector LeftOver = Remaining - Dir * Travel;
+		LeftOver = LeftOver - Normal * LeftOver.Dot(Normal);
+		Remaining = LeftOver;
+	}
+
+	// 안전 클램프: 어떤 경로로도 한 프레임 이동량(MoveCap) 이상으로 튀지 않게 해
+	// sweep/normal/침투 이상에 의한 폭주를 구조적으로 차단.
+	FVector Disp = Position - Start;
+	const float DispLen = Disp.Length();
+	if (DispLen > MoveCap && DispLen > 1e-5f)
+	{
+		Position = Start + Disp * (MoveCap / DispLen);
+	}
+
+	Updated->SetWorldLocation(Position);
+	return bHitAny;
 }
 
 void UCharacterMovementComponent::Serialize(FArchive& Ar)

@@ -115,4 +115,18 @@ public:
 	// Trigger flag shape 는 PhysX query 단계에서 자동 제외.
 	virtual bool RaycastByObjectTypes(const FVector& Start, const FVector& Dir, float MaxDist, FHitResult& OutHit,
 		uint32 ObjectTypeMask, const AActor* IgnoreActor = nullptr) const = 0;
+
+	// --- Sweep ---
+	// 캡슐을 Start 에서 Dir 방향으로 MaxDist 만큼 쓸어(sweep) 최초 Block hit 을 반환.
+	// 벽/장애물 충돌 해소(sweep-and-slide)용 — point raycast 와 달리 캡슐 반경을 고려한다.
+	//   Radius/HalfHeight : UCapsuleComponent 와 동일 의미 (HalfHeight 는 반구 포함 전체 반높이).
+	//   Rot               : 캡슐의 월드 회전(보통 컴포넌트 월드 회전). 캡슐 장축은 Rot 의 +Z 로 정렬.
+	//   ObjectTypeMask    : RaycastByObjectTypes 와 동일 — hit 후보 shape 의 ObjectType 비트마스크 필터.
+	//                       예: ObjectTypeBit(WorldStatic) | ObjectTypeBit(WorldDynamic).
+	//   IgnoreActor       : 자기 자신/소유 액터 제외.
+	// 시작 위치에서 이미 겹쳐 있으면(초기 침투) OutHit.Distance=0, OutHit.PenetrationDepth 에 침투
+	// 깊이, ImpactNormal 에 depenetration 방향이 채워진다(eMTD).
+	virtual bool SweepCapsuleByObjectTypes(const FVector& Start, const FQuat& Rot,
+		float Radius, float HalfHeight, const FVector& Dir, float MaxDist, FHitResult& OutHit,
+		uint32 ObjectTypeMask, const AActor* IgnoreActor = nullptr) const = 0;
 };

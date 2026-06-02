@@ -137,6 +137,15 @@ void UPrimitiveComponent::SetSimulatePhysics(bool bInSimulate)
 	NotifyPhysicsBodyDirty();
 }
 
+void UPrimitiveComponent::SetKinematic(bool bInKinematic)
+{
+	if (bKinematic == bInKinematic) return;
+	bKinematic = bInKinematic;
+	// static ↔ kinematic 은 PxActor 타입 변경이라 body 재구성 필요. NotifyPhysicsBodyDirty 는
+	// BeginPlay 전이면 멤버만 바꾸고 skip → BeginPlay 의 최초 등록이 올바른 타입으로 만든다.
+	NotifyPhysicsBodyDirty();
+}
+
 void UPrimitiveComponent::MarkProxyDirty(EDirtyFlag Flag) const
 {
 	if (!SceneProxy || !Owner || !Owner->GetWorld()) return;
