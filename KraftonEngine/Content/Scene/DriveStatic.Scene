@@ -289,6 +289,12 @@
                   "CameraState.NearZ" : 0.100000,
                   "CameraState.OrthoWidth" : 10.000000,
                   "CameraState.bIsOrthogonal" : false,
+                  "PostProcessSettings" : {
+                    "Aperture" : 0.500000,
+                    "DOFSample" : 32,
+                    "FocalLength" : 15.000000,
+                    "FocusDistance" : 20.000000
+                  },
                   "RelativeTransform.Location" : [0.000000, 0.000000, 0.000000],
                   "RelativeTransform.Scale" : [1.000000, 1.000000, 1.000000],
                   "bAutoActivate" : true,
@@ -678,9 +684,9 @@
   "PerspectiveCamera" : {
     "FOV" : 1.047198,
     "FarClip" : 1000.000000,
-    "Location" : [-12.000000, -12.000000, 7.000000],
+    "Location" : [-67.284615, 8.550969, 33.678429],
     "NearClip" : 0.100000,
-    "Rotation" : [0.000000, 20.000000, 44.849998]
+    "Rotation" : [0.000000, 25.999962, 5.999972]
   },
   "Version" : 2,
   "WorldSettings" : {
