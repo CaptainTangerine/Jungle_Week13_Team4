@@ -5,6 +5,8 @@ set ROOT_DIR=%~dp0..
 set PHYSX_DIR=%ROOT_DIR%\KraftonEngine\ThirdParty\PhysX\physx
 set PHYSX_SOLUTION=%PHYSX_DIR%\compiler\vc17win64\PhysXSDK.sln
 set PM_python_PATH=%ROOT_DIR%\Scripts\python
+set NO_PAUSE=0
+if /I "%~1"=="--no-pause" set NO_PAUSE=1
 
 set "_KEEP_PATH=%PATH%"
 set "PATH="
@@ -14,14 +16,14 @@ set "_KEEP_PATH="
 if not exist "%PHYSX_DIR%\generate_projects.bat" (
     echo PhysX SDK was not found at:
     echo   %PHYSX_DIR%
-    pause
+    if "%NO_PAUSE%"=="0" pause
     exit /b 1
 )
 
 if not exist "%PM_python_PATH%\python.exe" (
     echo Bundled Python was not found at:
     echo   %PM_python_PATH%\python.exe
-    pause
+    if "%NO_PAUSE%"=="0" pause
     exit /b 1
 )
 
@@ -52,14 +54,14 @@ if not defined VS_PATH (
 if not defined VS_PATH (
     echo Visual Studio was not found. Please install Visual Studio 2019 or later
     echo with "Desktop development with C++" workload.
-    pause
+    if "%NO_PAUSE%"=="0" pause
     exit /b 1
 )
 
 call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -no_logo -arch=x64 -host_arch=x64
 if %ERRORLEVEL% neq 0 (
     echo Failed to initialize Visual Studio build environment.
-    pause
+    if "%NO_PAUSE%"=="0" pause
     exit /b %ERRORLEVEL%
 )
 
@@ -85,7 +87,7 @@ if %ERRORLEVEL% neq 0 (
         echo CMake was not found.
         echo Install CMake and add it to PATH, or place cmake.exe at:
         echo   %PHYSX_DIR%\..\externals\cmake\x64\bin\cmake.exe
-        pause
+        if "%NO_PAUSE%"=="0" pause
         exit /b 1
     )
 )
@@ -95,24 +97,24 @@ cd /d "%PHYSX_DIR%"
 call generate_projects.bat vc17win64
 if %ERRORLEVEL% neq 0 (
     echo Failed to generate PhysX vc17win64 projects.
-    pause
+    if "%NO_PAUSE%"=="0" pause
     exit /b %ERRORLEVEL%
 )
 
 msbuild "%PHYSX_SOLUTION%" /p:Configuration=debug /p:Platform=x64 /m /v:minimal
 if %ERRORLEVEL% neq 0 (
     echo Failed to build PhysX debug x64.
-    pause
+    if "%NO_PAUSE%"=="0" pause
     exit /b %ERRORLEVEL%
 )
 
 msbuild "%PHYSX_SOLUTION%" /p:Configuration=release /p:Platform=x64 /m /v:minimal
 if %ERRORLEVEL% neq 0 (
     echo Failed to build PhysX release x64.
-    pause
+    if "%NO_PAUSE%"=="0" pause
     exit /b %ERRORLEVEL%
 )
 
 echo.
 echo PhysX build complete.
-pause
+if "%NO_PAUSE%"=="0" pause

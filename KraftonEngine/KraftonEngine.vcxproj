@@ -2157,6 +2157,9 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
   <PropertyGroup>
     <PythonExe Condition="'$(PythonExe)'==''">$(MSBuildProjectDirectory)\..\Scripts\python\python.exe</PythonExe>
   </PropertyGroup>
+  <Target Name="EnsurePhysXBuilt" BeforeTargets="PrepareForBuild" Condition="'$(Platform)'=='x64'">
+    <Exec Command="&quot;$(MSBuildProjectDirectory)\..\Scripts\EnsurePhysX.bat&quot; &quot;$(Configuration)&quot;" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
   <Target Name="GenerateReflectionHeaders" BeforeTargets="ClCompile">
     <Exec Command="&quot;$(PythonExe)&quot; &quot;$(MSBuildProjectDirectory)\..\Scripts\GenerateHeaders.py&quot; --root &quot;$(MSBuildProjectDirectory)&quot;" WorkingDirectory="$(MSBuildProjectDirectory)" />
   </Target>

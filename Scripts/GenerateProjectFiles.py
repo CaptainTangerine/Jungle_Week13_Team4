@@ -121,7 +121,7 @@ FMOD_RELEASE_DLL = "fmod.dll"
 
 # PhysX SDK config. Debug links against PhysX debug so the MSVC runtime
 # matches /MDd. Release-like builds link against PhysX release.
-# Build it with Scripts\\BuildPhysX.bat first.
+# Scripts\\EnsurePhysX.bat builds it on demand when the libs are missing.
 PHYSX_BIN_ROOTS = [
     "ThirdParty\\PhysX\\physx\\bin\\win.x86_64.vc142.md",
     "ThirdParty\\PhysX\\physx\\bin\\win.x86_64.vc143.md",
@@ -151,6 +151,7 @@ def physx_config_for(cfg):
 # 빌드 시작 직전(PreBuildEvent)과 ClCompile 직전(GenerateReflectionHeaders target)
 # 두 위치에 모두 박는다 — VS IDE / msbuild 호출 경로 모두 커버.
 GENERATE_HEADERS_TOOL = "..\\Scripts\\GenerateHeaders.py"
+ENSURE_PHYSX_TOOL = "..\\Scripts\\EnsurePhysX.bat"
 
 # Lua (LuaJIT, 5.1 ABI) — lua51.dll 은 .gitignore 의 **/[Bb]in/* 에 걸려 있어
 # 팀원이 직접 ThirdParty\\lua\\bin\\lua51.dll 위치에 배치해야 한다 (LuaJIT 배포본).
@@ -528,6 +529,17 @@ def generate_vcxproj(files: dict[str, list[str]]):
     ET.SubElement(pg, "PythonExe", Condition="'$(PythonExe)'==''").text = (
         "$(MSBuildProjectDirectory)\\..\\Scripts\\python\\python.exe"
     )
+    ensure_physx = ET.SubElement(proj, "Target",
+                                 Name="EnsurePhysXBuilt",
+                                 BeforeTargets="PrepareForBuild",
+                                 Condition="'$(Platform)'=='x64'")
+    ET.SubElement(ensure_physx, "Exec",
+                  Command=(
+                      f'"$(MSBuildProjectDirectory)\\{ENSURE_PHYSX_TOOL}"'
+                      f' "$(Configuration)"'
+                  ),
+                  WorkingDirectory="$(MSBuildProjectDirectory)")
+
     refl = ET.SubElement(proj, "Target",
                          Name="GenerateReflectionHeaders",
                          BeforeTargets="ClCompile")
