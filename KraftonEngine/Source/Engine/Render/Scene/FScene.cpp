@@ -212,6 +212,18 @@ void FScene::UpdateDirtyProxies()
 			Proxy->UpdateVisibility();
 		}
 	}
+
+	// dirty-flag 와 무관한 매 프레임 동적 스냅샷(스킨 행렬 등). 스켈레탈 프록시는 애니메이션으로
+	// 매 프레임 변하지만 프록시를 dirty 로 만들지 않으므로(재생성 방지) 여기서 전체를 순회한다.
+	// 컴포넌트 상태를 프록시에 복사해, 이후 렌더 제출이 live 컴포넌트를 읽지 않게 한다(렌더 스레드 전제).
+	// 대부분 프록시는 no-op 가상 호출 — 추후 스켈레탈 전용 리스트로 최적화 여지.
+	for (FPrimitiveSceneProxy* Proxy : Proxies)
+	{
+		if (Proxy && Proxy->Owner)
+		{
+			Proxy->UpdateRenderSnapshot();
+		}
+	}
 }
 
 // ============================================================
