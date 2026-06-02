@@ -4,7 +4,9 @@
 
 #if WITH_NVCLOTH
 #include "NvCloth/Callbacks.h"
+#include "NvCloth/Cloth.h"
 #include "NvCloth/Factory.h"
+#include "NvCloth/Solver.h"
 
 #include <foundation/PxErrorCallback.h>
 #include <malloc.h>
@@ -69,9 +71,20 @@ bool FNvClothSystem::Initialize()
 		return false;
 	}
 
+	UE_LOG("[NvCloth] Creating CPU solver");
+	Solver = Factory->createSolver();
+	if (!Solver)
+	{
+		NvClothDestroyFactory(Factory);
+		Factory = nullptr;
+		UE_LOG("[NvCloth] Failed to create CPU solver");
+		return false;
+	}
+
 	bInitialized = true;
-	UE_LOG("[NvCloth] CPU factory initialized (Factory=%p, CUDA=%d, DX=%d)",
+	UE_LOG("[NvCloth] CPU factory initialized (Factory=%p, Solver=%p, CUDA=%d, DX=%d)",
 		Factory,
+		Solver,
 		NvClothCompiledWithCudaSupport() ? 1 : 0,
 		NvClothCompiledWithDxSupport() ? 1 : 0);
 	return true;
@@ -84,6 +97,13 @@ bool FNvClothSystem::Initialize()
 void FNvClothSystem::Shutdown()
 {
 #if WITH_NVCLOTH
+	if (Solver)
+	{
+		delete Solver;
+		Solver = nullptr;
+		UE_LOG("[NvCloth] CPU solver destroyed");
+	}
+
 	if (Factory)
 	{
 		NvClothDestroyFactory(Factory);
@@ -94,3 +114,46 @@ void FNvClothSystem::Shutdown()
 
 	bInitialized = false;
 }
+
+#if WITH_NVCLOTH
+bool FNvClothSystem::AddCloth(nv::cloth::Cloth* Cloth)
+{
+	if (!Solver || !Cloth)
+	{
+		return false;
+	}
+
+	Solver->addCloth(Cloth);
+	return true;
+}
+
+void FNvClothSystem::RemoveCloth(nv::cloth::Cloth* Cloth)
+{
+	if (Solver && Cloth)
+	{
+		Solver->removeCloth(Cloth);
+	}
+}
+
+bool FNvClothSystem::Simulate(float DeltaTime)
+{
+	if (!Solver || DeltaTime <= 0.0f)
+	{
+		return false;
+	}
+
+	if (!Solver->beginSimulation(DeltaTime))
+	{
+		return false;
+	}
+
+	const int ChunkCount = Solver->getSimulationChunkCount();
+	for (int Chunk = 0; Chunk < ChunkCount; ++Chunk)
+	{
+		Solver->simulateChunk(Chunk);
+	}
+	Solver->endSimulation();
+
+	return !Solver->hasError();
+}
+#endif

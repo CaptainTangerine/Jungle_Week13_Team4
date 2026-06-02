@@ -32,6 +32,7 @@ enum class EPrimitiveProxyFlags : uint16
 	SkeletalMesh	= 1 << 10,
 	ParticleSystem	= 1 << 11,
 	PhysicsAssetDebug = 1 << 12,	// PhysicsAsset 콜리전 프리미티브 와이어프레임 (에디터 미리보기)
+	Cloth			= 1 << 13,
 };
 
 inline EPrimitiveProxyFlags  operator|(EPrimitiveProxyFlags A, EPrimitiveProxyFlags B)  { return static_cast<EPrimitiveProxyFlags>(static_cast<uint16>(A) | static_cast<uint16>(B)); }

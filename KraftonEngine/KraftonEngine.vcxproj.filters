@@ -274,6 +274,9 @@
     <Filter Include="Source\Engine\Physics\Asset">
       <UniqueIdentifier>{2b8b7095-ed81-73fd-94d5-c4642b32a800}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Engine\Physics\Cloth">
+      <UniqueIdentifier>{ac261437-abe9-47fb-9f1c-bd9fa3a10ea1}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source\Engine\Platform">
       <UniqueIdentifier>{813e0a37-91de-2afc-805f-1a0f801727b9}</UniqueIdentifier>
     </Filter>
@@ -1019,6 +1022,9 @@
     <ClCompile Include="Source\Engine\Component\Primitive\BillboardComponent.cpp">
       <Filter>Source\Engine\Component\Primitive</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Component\Primitive\ClothComponent.cpp">
+      <Filter>Source\Engine\Component\Primitive</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Component\Primitive\CylindricalBillboardComponent.cpp">
       <Filter>Source\Engine\Component\Primitive</Filter>
     </ClCompile>
@@ -1385,6 +1391,9 @@
     <ClCompile Include="Source\Engine\Physics\Asset\PhysicsAssetManager.cpp">
       <Filter>Source\Engine\Physics\Asset</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Physics\Cloth\ClothAsset.cpp">
+      <Filter>Source\Engine\Physics\Cloth</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Platform\CrashDump.cpp">
       <Filter>Source\Engine\Platform</Filter>
     </ClCompile>
@@ -1455,6 +1464,9 @@
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\Proxy\BoneDebugSceneProxy.cpp">
+      <Filter>Source\Engine\Render\Proxy</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Proxy\ClothSceneProxy.cpp">
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\Proxy\CylindricalBillboardSceneProxy.cpp">
@@ -2174,6 +2186,9 @@
     <ClInclude Include="Source\Engine\Component\Primitive\BillboardComponent.h">
       <Filter>Source\Engine\Component\Primitive</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Component\Primitive\ClothComponent.h">
+      <Filter>Source\Engine\Component\Primitive</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Component\Primitive\CylindricalBillboardComponent.h">
       <Filter>Source\Engine\Component\Primitive</Filter>
     </ClInclude>
@@ -2648,6 +2663,9 @@
     <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAssetTypes.h">
       <Filter>Source\Engine\Physics\Asset</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\Cloth\ClothAsset.h">
+      <Filter>Source\Engine\Physics\Cloth</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Platform\ConsoleHelper.h">
       <Filter>Source\Engine\Platform</Filter>
     </ClInclude>
@@ -2733,6 +2751,9 @@
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Proxy\BoneDebugSceneProxy.h">
+      <Filter>Source\Engine\Render\Proxy</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Proxy\ClothSceneProxy.h">
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Proxy\CylindricalBillboardSceneProxy.h">

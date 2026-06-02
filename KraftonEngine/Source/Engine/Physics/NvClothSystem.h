@@ -11,7 +11,9 @@ namespace nv
 {
 namespace cloth
 {
+class Cloth;
 class Factory;
+class Solver;
 }
 }
 #endif
@@ -28,6 +30,10 @@ public:
 
 #if WITH_NVCLOTH
 	nv::cloth::Factory* GetFactory() const { return Factory; }
+	nv::cloth::Solver* GetSolver() const { return Solver; }
+	bool AddCloth(nv::cloth::Cloth* Cloth);
+	void RemoveCloth(nv::cloth::Cloth* Cloth);
+	bool Simulate(float DeltaTime);
 #endif
 
 private:
@@ -38,5 +44,6 @@ private:
 
 #if WITH_NVCLOTH
 	nv::cloth::Factory* Factory = nullptr;
+	nv::cloth::Solver* Solver = nullptr;
 #endif
 };
