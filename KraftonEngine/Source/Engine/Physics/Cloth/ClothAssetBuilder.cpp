@@ -1,4 +1,4 @@
-#include "Physics/Cloth/ClothAssetBuilder.h"
+﻿#include "Physics/Cloth/ClothAssetBuilder.h"
 
 #include "Materials/Material.h"
 #include "Mesh/Skeletal/SkeletalMesh.h"
@@ -7,7 +7,6 @@
 #include "Mesh/Static/StaticMeshAsset.h"
 
 #include <algorithm>
-#include <cmath>
 
 namespace
 {
@@ -28,9 +27,147 @@ namespace
 		return (static_cast<uint64>(A) << 32) | static_cast<uint64>(B);
 	}
 
-	bool IsVertexColorPinned(const FVector4& Color)
+	FVector CalculateDebugGridCenter(const TArray<FVector>& SourcePositions)
 	{
-		return Color.R > 0.5f && Color.R >= Color.G && Color.R >= Color.B;
+		if (SourcePositions.empty())
+		{
+			return FVector::ZeroVector;
+		}
+
+		FVector Sum = FVector::ZeroVector;
+		for (const FVector& Position : SourcePositions)
+		{
+			Sum = Sum + Position;
+		}
+
+		return Sum * (1.0f / static_cast<float>(SourcePositions.size()));
+	}
+
+	bool BuildDebugPinnedGrid96x96(const TArray<FVector>& SourcePositions, UMaterial* Material, UClothAsset& OutAsset, FString* OutError)
+	{
+		constexpr uint32 GridSide = 96;
+		constexpr uint32 PreviousGridSide = 32;
+		constexpr float PreviousParticleSpacing = 0.2f;
+		constexpr float DebugClothExtent = PreviousParticleSpacing * static_cast<float>(PreviousGridSide - 1);
+		constexpr float DebugParticleSpacing = DebugClothExtent / static_cast<float>(GridSide - 1);
+		constexpr float DebugHalfExtent = DebugClothExtent * 0.5f;
+
+		OutAsset.FabricData = FClothFabricCookedData();
+		OutAsset.RestPositions.clear();
+		OutAsset.Indices.clear();
+		OutAsset.UVs.clear();
+		OutAsset.InvMasses.clear();
+		OutAsset.PinMask.clear();
+		OutAsset.SetMaterial(Material);
+
+		OutAsset.RestPositions.reserve(GridSide * GridSide);
+		OutAsset.UVs.reserve(GridSide * GridSide);
+		OutAsset.InvMasses.assign(GridSide * GridSide, 1.0f);
+		OutAsset.PinMask.assign(GridSide * GridSide, 0.0f);
+
+		const FVector GridCenter = CalculateDebugGridCenter(SourcePositions);
+
+		for (uint32 Row = 0; Row < GridSide; ++Row)
+		{
+			for (uint32 Col = 0; Col < GridSide; ++Col)
+			{
+				const float U = static_cast<float>(Col) / static_cast<float>(GridSide - 1);
+				const float V = static_cast<float>(Row) / static_cast<float>(GridSide - 1);
+				const FVector Position(
+					GridCenter.X - DebugHalfExtent + static_cast<float>(Col) * DebugParticleSpacing,
+					GridCenter.Y,
+					GridCenter.Z + DebugHalfExtent - static_cast<float>(Row) * DebugParticleSpacing);
+				OutAsset.RestPositions.push_back(Position);
+				OutAsset.UVs.push_back(FVector2(
+					U,
+					V));
+			}
+		}
+
+		auto GridIndex = [GridSide](uint32 Row, uint32 Col)
+		{
+			return Row * GridSide + Col;
+		};
+
+		for (uint32 Row = 0; Row + 1 < GridSide; ++Row)
+		{
+			for (uint32 Col = 0; Col + 1 < GridSide; ++Col)
+			{
+				const uint32 I0 = GridIndex(Row, Col);
+				const uint32 I1 = GridIndex(Row, Col + 1);
+				const uint32 I2 = GridIndex(Row + 1, Col);
+				const uint32 I3 = GridIndex(Row + 1, Col + 1);
+				OutAsset.Indices.push_back(I0);
+				OutAsset.Indices.push_back(I1);
+				OutAsset.Indices.push_back(I2);
+				OutAsset.Indices.push_back(I1);
+				OutAsset.Indices.push_back(I3);
+				OutAsset.Indices.push_back(I2);
+			}
+		}
+
+		for (uint32 Col = 0; Col < GridSide; ++Col)
+		{
+			const uint32 PinnedIndex = GridIndex(0, Col);
+			OutAsset.InvMasses[PinnedIndex] = 0.0f;
+			OutAsset.PinMask[PinnedIndex] = 1.0f;
+		}
+
+		TSet<uint64> SeenConstraints;
+		auto AddConstraint = [&](uint32 A, uint32 B)
+		{
+			const uint64 Key = MakeEdgeKey(A, B);
+			if (SeenConstraints.find(Key) != SeenConstraints.end())
+			{
+				return;
+			}
+			SeenConstraints.insert(Key);
+
+			OutAsset.FabricData.ConstraintIndices.push_back(A);
+			OutAsset.FabricData.ConstraintIndices.push_back(B);
+			OutAsset.FabricData.RestValues.push_back(FVector::Distance(OutAsset.RestPositions[A], OutAsset.RestPositions[B]));
+		};
+
+		for (uint32 Row = 0; Row < GridSide; ++Row)
+		{
+			for (uint32 Col = 0; Col < GridSide; ++Col)
+			{
+				const uint32 I0 = GridIndex(Row, Col);
+				if (Col + 1 < GridSide)
+				{
+					AddConstraint(I0, GridIndex(Row, Col + 1));
+				}
+				if (Row + 1 < GridSide)
+				{
+					AddConstraint(I0, GridIndex(Row + 1, Col));
+				}
+				if (Row + 1 < GridSide && Col + 1 < GridSide)
+				{
+					AddConstraint(I0, GridIndex(Row + 1, Col + 1));
+					AddConstraint(GridIndex(Row, Col + 1), GridIndex(Row + 1, Col));
+				}
+				if (Col + 2 < GridSide)
+				{
+					AddConstraint(I0, GridIndex(Row, Col + 2));
+				}
+				if (Row + 2 < GridSide)
+				{
+					AddConstraint(I0, GridIndex(Row + 2, Col));
+				}
+			}
+		}
+
+		OutAsset.FabricData.PhaseIndices.push_back(0);
+		OutAsset.FabricData.Sets.push_back(static_cast<uint32>(OutAsset.FabricData.RestValues.size()));
+		OutAsset.FabricData.Triangles = OutAsset.Indices;
+
+		if (!OutAsset.HasValidSimulationData())
+		{
+			SetError(OutError, "Generated debug 96x96 ClothAsset data failed validation.");
+			return false;
+		}
+
+		return true;
 	}
 
 	UMaterial* ResolveStaticMeshMaterial(const UStaticMesh* SourceMesh, const FStaticMesh* Mesh)
@@ -160,6 +297,14 @@ bool FClothAssetBuilder::BuildFromRawMesh(
 	const FClothAssetBuildOptions& Options,
 	FString* OutError)
 {
+	if (Options.bBuildDebugPinnedGrid96x96)
+	{
+		(void)Colors;
+		(void)UVs;
+		(void)Indices;
+		return BuildDebugPinnedGrid96x96(Positions, Material, OutAsset, OutError);
+	}
+
 	const uint32 ParticleCount = static_cast<uint32>(Positions.size());
 	if (ParticleCount == 0)
 	{
@@ -173,29 +318,8 @@ bool FClothAssetBuilder::BuildFromRawMesh(
 		return false;
 	}
 
-	float MaxZ = Positions[0].Z;
-	float MinZ = Positions[0].Z;
-	for (const FVector& Position : Positions)
-	{
-		MaxZ = std::max(MaxZ, Position.Z);
-		MinZ = std::min(MinZ, Position.Z);
-	}
-
-	bool bHasColorPins = false;
-	if (Options.bUseVertexColorPinMask && Colors.size() == Positions.size())
-	{
-		for (const FVector4& Color : Colors)
-		{
-			if (IsVertexColorPinned(Color))
-			{
-				bHasColorPins = true;
-				break;
-			}
-		}
-	}
-
-	const float TopRange = std::max(MaxZ - MinZ, 0.001f);
-	const float TopTolerance = std::max(TopRange * Options.TopRowToleranceRatio, 0.001f);
+	(void)Colors;
+	(void)Options;
 
 	OutAsset.FabricData = FClothFabricCookedData();
 	OutAsset.RestPositions = Positions;
@@ -204,20 +328,6 @@ bool FClothAssetBuilder::BuildFromRawMesh(
 	OutAsset.InvMasses.assign(Positions.size(), 1.0f);
 	OutAsset.PinMask.assign(Positions.size(), 0.0f);
 	OutAsset.SetMaterial(Material);
-
-	for (uint32 Index = 0; Index < ParticleCount; ++Index)
-	{
-		const bool bPinnedByColor = bHasColorPins && IsVertexColorPinned(Colors[Index]);
-		const bool bPinnedByTopRow = !bHasColorPins
-			&& Options.bFallbackPinTopRow
-			&& Positions[Index].Z >= MaxZ - TopTolerance;
-
-		if (bPinnedByColor || bPinnedByTopRow)
-		{
-			OutAsset.InvMasses[Index] = 0.0f;
-			OutAsset.PinMask[Index] = 1.0f;
-		}
-	}
 
 	TSet<uint64> SeenEdges;
 	auto AddEdge = [&](uint32 A, uint32 B)

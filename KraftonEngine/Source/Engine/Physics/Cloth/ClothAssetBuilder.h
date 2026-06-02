@@ -10,9 +10,7 @@ class UStaticMesh;
 
 struct FClothAssetBuildOptions
 {
-	bool bUseVertexColorPinMask = true;
-	bool bFallbackPinTopRow = true;
-	float TopRowToleranceRatio = 0.02f;
+	bool bBuildDebugPinnedGrid96x96 = true;
 };
 
 class FClothAssetBuilder

@@ -225,6 +225,7 @@ void FDrawCommandBuilder::BuildCommandForProxy(FScene& Scene, const FPrimitiveSc
 	ID3D11DeviceContext* Ctx = CachedContext;
 
 	const bool bSkeletal = Proxy.HasProxyFlag(EPrimitiveProxyFlags::SkeletalMesh);
+	const bool bCloth = Proxy.HasProxyFlag(EPrimitiveProxyFlags::Cloth);
 	const bool bWeightBoneHeatMap = bSkeletal && bCollectWeightBoneHeatMap && CollectWeightBoneHeatMapBoneIndex >= 0;
 	const bool bGPUSkinning = bSkeletal && (SkinningModeRuntime::Get() == ESkinningMode::GPU || bWeightBoneHeatMap);
 	const FSkeletalMeshSceneProxy* SkeletalProxy = bSkeletal
@@ -349,6 +350,11 @@ void FDrawCommandBuilder::BuildCommandForProxy(FScene& Scene, const FPrimitiveSc
 		if (Pass == ERenderPass::AlphaBlend)
 		{
 			Cmd.RenderState.DepthStencil = EDepthStencilState::DepthReadOnly;
+		}
+
+		if (bCloth && Cmd.RenderState.Rasterizer != ERasterizerState::WireFrame)
+		{
+			Cmd.RenderState.Rasterizer = ERasterizerState::SolidNoCull;
 		}
 
 		Cmd.BuildSortKey();

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Component/PrimitiveComponent.h"
 #include "Object/Ptr/SoftObjectPtr.h"
@@ -52,9 +52,6 @@ public:
 	void SetMasterPoseComponent(USkeletalMeshComponent* InMaster);
 	USkeletalMeshComponent* GetMasterPoseComponent() const { return MasterPoseComponent; }
 
-	const FName& GetAttachBoneName() const { return AttachBoneName; }
-	void SetAttachBoneName(FName InBoneName) { AttachBoneName = InBoneName; }
-
 	const TArray<FVertexPNCTT>& GetRenderVertices() const { return RenderVertices; }
 	const TArray<uint32>& GetRenderIndices() const { return RenderIndices; }
 	uint64 GetRenderRevision() const { return RenderRevision; }
@@ -72,22 +69,22 @@ private:
 	UClothAsset* ResolveClothAsset();
 	bool InitializeSimulation();
 	void ReleaseSimulation();
-	void UpdateClothFrameFromMaster();
-	void UpdateCollisionFromPhysicsAsset();
+	void UpdateClothFrame();
+	void UpdateCollisionFromPhysicsScene();
 	void RebuildRenderMeshFromSimulation();
 	void RecalculateRenderNormalsAndTangents();
 	void UseRestPoseRenderData();
 
 #if WITH_NVCLOTH
-	void BuildNvClothCollisionFromPhysicsAsset(UPhysicsAsset* PhysicsAsset);
+	bool BuildNvClothCollisionFromPhysicsBodies();
+	bool BuildNvClothCollisionFromPhysicsAsset(UPhysicsAsset* PhysicsAsset);
+	void ApplyNvClothCollision();
+	void ClearNvClothCollision();
 #endif
 
 private:
 	UPROPERTY(Edit, Save, Category="Cloth", DisplayName="Cloth Asset", AssetType="ClothAsset")
 	FSoftObjectPtr ClothAssetPath = "None";
-
-	UPROPERTY(Edit, Save, Category="Cloth|Attachment", DisplayName="Attach Bone Name")
-	FName AttachBoneName = "spine_03";
 
 	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Enable Simulation")
 	bool bEnableSimulation = true;
@@ -98,6 +95,18 @@ private:
 	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Gravity")
 	FVector Gravity = FVector(0.0f, 0.0f, -980.0f);
 
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Damping")
+	FVector Damping = FVector(0.8f, 0.8f, 0.8f);
+
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Linear Inertia")
+	FVector LinearInertia = FVector(1.0f, 1.0f, 1.0f);
+
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Angular Inertia")
+	FVector AngularInertia = FVector(1.0f, 1.0f, 1.0f);
+
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Centrifugal Inertia")
+	FVector CentrifugalInertia = FVector(1.0f, 1.0f, 1.0f);
+
 	UClothAsset* ClothAsset = nullptr;
 	USkeletalMeshComponent* MasterPoseComponent = nullptr;
 
@@ -105,6 +114,10 @@ private:
 	TArray<uint32> RenderIndices;
 	uint64 RenderRevision = 0;
 	bool bHasPendingSimulationInput = false;
+	bool bDebugLogPinnedGrid96x96Simulation = false;
+	bool bClearFrameInertiaOnNextInput = false;
+	uint32 DebugSimulationLogFrames = 0;
+	uint32 CollisionSyncLogFrames = 0;
 
 #if WITH_NVCLOTH
 	nv::cloth::Fabric* Fabric = nullptr;
@@ -112,5 +125,8 @@ private:
 	TArray<FVector4> InitialParticles;
 	TArray<FVector4> CollisionSpheres;
 	TArray<uint32> CollisionCapsules;
+	TArray<FVector4> CollisionPlanes;
+	TArray<uint32> CollisionConvexes;
+	TArray<FVector> CollisionTriangles;
 #endif
 };
