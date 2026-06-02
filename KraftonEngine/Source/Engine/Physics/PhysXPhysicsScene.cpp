@@ -1051,6 +1051,7 @@ void FPhysXPhysicsScene::Shutdown()
 	ReleaseSharedPhysX();
 
 	World = nullptr;
+	PHYSICS_STATS_RESET();
 }
 
 // ============================================================
