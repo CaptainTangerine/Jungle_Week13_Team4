@@ -2,6 +2,7 @@
 
 #include "Render/Proxy/PrimitiveSceneProxy.h"
 #include "Math/Matrix.h"
+#include "Render/Types/VertexTypes.h"
 
 class USkeletalMeshComponent;
 struct FDrawCommandBuffer;
@@ -38,9 +39,16 @@ private:
 	mutable uint32 SkinMatrixCapacity = 0;
 	mutable uint64 UploadedSkinMatrixRevision = 0;
 
-	// 게임 스레드가 UpdateRenderSnapshot()에서 채우는 스킨 행렬 스냅샷. 렌더 제출(UpdateSkinMatrixBuffer)은
-	// 컴포넌트가 아닌 이 캐시만 읽어 GPU 에 업로드한다(렌더 스레드 분리 전제). SnapshotRevision 은
-	// 스냅샷 시점의 컴포넌트 SkinnedRevision — 렌더가 업로드 여부를 판단하는 기준.
-	TArray<FMatrix> CachedSkinMatrices;
-	uint64 SkinMatrixSnapshotRevision = 0;
+	// 게임 스레드(UpdateRenderSnapshot)가 채우는 per-frame 동적 스냅샷. 렌더 제출은 컴포넌트가
+	// 아닌 이 캐시만 읽는다(렌더 스레드 분리 전제). RenderSnapshotRevision = 스냅샷 시점
+	// SkinnedRevision — 렌더가 GPU 업로드 여부를 판단하는 기준.
+	TArray<FMatrix>      CachedSkinMatrices;     // GPU 스키닝 경로(본 행렬)
+	TArray<FVertexPNCTT> CachedSkinnedVertices;  // CPU 스키닝 경로(스킨된 버텍스)
+	uint64 RenderSnapshotRevision = 0;
+
+	// 정적 렌더 버퍼(불변 GPU 리소스) 포인터 — UpdateMesh(게임 스레드, 메시 변경 시)에 캐시.
+	// 렌더 제출이 SMC->GetSkeletalMesh()->Asset->RenderBuffer 체인을 타지 않게 한다.
+	ID3D11Buffer* CachedStaticVertexBuffer = nullptr;
+	uint32        CachedStaticVertexStride = 0;
+	ID3D11Buffer* CachedStaticIndexBuffer  = nullptr;
 };
