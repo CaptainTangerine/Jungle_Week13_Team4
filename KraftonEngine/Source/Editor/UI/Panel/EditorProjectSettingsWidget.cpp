@@ -102,6 +102,10 @@ void EditorProjectSettingsWidget::Render()
 		ImGui::Checkbox("CCD", &PS.Physics.bEnableCCD);
 		ImGui::Checkbox("PCM", &PS.Physics.bEnablePCM);
 		ImGui::Checkbox("Active Actors", &PS.Physics.bEnableActiveActors);
+		ImGui::Checkbox("Use Ragdoll Aggregate", &PS.Physics.bUseRagdollAggregate);
+		ImGui::SameLine(); ImGui::TextDisabled("(?)");
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("랙돌 바디를 PxAggregate(selfCollision=off)로 묶음.\n끄면 씬에 직접 추가(self-collision 은 filter 로 유지).\n다음 랙돌 인스턴스화부터 적용.");
 
 		ImGui::Separator();
 		ImGui::TextUnformatted("PVD");

@@ -39,6 +39,7 @@ class FProjectSettings : public TSingleton<FProjectSettings>
 		bool bEnableCCD = true;
 		bool bEnablePCM = true;
 		bool bEnableActiveActors = true;
+		bool bUseRagdollAggregate = true;   // 랙돌 바디를 PxAggregate(selfCollision=false)로 묶을지(성능 A/B 토글). 끄면 씬에 직접 추가(self-collision 은 filter word3 로 계속 차단).
 		bool bEnablePVD = false;
 		FString PvdHost = "127.0.0.1";
 		uint32 PvdPort = 5425;

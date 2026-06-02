@@ -9,6 +9,7 @@
 #include "Animation/PoseContext.h"
 #include "Asset/AssetRegistry.h"
 #include "Core/Logging/Log.h"
+#include "Core/ProjectSettings.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
 #include "Math/Quat.h"
@@ -515,9 +516,13 @@ bool USkeletalMeshComponent::InstantiatePhysicsAsset_Internal(
     AActor* OwnerActor = GetOwner();
     const uint32 SelfCollisionGroup = OwnerActor ? OwnerActor->GetUUID() : GetUUID();
 
-    // 본 바디 전체를 한 aggregate 로 묶는다. 상한은 BodySetups 수(스킵분 포함 안전한 상계).
-    RagdollAggregate = PhysicsScene->CreateAggregate(
-        static_cast<uint32>(InPhysicsAsset->BodySetups.size()), /*bSelfCollision=*/false);
+    // 본 바디 전체를 한 aggregate 로 묶는다(상한은 BodySetups 수). 프로젝트 세팅으로 토글 —
+    // 끄면 바디를 씬에 직접 추가(성능 A/B 비교용). 어느 경우든 self-collision 은 아래
+    // SetActorSelfCollisionGroup(filter word3)로 차단되므로 끄더라도 폭발하지 않는다.
+    const bool bUseAggregate = FProjectSettings::Get().Physics.bUseRagdollAggregate;
+    RagdollAggregate = bUseAggregate
+        ? PhysicsScene->CreateAggregate(static_cast<uint32>(InPhysicsAsset->BodySetups.size()), /*bSelfCollision=*/false)
+        : FPhysicsAggregateHandle{};
 
     const FVector WorldScale = GetWorldScale();
     for (UBodySetup* BodySetup : InPhysicsAsset->BodySetups)
