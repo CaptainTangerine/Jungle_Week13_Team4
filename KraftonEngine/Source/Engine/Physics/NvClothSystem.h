@@ -1,10 +1,13 @@
 #pragma once
 
 #include "Core/Singleton.h"
+#include "Core/Types/CoreTypes.h"
 
 #ifndef WITH_NVCLOTH
 #define WITH_NVCLOTH 0
 #endif
+
+class UClothComponent;
 
 #if WITH_NVCLOTH
 namespace nv
@@ -25,8 +28,11 @@ class FNvClothSystem : public TSingleton<FNvClothSystem>
 public:
 	bool Initialize();
 	void Shutdown();
+	void Tick(float DeltaTime);
 
 	bool IsInitialized() const { return bInitialized; }
+	void RegisterComponent(UClothComponent* Component);
+	void UnregisterComponent(UClothComponent* Component);
 
 #if WITH_NVCLOTH
 	nv::cloth::Factory* GetFactory() const { return Factory; }
@@ -41,6 +47,7 @@ private:
 	~FNvClothSystem() = default;
 
 	bool bInitialized = false;
+	TArray<UClothComponent*> RegisteredComponents;
 
 #if WITH_NVCLOTH
 	nv::cloth::Factory* Factory = nullptr;

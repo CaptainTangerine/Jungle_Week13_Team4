@@ -11,6 +11,7 @@
 #include "GameFramework/GameMode/PlayerController.h"
 #include "GameFramework/Camera/PlayerCameraManager.h"
 #include "Object/Reflection/UClass.h"
+#include "Physics/NvClothSystem.h"
 #include "Profiling/Stats/Stats.h"
 #include "Profiling/Time/Timer.h"
 #include "Runtime/Engine.h"
@@ -355,6 +356,7 @@ void UWorld::Tick(float DeltaTime, ELevelTick TickType)
 	}
 
 	TickManager.Tick(this, DeltaTime, TickType);
+	FNvClothSystem::Get().Tick(DeltaTime);
 
 	// 카메라는 물리/액터 Tick 이후 갱신 — 차량 1인칭처럼 physics body 에 붙은 카메라가
 	// 같은 프레임의 최신 transform 으로 POV cache 를 채운다.

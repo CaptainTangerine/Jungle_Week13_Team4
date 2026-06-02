@@ -61,6 +61,9 @@ public:
 	UMaterial* GetResolvedMaterial() const;
 
 	void ResetSimulation();
+	bool PrepareSimulationInput();
+	void ApplySimulationResult();
+	bool HasPendingSimulationInput() const { return bHasPendingSimulationInput; }
 
 protected:
 	void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction) override;
@@ -100,6 +103,7 @@ private:
 	TArray<FVertexPNCTT> RenderVertices;
 	TArray<uint32> RenderIndices;
 	uint64 RenderRevision = 0;
+	bool bHasPendingSimulationInput = false;
 
 #if WITH_NVCLOTH
 	nv::cloth::Fabric* Fabric = nullptr;

@@ -1,6 +1,9 @@
 #include "Physics/NvClothSystem.h"
 
+#include "Component/Primitive/ClothComponent.h"
 #include "Core/Logging/Log.h"
+
+#include <algorithm>
 
 #if WITH_NVCLOTH
 #include "NvCloth/Callbacks.h"
@@ -96,6 +99,8 @@ bool FNvClothSystem::Initialize()
 
 void FNvClothSystem::Shutdown()
 {
+	RegisteredComponents.clear();
+
 #if WITH_NVCLOTH
 	if (Solver)
 	{
@@ -113,6 +118,61 @@ void FNvClothSystem::Shutdown()
 #endif
 
 	bInitialized = false;
+}
+
+void FNvClothSystem::Tick(float DeltaTime)
+{
+	bool bHasPendingSimulationInput = false;
+	for (UClothComponent* Component : RegisteredComponents)
+	{
+		if (Component && Component->HasPendingSimulationInput())
+		{
+			bHasPendingSimulationInput = true;
+			break;
+		}
+	}
+
+	if (!bHasPendingSimulationInput)
+	{
+		return;
+	}
+
+#if WITH_NVCLOTH
+	Simulate(DeltaTime);
+#endif
+
+	for (UClothComponent* Component : RegisteredComponents)
+	{
+		if (Component)
+		{
+			Component->ApplySimulationResult();
+		}
+	}
+}
+
+void FNvClothSystem::RegisterComponent(UClothComponent* Component)
+{
+	if (!Component)
+	{
+		return;
+	}
+
+	if (std::find(RegisteredComponents.begin(), RegisteredComponents.end(), Component) == RegisteredComponents.end())
+	{
+		RegisteredComponents.push_back(Component);
+	}
+}
+
+void FNvClothSystem::UnregisterComponent(UClothComponent* Component)
+{
+	if (!Component)
+	{
+		return;
+	}
+
+	RegisteredComponents.erase(
+		std::remove(RegisteredComponents.begin(), RegisteredComponents.end(), Component),
+		RegisteredComponents.end());
 }
 
 #if WITH_NVCLOTH

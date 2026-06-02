@@ -242,26 +242,61 @@ void UClothComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 
 	if (!ClothAsset)
 	{
+		bHasPendingSimulationInput = false;
 		return;
 	}
 
-#if WITH_NVCLOTH
-	if (bEnableSimulation)
+	if (!bEnableSimulation)
 	{
-		if (!Cloth)
-		{
-			InitializeSimulation();
-		}
-
-		if (Cloth)
-		{
-			UpdateClothFrameFromMaster();
-			UpdateCollisionFromPhysicsAsset();
-			FNvClothSystem::Get().Simulate(DeltaTime);
-		}
+		bHasPendingSimulationInput = false;
+		UseRestPoseRenderData();
+		MarkWorldBoundsDirty();
+		MarkProxyDirty(EDirtyFlag::Mesh);
+		return;
 	}
-#endif
 
+	PrepareSimulationInput();
+}
+
+bool UClothComponent::PrepareSimulationInput()
+{
+	if (!ClothAsset || !bEnableSimulation)
+	{
+		bHasPendingSimulationInput = false;
+		return false;
+	}
+
+#if WITH_NVCLOTH
+	if (!Cloth && !InitializeSimulation())
+	{
+		bHasPendingSimulationInput = false;
+		return false;
+	}
+
+	if (!Cloth)
+	{
+		bHasPendingSimulationInput = false;
+		return false;
+	}
+
+	UpdateClothFrameFromMaster();
+	UpdateCollisionFromPhysicsAsset();
+	bHasPendingSimulationInput = true;
+	return true;
+#else
+	bHasPendingSimulationInput = false;
+	return false;
+#endif
+}
+
+void UClothComponent::ApplySimulationResult()
+{
+	if (!bHasPendingSimulationInput)
+	{
+		return;
+	}
+
+	bHasPendingSimulationInput = false;
 	RebuildRenderMeshFromSimulation();
 	MarkWorldBoundsDirty();
 	MarkProxyDirty(EDirtyFlag::Mesh);
@@ -358,6 +393,7 @@ bool UClothComponent::InitializeSimulation()
 		return false;
 	}
 
+	ClothSystem.RegisterComponent(this);
 	return true;
 #else
 	return false;
@@ -366,7 +402,11 @@ bool UClothComponent::InitializeSimulation()
 
 void UClothComponent::ReleaseSimulation()
 {
+	bHasPendingSimulationInput = false;
+
 #if WITH_NVCLOTH
+	FNvClothSystem::Get().UnregisterComponent(this);
+
 	if (Cloth)
 	{
 		FNvClothSystem::Get().RemoveCloth(Cloth);
