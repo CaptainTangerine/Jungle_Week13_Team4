@@ -25,3 +25,13 @@ struct FPhysicsConstraintHandle
 	void* Internal = nullptr;
 	bool IsValid() const { return Internal != nullptr; }
 };
+
+// 여러 raw actor 를 한 그룹으로 묶는 핸들(랙돌 = 한 SkeletalMesh 의 본 바디 전체).
+//   - PhysX 백엔드 : Internal = PxAggregate*
+// selfCollision=false 로 만들면 그룹 내부 바디끼리는 broad-phase 단계에서 충돌 제외돼
+// 인접/비인접 본 바디가 서로 부딪쳐 폭발하는 문제를 구조적으로 막는다.
+struct FPhysicsAggregateHandle
+{
+	void* Internal = nullptr;
+	bool IsValid() const { return Internal != nullptr; }
+};

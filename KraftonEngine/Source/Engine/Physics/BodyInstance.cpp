@@ -4,7 +4,8 @@
 #include "Physics/IPhysicsScene.h"
 #include "Physics/PhysicsInterfaceTypes.h"
 
-bool FBodyInstance::InitBody(UBodySetup* Setup, const FTransform& Transform, IPhysicsScene* InRBScene, int32 BoneIndex)
+bool FBodyInstance::InitBody(UBodySetup* Setup, const FTransform& Transform, IPhysicsScene* InRBScene, int32 BoneIndex,
+	FPhysicsAggregateHandle Aggregate)
 {
 	if (!Setup || !InRBScene || Setup->AggGeom.GetElementCount() <= 0)
 	{
@@ -39,6 +40,7 @@ bool FBodyInstance::InitBody(UBodySetup* Setup, const FTransform& Transform, IPh
 	ActorParams.bStartAwake = bStartAwake;
 	ActorParams.bEnableGravity = bEnableGravity;
 	ActorParams.UserData = this;
+	ActorParams.Aggregate = Aggregate;   // 유효하면 랙돌 aggregate 그룹에 묶여 생성
 
 	ActorHandle = InRBScene->CreateActor(ActorParams);
 	if (!ActorHandle.IsValid())

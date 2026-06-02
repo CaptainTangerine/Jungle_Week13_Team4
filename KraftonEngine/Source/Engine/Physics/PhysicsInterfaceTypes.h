@@ -18,6 +18,8 @@ struct FActorCreationParams
 	bool bStartAwake = true;
 	const char* DebugName = nullptr;
 	void* UserData = nullptr;
+	// 유효하면 actor 를 씬에 직접 추가하는 대신 이 aggregate 에 넣는다(랙돌 그룹핑).
+	FPhysicsAggregateHandle Aggregate;
 };
 
 struct FGeometryAddParams

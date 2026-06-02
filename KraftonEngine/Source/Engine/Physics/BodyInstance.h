@@ -22,7 +22,8 @@ struct FBodyInstance : public FBodyInstanceCore
 	float PhysicsBlendWeight = 0.0f;
 	float PhysicsBlendWeightTarget = 0.0f;
 
-	bool InitBody(UBodySetup* Setup, const FTransform& Transform, IPhysicsScene* InRBScene, int32 BoneIndex = -1);
+	bool InitBody(UBodySetup* Setup, const FTransform& Transform, IPhysicsScene* InRBScene, int32 BoneIndex = -1,
+		FPhysicsAggregateHandle Aggregate = {});
 	void TermBody(IPhysicsScene* InRBScene);
 
 	bool IsValidBodyInstance() const { return ActorHandle.IsValid(); }

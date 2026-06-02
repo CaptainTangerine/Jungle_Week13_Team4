@@ -50,6 +50,14 @@ public:
 	// KraftonFilterShader 가 충돌을 무시 → 랙돌 바디들이 서로(및 자기 캡슐과) 안 부딪치게.
 	virtual void SetActorSelfCollisionGroup(FPhysicsActorHandle Actor, uint32 GroupId) = 0;
 
+	// --- Aggregate (랙돌처럼 여러 raw actor 를 한 그룹으로 묶기) ---
+	// MaxActors: 그룹에 들어갈 actor 수 상한. bSelfCollision=false 면 그룹 내부 바디끼리
+	// 충돌하지 않는다(랙돌 self-collision 을 broad-phase 에서 구조적으로 차단).
+	// CreateAggregate 직후 빈 상태로 씬에 추가되며, Aggregate 를 지정한 CreateActor 가
+	// actor 를 이 그룹에 넣으면 자동으로 씬에도 반영된다.
+	virtual FPhysicsAggregateHandle CreateAggregate(uint32 MaxActors, bool bSelfCollision) = 0;
+	virtual void ReleaseAggregate(FPhysicsAggregateHandle Aggregate) = 0;
+
 	// --- Raw physics constraint path (PhysicsAsset / ragdoll) ---
 	virtual FPhysicsConstraintHandle CreateConstraint(const FConstraintCreationParams& Params) = 0;
 	virtual void ReleaseConstraint(FPhysicsConstraintHandle Constraint) = 0;

@@ -3,6 +3,7 @@
 #include "Component/Primitive/SkinnedMeshComponent.h"
 #include "Animation/AnimationMode.h"
 #include "Object/Ptr/SubclassOf.h"
+#include "Physics/PhysicsHandles.h"
 
 #include "Source/Engine/Component/Primitive/SkeletalMeshComponent.generated.h"
 
@@ -154,6 +155,9 @@ protected:
     UPhysicsAsset*             PhysicsAssetOverride = nullptr;
     TArray<FBodyInstance*>     Bodies;
     TArray<FConstraintInstance*> Constraints;
+    // 이 랙돌의 모든 본 바디를 묶는 aggregate(selfCollision=false). 바디들끼리의 내부 충돌을
+    // broad-phase 에서 차단한다. TermArticulated 에서 바디 해제 후 마지막에 release.
+    FPhysicsAggregateHandle    RagdollAggregate;
 
     // 블렌드 가중치는 바디별(FBodyInstance::PhysicsBlendWeight/Target)로 보관한다.
     //   weight 0   : 순수 anim(바디 키네마틱 추종)

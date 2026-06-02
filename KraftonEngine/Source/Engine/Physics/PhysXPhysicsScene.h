@@ -17,6 +17,7 @@ namespace physx
 	class PxRigidActor;
 	class PxShape;
 	class PxD6Joint;
+	class PxAggregate;
 }
 
 class FPhysXSimulationCallback;
@@ -64,6 +65,9 @@ public:
 	void SetActorMass(FPhysicsActorHandle Actor, float Mass) override;
 	void SetActorSelfCollisionGroup(FPhysicsActorHandle Actor, uint32 GroupId) override;
 
+	FPhysicsAggregateHandle CreateAggregate(uint32 MaxActors, bool bSelfCollision) override;
+	void ReleaseAggregate(FPhysicsAggregateHandle Aggregate) override;
+
 	FPhysicsConstraintHandle CreateConstraint(const FConstraintCreationParams& Params) override;
 	void ReleaseConstraint(FPhysicsConstraintHandle Constraint) override;
 
@@ -110,6 +114,12 @@ private:
 		TArray<UPrimitiveComponent*> Components; // 등록된 컴포넌트들 (shape 1:1 매칭)
 	};
 	std::vector<FBodyMapping> BodyMappings;
+
+	// Raw actor 경로(PhysicsAsset/랙돌)로 만든 actor·aggregate·constraint 를 씬이 멤버로
+	// 추적한다. 컴포넌트 경로(BodyMappings)와 동일하게 씬이 소유권/가시성을 갖게 해 일관성을
+	// 맞춘다(생성/해제 짝, Shutdown 일괄 정리, 디버그 열거, 향후 멀티스레드 전후처리 순회).
+	std::vector<physx::PxRigidActor*> RawActors;
+	std::vector<physx::PxAggregate*> Aggregates;
 	std::vector<physx::PxD6Joint*> RawConstraints;
 
 	// 내부 헬퍼

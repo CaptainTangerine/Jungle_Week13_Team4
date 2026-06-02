@@ -507,11 +507,17 @@ bool USkeletalMeshComponent::InstantiatePhysicsAsset_Internal(
         return false;
     }
 
-    // 랙돌 바디들이 서로(및 자기 캐릭터 캡슐과) 충돌하지 않도록 같은 self-collision 그룹
-    // (owner UUID)으로 묶는다. 조인트로 연결된 인접 쌍만 막던 기존 방식으론 비인접 바디끼리
-    // (특히 WorldScale 로 부푼 캡슐들이) 겹쳐 다이내믹 전환 시 폭발한다.
+    // 랙돌 self-collision 차단은 두 메커니즘을 병용한다:
+    //  1) aggregate(selfCollision=false): 이 랙돌의 본 바디들끼리는 broad-phase 에서 충돌 제외.
+    //     비인접 바디(WorldScale 로 부푼 캡슐들)가 겹쳐 다이내믹 전환 시 폭발하던 문제를 차단.
+    //  2) self-collision 그룹(owner UUID, filter word3): aggregate 밖에 있는 자기 캐릭터 캡슐
+    //     (컴포넌트 경로 바디)과의 충돌까지 막는다. 캡슐은 다른 생성 경로라 aggregate 에 못 넣는다.
     AActor* OwnerActor = GetOwner();
     const uint32 SelfCollisionGroup = OwnerActor ? OwnerActor->GetUUID() : GetUUID();
+
+    // 본 바디 전체를 한 aggregate 로 묶는다. 상한은 BodySetups 수(스킵분 포함 안전한 상계).
+    RagdollAggregate = PhysicsScene->CreateAggregate(
+        static_cast<uint32>(InPhysicsAsset->BodySetups.size()), /*bSelfCollision=*/false);
 
     const FVector WorldScale = GetWorldScale();
     for (UBodySetup* BodySetup : InPhysicsAsset->BodySetups)
@@ -533,7 +539,7 @@ bool USkeletalMeshComponent::InstantiatePhysicsAsset_Internal(
         FBodyInstance* BodyInstance = new FBodyInstance();
         BodyInstance->Scale3D = WorldScale;
 
-        if (BodyInstance->InitBody(BodySetup, BoneWorldTransforms[BoneIndex], PhysicsScene, BoneIndex))
+        if (BodyInstance->InitBody(BodySetup, BoneWorldTransforms[BoneIndex], PhysicsScene, BoneIndex, RagdollAggregate))
         {
             PhysicsScene->SetActorSelfCollisionGroup(BodyInstance->GetPhysicsActorHandle(), SelfCollisionGroup);
             Bodies.push_back(BodyInstance);
@@ -602,6 +608,13 @@ void USkeletalMeshComponent::TermArticulated()
         }
     }
     Bodies.clear();
+
+    // 바디를 모두 해제(aggregate 에서 자동 분리)한 뒤 빈 aggregate 를 해제한다.
+    if (PhysicsScene && RagdollAggregate.IsValid())
+    {
+        PhysicsScene->ReleaseAggregate(RagdollAggregate);
+    }
+    RagdollAggregate = {};
 }
 
 void USkeletalMeshComponent::SetSimulatePhysics(bool bSimulate)
