@@ -1767,6 +1767,20 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 		}
 	}
 
+	// 전체 바디/조인트 제거 — 본 필터(손가락/치맛자락 스킵) 적용 등으로 처음부터 다시 생성할 때.
+	// Generate All 은 기존 바디를 안 지우므로, 필터를 반영하려면 Clear → Generate All → Save.
+	if (ImGui::Button("Clear All (Bodies + Constraints)", ImVec2(-1.0f, 0.0f)) && CurrentPhysicsAsset)
+	{
+		for (UBodySetup* Body : CurrentPhysicsAsset->BodySetups)
+		{
+			if (Body) { UObjectManager::Get().DestroyObject(Body); }
+		}
+		CurrentPhysicsAsset->BodySetups.clear();
+		CurrentPhysicsAsset->ConstraintSetups.clear();
+		SelectedBoneIndex = -1;
+		MarkDirty();
+	}
+
 	ImGui::Separator();
 
 	// 다중선택 시 일괄 편집 패널(이후 primary 단일 디테일도 함께 표시).
