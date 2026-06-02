@@ -1454,6 +1454,9 @@
     <ClCompile Include="Source\Engine\Render\Geometry\LineGeometry.cpp">
       <Filter>Source\Engine\Render\Geometry</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Geometry\TriangleGeometry.cpp">
+      <Filter>Source\Engine\Render\Geometry</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Render\Pipeline\DefaultRenderPipeline.cpp">
       <Filter>Source\Engine\Render\Pipeline</Filter>
     </ClCompile>
@@ -2739,6 +2742,9 @@
       <Filter>Source\Engine\Render\Geometry</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Geometry\LineGeometry.h">
+      <Filter>Source\Engine\Render\Geometry</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Geometry\TriangleGeometry.h">
       <Filter>Source\Engine\Render\Geometry</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Pipeline\DefaultRenderPipeline.h">

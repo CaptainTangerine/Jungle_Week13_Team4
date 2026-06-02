@@ -1,4 +1,4 @@
-#include "BoneDebugSceneProxy.h"
+﻿#include "BoneDebugSceneProxy.h"
 
 #include "Component/Debug/BoneDebugComponent.h"
 #include "Component/Primitive/SkeletalMeshComponent.h"
@@ -162,4 +162,9 @@ void FBoneDebugSceneProxy::RebuildLines()
 		const FVector ParentPos = MeshComp->GetBoneLocationByIndex(ParentIndex);
 		BuildBonePyramidLines(CachedParentBoneLines, BonePos, ParentPos, PyramidWidthScale);
 	}
+}
+
+void FBoneDebugSceneProxy::RebuildTriangles()
+{
+	
 }
