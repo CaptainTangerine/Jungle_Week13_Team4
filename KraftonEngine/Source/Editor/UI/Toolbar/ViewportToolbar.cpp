@@ -618,17 +618,17 @@ void FViewportToolbar::RenderShowFlags(const FToolbarRenderState& State)
 		if (RenderOptions.ShowFlags.bDOF)
 		{
 			ImGui::SetNextItemWidth(140.0f);
-			ImGui::SliderFloat("Aperture", &RenderOptions.Aperture, 0.f, 1.f, "%.3f");
+			ImGui::SliderFloat("Aperture", &RenderOptions.PostProcessSettings.Aperture, 0.f, 1.f, "%.3f");
 			ImGui::SetNextItemWidth(140.0f);
-			ImGui::DragFloat("Focus Dist.", &RenderOptions.FocusDistance, 0.1f, 1.f, 2048.f, "%.2f");
+			ImGui::DragFloat("Focus Dist.", &RenderOptions.PostProcessSettings.FocusDistance, 0.1f, 1.f, 2048.f, "%.2f");
 			ImGui::SetNextItemWidth(140.0f);
-			ImGui::DragFloat("Focal Length", &RenderOptions.FocalLength, 0.01f, 0.1f, RenderOptions.FocusDistance, "%.2f");
-			if (RenderOptions.FocalLength > RenderOptions.FocusDistance)
+			ImGui::DragFloat("Focal Length", &RenderOptions.PostProcessSettings.FocalLength, 0.01f, 0.1f, RenderOptions.PostProcessSettings.FocusDistance, "%.2f");
+			if (RenderOptions.PostProcessSettings.FocalLength > RenderOptions.PostProcessSettings.FocusDistance)
 			{
-				RenderOptions.FocalLength = RenderOptions.FocusDistance;
+				RenderOptions.PostProcessSettings.FocalLength = RenderOptions.PostProcessSettings.FocusDistance;
 			}
 			ImGui::SetNextItemWidth(140.f);
-			ImGui::DragInt("DOF Sample", &RenderOptions.DOFSample, 4, 0, 64);
+			ImGui::DragInt("DOF Sample", &RenderOptions.PostProcessSettings.DOFSample, 4, 0, 64);
 		}
 		ImGui::Checkbox("FXAA", &RenderOptions.ShowFlags.bFXAA);
 		ImGui::Checkbox("Gamma Correction", &RenderOptions.ShowFlags.bGammaCorrection);

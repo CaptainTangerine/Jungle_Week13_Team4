@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Core/Types/CoreTypes.h"
+#include "Component/Camera/FPostProcessSettings.h"
 
 enum class EViewMode : int32
 {
@@ -112,10 +113,7 @@ struct FViewportRenderOptions
 	float BloomBlurRadius = 1.0f;
 
 	// DOF 전용 설정
-	float Aperture		= 0.5f;			// 0 = pass disabled
-	float FocusDistance = 20.0f;		// focus plane distance
-	float FocalLength	= 15.0f;		// <= FocusDistance
-	int	  DOFSample		= 32;			// Number of blur taps
+	FPostProcessSettings PostProcessSettings;
 
 	// Tone Mapping / Gamma Correction 전용 설정
 	float Gamma = 2.4f;

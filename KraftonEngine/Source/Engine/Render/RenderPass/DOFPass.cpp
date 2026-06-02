@@ -71,7 +71,7 @@ bool FDOFPass::BeginPass(const FPassContext& Ctx)
 {
 	const FFrameContext& FrameContext = Ctx.Frame;
 	const FViewportRenderOptions& RenderOptions = FrameContext.RenderOptions;
-	if (RenderOptions.ShowFlags.bDOF == false || RenderOptions.Aperture <= 0.001f)		return false;
+	if (RenderOptions.ShowFlags.bDOF == false || RenderOptions.PostProcessSettings.Aperture <= 0.001f)		return false;
 	if (!FrameContext.SceneColorCopyTexture || !FrameContext.SceneColorCopySRV ||
 		!FrameContext.ViewportRenderTexture || !FrameContext.ViewportRTV)			return false;
 	if (FrameContext.ViewportWidth <= 0.0f || FrameContext.ViewportHeight <= 0.0f)	return false;
@@ -120,10 +120,10 @@ void FDOFPass::Execute(const FPassContext& Ctx)
 	const FViewportRenderOptions& RenderOptions = FrameContext.RenderOptions;
 
 	FDOFCB DOFCBData = {};
-	DOFCBData.Aperture	= RenderOptions.Aperture;
-	DOFCBData.FocusDist = RenderOptions.FocusDistance;
-	DOFCBData.FocalLength = RenderOptions.FocalLength;
-	DOFCBData.DOFSample = RenderOptions.DOFSample;
+	DOFCBData.Aperture	= RenderOptions.PostProcessSettings.Aperture;
+	DOFCBData.FocusDist = RenderOptions.PostProcessSettings.FocusDistance;
+	DOFCBData.FocalLength = RenderOptions.PostProcessSettings.FocalLength;
+	DOFCBData.DOFSample = RenderOptions.PostProcessSettings.DOFSample;
 	DOFCBData.CameraNear = FrameContext.NearClip;
 	DOFCBData.CameraFar = FrameContext.FarClip;
 	DOFCBData.SourceTexelSize[0] = 1.0f / FrameContext.ViewportWidth;
