@@ -11,6 +11,7 @@
 class UWorld;
 class AActor;
 class UPrimitiveComponent;
+class IPhysicsBodySync;
 struct FHitResult;
 
 // ============================================================
@@ -63,7 +64,19 @@ public:
 	virtual void ReleaseConstraint(FPhysicsConstraintHandle Constraint) = 0;
 
 	// --- 시뮬레이션 ---
+	// Tick = StartSimulation + FinishSimulation. 게임 루프는 둘을 분리 호출해 tick group
+	// (anim 등) 을 시뮬레이션 전후로 끼워넣는다(World::Tick). 에디터 프리뷰는 Tick 그대로 사용.
+	//   StartSimulation  : dt 클램프 → pre-sync(엔진→PhysX) → simulate()
+	//   FinishSimulation : fetchResults() → post-sync(PhysX→엔진) → 지연 이벤트 dispatch
+	// 두 호출 사이(simulate 진행 중)에는 PxActor 를 건드리면 안 된다(향후 async 대비).
+	virtual void StartSimulation(float DeltaTime) = 0;
+	virtual void FinishSimulation() = 0;
 	virtual void Tick(float DeltaTime) = 0;
+
+	// 씬 주도 바디 동기화 핸들러 등록. 랙돌(USkeletalMeshComponent)처럼 raw actor 를 직접
+	// 보유한 객체가 등록하면 Start/FinishSimulation 에서 Pre/PostPhysicsSimulate 가 호출된다.
+	virtual void RegisterBodySync(IPhysicsBodySync* Sync) = 0;
+	virtual void UnregisterBodySync(IPhysicsBodySync* Sync) = 0;
 
 	// --- 힘/토크 ---
 	virtual void AddForce(UPrimitiveComponent* Comp, const FVector& Force) = 0;

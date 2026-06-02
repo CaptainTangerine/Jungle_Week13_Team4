@@ -437,6 +437,9 @@ void FMeshEditorWidget::Tick(float DeltaTime)
 		USkeletalMeshComponent* Comp = ViewportClient.GetPreviewMeshComponent();
 		if (Comp)
 		{
+			// 기준 포즈 캐시(simulate 이전) → Scene->Tick 이 등록된 핸들러(Pre/PostPhysicsSimulate)로
+			// 키네마틱 추종 + 시뮬 결과 반영까지 구동한다(게임 경로와 동일).
+			Comp->PreparePhysicsPreview(DeltaTime);
 			if (UWorld* World = Comp->GetWorld())
 			{
 				if (IPhysicsScene* Scene = World->GetPhysicsScene())
@@ -444,7 +447,6 @@ void FMeshEditorWidget::Tick(float DeltaTime)
 					Scene->Tick(DeltaTime);
 				}
 			}
-			Comp->SimulatePhysicsPreview(DeltaTime);
 		}
 	}
 }

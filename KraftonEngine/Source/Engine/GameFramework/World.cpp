@@ -348,13 +348,21 @@ void UWorld::Tick(float DeltaTime, ELevelTick TickType)
 		return;
 	}
 
+	// 물리를 tick group 사이에 끼워넣는다(UE 식 순서):
+	//   TG_PrePhysics(anim 등, pre-sync 쓰기) → simulate/fetchResults → 나머지 그룹(post-sync
+	//   읽기, CMC, 카메라). 랙돌 sync 가 simulate 를 정확히 감싸 한 프레임 지연이 사라지고,
+	//   simulate~fetchResults 윈도우 밖에서만 PxActor 에 접근하게 된다(향후 async 대비).
+	TickManager.Gather(this, TickType);
+	TickManager.RunTickGroups(DeltaTime, TickType, TG_PrePhysics, TG_PrePhysics);
+
 	if (bHasBegunPlay && PhysicsScene)
 	{
 		SCOPE_STAT_CAT("PhysicsScene", "1_WorldTick");
-		PhysicsScene->Tick(DeltaTime);
+		PhysicsScene->StartSimulation(DeltaTime);
+		PhysicsScene->FinishSimulation();
 	}
 
-	TickManager.Tick(this, DeltaTime, TickType);
+	TickManager.RunTickGroups(DeltaTime, TickType, TG_DuringPhysics, static_cast<ETickingGroup>(TG_MAX - 1));
 
 	// 카메라는 물리/액터 Tick 이후 갱신 — 차량 1인칭처럼 physics body 에 붙은 카메라가
 	// 같은 프레임의 최신 transform 으로 POV cache 를 채운다.

@@ -581,6 +581,12 @@ bool USkeletalMeshComponent::InstantiatePhysicsAsset_Internal(
         }
     }
 
+    // 씬 주도 sync 핸들러로 등록 — 이후 Start/FinishSimulation 이 Pre/PostPhysicsSimulate 호출.
+    if (!Bodies.empty())
+    {
+        PhysicsScene->RegisterBodySync(this);
+    }
+
     return !Bodies.empty();
 }
 
@@ -588,6 +594,12 @@ void USkeletalMeshComponent::TermArticulated()
 {
     UWorld* World = GetWorld();
     IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+
+    // 바디를 해제하기 전에 sync 핸들러부터 해제 — 반쯤 해체된 상태로 호출되지 않게.
+    if (PhysicsScene)
+    {
+        PhysicsScene->UnregisterBodySync(this);
+    }
 
     for (FConstraintInstance* Constraint : Constraints)
     {
@@ -870,6 +882,11 @@ void USkeletalMeshComponent::SyncKinematicBodiesToAnim(const TArray<FMatrix>& An
 
 void USkeletalMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
 {
+    // 이 tick 은 TG_PrePhysics — 물리 simulate 이전(World::Tick)에 돈다. 여기서는 simulate 의
+    // "준비"만 한다: 블렌드 가중치 보간 + 바디 시뮬 상태 + anim 평가 + 기준 포즈 캐시.
+    // 실제 키네마틱 타깃 쓰기(Pre)와 시뮬 결과 반영(Post)은 씬이 simulate 전후로
+    // PrePhysicsSimulate / PostPhysicsSimulate 핸들러를 통해 구동한다(한 프레임 지연 제거).
+
     // 1) 바디별 블렌드 가중치를 목표로 보간(부드러운 전환) 후 바디 시뮬 상태 갱신.
     RampBodyBlendWeights(DeltaTime);
     UpdateBodySimulationState();
@@ -877,27 +894,19 @@ void USkeletalMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     // 2) anim 평가 — 블렌드의 기준 포즈. 평가 결과는 BoneEditLocalMatrices 에 반영된다.
     const bool bAnim = EvaluateAnimInstance(DeltaTime);
 
-    // anim 기준 컴포넌트-글로벌. anim 이 없으면 ref 포즈(블렌드 출력 피드백 방지).
-    const bool bWantBlend = AnyBodyPhysicsActive() && !Bodies.empty();
-    TArray<FMatrix> AnimGlobals;
-    if (bWantBlend || !Bodies.empty())
+    // 3) anim 기준 컴포넌트-글로벌을 캐시(핸들러가 simulate 전후로 소비). anim 이 없으면 ref 포즈.
+    bCachedWantBlend = AnyBodyPhysicsActive() && !Bodies.empty();
+    CachedAnimGlobals.clear();
+    if (bCachedWantBlend || !Bodies.empty())
     {
-        if (bAnim) BuildBoneEditGlobalMatrices(AnimGlobals);
-        else       BuildReferencePoseGlobals(AnimGlobals);
+        if (bAnim) BuildBoneEditGlobalMatrices(CachedAnimGlobals);
+        else       BuildReferencePoseGlobals(CachedAnimGlobals);
     }
 
-    // 3) 활성 바디(부분/전체 랙돌)가 있으면: 키네마틱 바디는 anim 추종(자식 조인트 앵커),
-    //    그 위에 anim↔시뮬을 바디별 weight 로 블렌드해 푸시.
-    if (bWantBlend)
-    {
-        SyncKinematicBodiesToAnim(AnimGlobals);
-        ApplyPhysicsBlendedPose(AnimGlobals);
-        UMeshComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
-        return;
-    }
-
-    // 4) 활성 바디 없음: 순수 anim. 모든 바디는 키네마틱으로 anim 을 추종해 다음 전환에 대비.
-    if (bAnim)
+    // 4) 베이스 tick (transform/bounds, no-anim 폴백 시 CPU 스키닝). 기존 분기 보존:
+    //    blend/anim 경로는 UMeshComponent(스키닝 생략 — GPU 경로 + Post 에서 본 포즈 갱신),
+    //    no-anim·no-blend 폴백만 Super(USkinnedMeshComponent, CPU 스키닝 포함).
+    if (bAnim || bCachedWantBlend)
     {
         UMeshComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
     }
@@ -905,28 +914,40 @@ void USkeletalMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     {
         Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
     }
-
-    if (!Bodies.empty())
-    {
-        SyncKinematicBodiesToAnim(AnimGlobals);
-    }
 }
 
-void USkeletalMeshComponent::SimulatePhysicsPreview(float DeltaTime)
+void USkeletalMeshComponent::PreparePhysicsPreview(float DeltaTime)
 {
-    // 에디터 프리뷰: anim 인스턴스가 없으므로 ref 포즈를 기준 포즈로 사용한다.
+    // 에디터 프리뷰: 게임의 TickComponent 가 안 돌므로 Scene->Tick 직전에 직접 캐시한다.
+    // anim 인스턴스가 없어 ref 포즈를 기준으로 한다. 이후 Scene->Tick 이 Pre/PostPhysicsSimulate
+    // 핸들러를 통해 키네마틱 추종 + 시뮬 결과 반영을 수행한다.
     RampBodyBlendWeights(DeltaTime);
     UpdateBodySimulationState();
 
-    if (!AnyBodyPhysicsActive() || Bodies.empty())
+    bCachedWantBlend = AnyBodyPhysicsActive() && !Bodies.empty();
+    CachedAnimGlobals.clear();
+    if (bCachedWantBlend || !Bodies.empty())
     {
-        return;
+        BuildReferencePoseGlobals(CachedAnimGlobals);
     }
+}
 
-    TArray<FMatrix> AnimGlobals;
-    BuildReferencePoseGlobals(AnimGlobals);
-    SyncKinematicBodiesToAnim(AnimGlobals);   // 핀 고정된(weight 0) 바디는 ref 포즈에 머무름
-    ApplyPhysicsBlendedPose(AnimGlobals);     // 시뮬 바디는 물리 결과를 본에 반영
+void USkeletalMeshComponent::PrePhysicsSimulate(float DeltaTime)
+{
+    // simulate 직전: 키네마틱(weight 0) 바디를 캐시된 anim 포즈로 추종시킨다(자식 조인트 앵커).
+    if (!Bodies.empty())
+    {
+        SyncKinematicBodiesToAnim(CachedAnimGlobals);
+    }
+}
+
+void USkeletalMeshComponent::PostPhysicsSimulate(float DeltaTime)
+{
+    // fetchResults 직후: 활성 바디가 있으면 시뮬 결과를 본 포즈에 블렌드 반영.
+    if (bCachedWantBlend)
+    {
+        ApplyPhysicsBlendedPose(CachedAnimGlobals);
+    }
 }
 
 // ──────────────────────────────────────────────

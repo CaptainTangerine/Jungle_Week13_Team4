@@ -21,6 +21,7 @@ namespace physx
 }
 
 class FPhysXSimulationCallback;
+class IPhysicsBodySync;
 
 // ============================================================
 // FPhysXPhysicsScene — PhysX 4.1 기반 물리 시스템
@@ -71,7 +72,12 @@ public:
 	FPhysicsConstraintHandle CreateConstraint(const FConstraintCreationParams& Params) override;
 	void ReleaseConstraint(FPhysicsConstraintHandle Constraint) override;
 
+	void StartSimulation(float DeltaTime) override;
+	void FinishSimulation() override;
 	void Tick(float DeltaTime) override;
+
+	void RegisterBodySync(IPhysicsBodySync* Sync) override;
+	void UnregisterBodySync(IPhysicsBodySync* Sync) override;
 
 	void AddForce(UPrimitiveComponent* Comp, const FVector& Force) override;
 	void AddForceAtLocation(UPrimitiveComponent* Comp, const FVector& Force, const FVector& WorldLocation) override;
@@ -121,6 +127,12 @@ private:
 	std::vector<physx::PxRigidActor*> RawActors;
 	std::vector<physx::PxAggregate*> Aggregates;
 	std::vector<physx::PxD6Joint*> RawConstraints;
+
+	// 씬 주도 sync 핸들러(랙돌 등). Start/FinishSimulation 에서 Pre/PostPhysicsSimulate 호출.
+	std::vector<IPhysicsBodySync*> BodySyncs;
+	// StartSimulation 이 simulate 한 dt 를 FinishSimulation/PostSync 로 전달. 0 = 이번 프레임
+	// 시뮬 안 함(FinishSimulation 이 fetchResults 를 건너뛰는 가드).
+	float CurrentSimDeltaTime = 0.0f;
 
 	// 내부 헬퍼
 	FBodyMapping* FindMappingByActor(AActor* OwnerActor);

@@ -11,6 +11,7 @@
 #include "Mesh/Static/StaticMesh.h"
 #include "Physics/Asset/BodySetup.h"
 #include "Physics/Asset/ConstraintSetup.h"
+#include "Physics/IPhysicsBodySync.h"
 #include "Core/ProjectSettings.h"
 #include "Core/Logging/Log.h"
 
@@ -982,6 +983,7 @@ void FPhysXPhysicsScene::Shutdown()
 		}
 	}
 	Aggregates.clear();
+	BodySyncs.clear();
 
 	// Body 정리
 	for (auto& Mapping : BodyMappings)
@@ -1538,6 +1540,14 @@ void FPhysXPhysicsScene::ReleaseConstraint(FPhysicsConstraintHandle Constraint)
 
 void FPhysXPhysicsScene::Tick(float DeltaTime)
 {
+	// 편의 래퍼 — 분리 호출이 필요 없는 경로(에디터 프리뷰 등)용.
+	StartSimulation(DeltaTime);
+	FinishSimulation();
+}
+
+void FPhysXPhysicsScene::StartSimulation(float DeltaTime)
+{
+	CurrentSimDeltaTime = 0.0f;   // simulate 안 하면 FinishSimulation 이 fetchResults 를 건너뜀
 	if (!Scene || DeltaTime <= 0.0f) return;
 
 	// 어떤 이유로든 frame hitch (씬 로드 / 큰 OBJ 동기 로딩 / Alt-Tab / OS 스파이크) 가
@@ -1599,8 +1609,24 @@ void FPhysXPhysicsScene::Tick(float DeltaTime)
 		}
 	}
 
-	// ── Simulate ──
+	// ── 등록된 sync 핸들러 Pre (랙돌 등): anim → 키네마틱 타깃. 반드시 simulate 이전 ──
+	for (IPhysicsBodySync* Sync : BodySyncs)
+	{
+		if (Sync) Sync->PrePhysicsSimulate(DeltaTime);
+	}
+
+	// ── Simulate (async 윈도우 시작) ──
+	// 이후 FinishSimulation 의 fetchResults 까지는 어떤 PxActor 도 건드리면 안 된다.
+	CurrentSimDeltaTime = DeltaTime;
 	Scene->simulate(DeltaTime);
+}
+
+void FPhysXPhysicsScene::FinishSimulation()
+{
+	if (!Scene || CurrentSimDeltaTime <= 0.0f) return;   // StartSimulation 이 simulate 안 함 → skip
+	const float DeltaTime = CurrentSimDeltaTime;
+	CurrentSimDeltaTime = 0.0f;
+
 	Scene->fetchResults(true);
 
 	// ── Post-simulate: PhysX → Engine Transform 동기화 ──
@@ -1622,6 +1648,12 @@ void FPhysXPhysicsScene::Tick(float DeltaTime)
 		Mapping.RootComp->SetRelativeRotation(NewRot);
 	}
 
+	// ── 등록된 sync 핸들러 Post (랙돌 등): 시뮬 결과 → 본 포즈. fetchResults 이후 ──
+	for (IPhysicsBodySync* Sync : BodySyncs)
+	{
+		if (Sync) Sync->PostPhysicsSimulate(DeltaTime);
+	}
+
 	// ── Dispatch deferred contact/trigger events ──
 	// onContact / onTrigger 는 fetchResults 안에서 fire 되므로 거기서 직접 게임 핸들러를
 	// 부르면 핸들러의 World->DestroyActor 등이 PhysX scene 변경 타이밍과 겹쳐 크래쉬한다.
@@ -1630,6 +1662,18 @@ void FPhysXPhysicsScene::Tick(float DeltaTime)
 	{
 		EventCallback->DispatchPendingEvents();
 	}
+}
+
+void FPhysXPhysicsScene::RegisterBodySync(IPhysicsBodySync* Sync)
+{
+	if (!Sync) return;
+	if (std::find(BodySyncs.begin(), BodySyncs.end(), Sync) != BodySyncs.end()) return;
+	BodySyncs.push_back(Sync);
+}
+
+void FPhysXPhysicsScene::UnregisterBodySync(IPhysicsBodySync* Sync)
+{
+	BodySyncs.erase(std::remove(BodySyncs.begin(), BodySyncs.end(), Sync), BodySyncs.end());
 }
 
 // ============================================================
