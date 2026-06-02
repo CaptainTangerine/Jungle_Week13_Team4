@@ -1,4 +1,5 @@
 ﻿#include "Physics/PhysXPhysicsScene.h"
+#include "Physics/PhysXVehicleManager.h"
 #include "Component/PrimitiveComponent.h"
 #include "Component/Shape/BoxComponent.h"
 #include "Component/Shape/SphereComponent.h"
@@ -55,9 +56,11 @@ static PxDefaultAllocator GPhysXAllocator;
 // ============================================================
 static PxFoundation* GSharedFoundation = nullptr;
 static PxPhysics* GSharedPhysics = nullptr;
+static PxCooking* GSharedCooking = nullptr;
 static PxPvd* GSharedPvd = nullptr;
 static PxPvdTransport* GSharedPvdTransport = nullptr;
 static bool GSharedExtensionsInitialized = false;
+static bool GVehicleSDKInitialized = false;
 static int32 GSharedRefCount = 0;
 
 static void ReleaseSharedPvd()
@@ -128,6 +131,18 @@ static void AcquireSharedPhysX(PxFoundation*& OutFoundation, PxPhysics*& OutPhys
 				UE_LOG("[PhysX] Extensions initialized (PVD=%d, Result=%d)",
 					GSharedPvd ? 1 : 0,
 					GSharedExtensionsInitialized ? 1 : 0);
+
+				GSharedCooking = PxCreateCooking(
+					PX_PHYSICS_VERSION,
+					*GSharedFoundation,
+					PxCookingParams(GSharedPhysics->getTolerancesScale()));
+
+				if (PxInitVehicleSDK(*GSharedPhysics))
+				{
+					PxVehicleSetBasisVectors(PxVec3(0.0f, 0.0f, 1.0f), PxVec3(1.0f, 0.0f, 0.0f));
+					PxVehicleSetUpdateMode(PxVehicleUpdateMode::eACCELERATION);
+					GVehicleSDKInitialized = true;
+				}
 			}
 		}
 	}
@@ -140,6 +155,16 @@ static void ReleaseSharedPhysX()
 {
 	if (--GSharedRefCount <= 0)
 	{
+		if (GVehicleSDKInitialized)
+		{
+			PxCloseVehicleSDK();
+			GVehicleSDKInitialized = false;
+		}
+		if (GSharedCooking)
+		{
+			GSharedCooking->release();
+			GSharedCooking = nullptr;
+		}
 		if (GSharedExtensionsInitialized)
 		{
 			PxCloseExtensions();
@@ -944,6 +969,10 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 		return;
 	}
 
+	Cooking = GSharedCooking;
+	VehicleManager = new FPhysXVehicleManager();
+	VehicleManager->Init(Physics, Scene, Cooking, DefaultMaterial);
+
 	UE_LOG("[PhysX] Initialized successfully (Scene=%p, Workers=%u, CCD=%d, PCM=%d, ActiveActors=%d, PVD=%d)",
 		Scene,
 		WorkerThreadCount,
@@ -996,6 +1025,7 @@ void FPhysXPhysicsScene::Shutdown()
 	}
 	BodyMappings.clear();
 
+	if (VehicleManager) { VehicleManager->Release(); delete VehicleManager; VehicleManager = nullptr; }
 	if (DefaultMaterial) { DefaultMaterial->release(); DefaultMaterial = nullptr; }
 	if (Scene) { Scene->release(); Scene = nullptr; }
 	if (EventCallback) { delete EventCallback; EventCallback = nullptr; }
@@ -1613,6 +1643,12 @@ void FPhysXPhysicsScene::StartSimulation(float DeltaTime)
 	for (IPhysicsBodySync* Sync : BodySyncs)
 	{
 		if (Sync) Sync->PrePhysicsSimulate(DeltaTime);
+	}
+
+	if (VehicleManager)
+	{
+		VehicleManager->PreTick(DeltaTime);
+		VehicleManager->Tick(DeltaTime);
 	}
 
 	// ── Simulate (async 윈도우 시작) ──

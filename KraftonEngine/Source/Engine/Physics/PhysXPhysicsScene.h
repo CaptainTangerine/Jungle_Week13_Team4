@@ -12,6 +12,7 @@ namespace physx
 	class PxFoundation;
 	class PxPhysics;
 	class PxScene;
+	class PxCooking;
 	class PxDefaultCpuDispatcher;
 	class PxMaterial;
 	class PxRigidActor;
@@ -21,6 +22,7 @@ namespace physx
 }
 
 class FPhysXSimulationCallback;
+class FPhysXVehicleManager;
 class IPhysicsBodySync;
 
 // ============================================================
@@ -100,6 +102,11 @@ public:
 	bool RaycastByObjectTypes(const FVector& Start, const FVector& Dir, float MaxDist, FHitResult& OutHit,
 		uint32 ObjectTypeMask, const AActor* IgnoreActor = nullptr) const override;
 
+	//=============================================================
+	// Vehicles
+	//=============================================================
+	FPhysXVehicleManager* GetVehicleManager() { return VehicleManager; }
+
 private:
 	UWorld* World = nullptr;
 
@@ -107,9 +114,11 @@ private:
 	physx::PxFoundation* Foundation = nullptr;
 	physx::PxPhysics* Physics = nullptr;
 	physx::PxScene* Scene = nullptr;
+	physx::PxCooking* Cooking = nullptr;   // 공유 PxCooking (convex hull cooking — vehicles)
 	physx::PxDefaultCpuDispatcher* Dispatcher = nullptr;
 	physx::PxMaterial* DefaultMaterial = nullptr;
 	FPhysXSimulationCallback* EventCallback = nullptr;
+	FPhysXVehicleManager* VehicleManager = nullptr;
 
 	// Actor 단위 매핑 — 한 액터의 여러 컴포넌트가 같은 PxRigidActor에 shape로 합쳐진다.
 	struct FBodyMapping

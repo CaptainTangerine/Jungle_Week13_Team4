@@ -1007,6 +1007,9 @@
     <ClCompile Include="Source\Engine\Component\Movement\MovementComponent.cpp">
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Component\Movement\PawnMovementComponent.cpp">
+      <Filter>Source\Engine\Component\Movement</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Component\Movement\PendulumMovementComponent.cpp">
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClCompile>
@@ -1014,6 +1017,9 @@
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Component\Movement\RotatingMovementComponent.cpp">
+      <Filter>Source\Engine\Component\Movement</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Component\Movement\WheeledVehicleMovementComponent.cpp">
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Component\Primitive\BillboardComponent.cpp">
@@ -1223,6 +1229,9 @@
     <ClCompile Include="Source\Engine\GameFramework\Pawn\Pawn.cpp">
       <Filter>Source\Engine\GameFramework\Pawn</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\GameFramework\Pawn\WheeledVehicle.cpp">
+      <Filter>Source\Engine\GameFramework\Pawn</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Gizmo\BoneTransformGizmoTarget.cpp">
       <Filter>Source\Engine\Gizmo</Filter>
     </ClCompile>
@@ -1371,6 +1380,9 @@
       <Filter>Source\Engine\Physics</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Physics\PhysXPhysicsScene.cpp">
+      <Filter>Source\Engine\Physics</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Physics\PhysXVehicleManager.cpp">
       <Filter>Source\Engine\Physics</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Physics\Asset\BodyConstraintGenerator.cpp">
@@ -2162,6 +2174,9 @@
     <ClInclude Include="Source\Engine\Component\Movement\MovementComponent.h">
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Component\Movement\PawnMovementComponent.h">
+      <Filter>Source\Engine\Component\Movement</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Component\Movement\PendulumMovementComponent.h">
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClInclude>
@@ -2169,6 +2184,9 @@
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Component\Movement\RotatingMovementComponent.h">
+      <Filter>Source\Engine\Component\Movement</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Component\Movement\WheeledVehicleMovementComponent.h">
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Component\Primitive\BillboardComponent.h">
@@ -2411,6 +2429,9 @@
     <ClInclude Include="Source\Engine\GameFramework\Pawn\Pawn.h">
       <Filter>Source\Engine\GameFramework\Pawn</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\GameFramework\Pawn\WheeledVehicle.h">
+      <Filter>Source\Engine\GameFramework\Pawn</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Gizmo\BoneTransformGizmoTarget.h">
       <Filter>Source\Engine\Gizmo</Filter>
     </ClInclude>
@@ -2622,6 +2643,9 @@
       <Filter>Source\Engine\Physics</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Physics\PhysXPhysicsScene.h">
+      <Filter>Source\Engine\Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\PhysXVehicleManager.h">
       <Filter>Source\Engine\Physics</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Physics\PhysicsHandles.h">

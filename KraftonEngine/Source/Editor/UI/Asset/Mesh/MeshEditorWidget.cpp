@@ -28,10 +28,6 @@
 #include "Physics/Asset/PhysicsAssetManager.h"
 #include "Physics/Asset/BodySetup.h"
 #include "Physics/Asset/BodyConstraintGenerator.h"
-#include "Physics/BodyInstance.h"
-#include "Physics/IPhysicsScene.h"
-#include "Physics/PhysicsInterfaceTypes.h"
-#include "GameFramework/World.h"
 #include "Editor/UI/Panel/FPropertyTable.h"
 #include "Physics/Asset/ConstraintSetup.h"
 #include "Math/MathUtils.h"
@@ -1731,31 +1727,6 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 	ImGui::Text("Bodies: %d   Constraints: %d",
 		static_cast<int32>(CurrentPhysicsAsset->BodySetups.size()),
 		static_cast<int32>(CurrentPhysicsAsset->ConstraintSetups.size()));
-
-	// 시각화 토글. Bodies 를 끄고 Constraints 만 켜면 "Constraint 만 보기" 모드(각도 편집 시
-	// 바디 와이어가 시야를 가리지 않음). 조인트는 본 선택 시 해당 조인트만, 아니면 전체.
-	bool bShowBodies = ViewportClient.IsDrawBodies();
-	if (ImGui::Checkbox("Show Bodies", &bShowBodies))
-	{
-		ViewportClient.SetDrawBodies(bShowBodies);
-	}
-	ImGui::SameLine();
-	bool bShowConstraints = ViewportClient.IsDrawConstraints();
-	if (ImGui::Checkbox("Show Constraints", &bShowConstraints))
-	{
-		ViewportClient.SetDrawConstraints(bShowConstraints);
-	}
-	if (ImGui::SmallButton("Constraints Only"))
-	{
-		ViewportClient.SetDrawBodies(false);
-		ViewportClient.SetDrawConstraints(true);
-	}
-	ImGui::SameLine();
-	if (ImGui::SmallButton("Show All"))
-	{
-		ViewportClient.SetDrawBodies(true);
-		ViewportClient.SetDrawConstraints(true);
-	}
 
 	// 전체 스켈레톤에 대해 바디/조인트 초기값을 일괄 생성(이미 있는 본은 건너뜀) — 생성기에 위임.
 	if (ImGui::Button("Generate All (Bodies + Constraints)", ImVec2(-1.0f, 0.0f)))
