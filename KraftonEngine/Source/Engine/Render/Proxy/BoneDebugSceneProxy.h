@@ -20,7 +20,6 @@ public:
 
 private:
 	void RebuildLines();
-	void RebuildTriangles();
 
 private:
 	TArray<FWireLine> CachedLines;

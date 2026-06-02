@@ -163,8 +163,3 @@ void FBoneDebugSceneProxy::RebuildLines()
 		BuildBonePyramidLines(CachedParentBoneLines, BonePos, ParentPos, PyramidWidthScale);
 	}
 }
-
-void FBoneDebugSceneProxy::RebuildTriangles()
-{
-	
-}
