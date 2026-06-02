@@ -386,9 +386,13 @@ void FPhysicsAssetDebugSceneProxy::RebuildDebugRender()
 
 	const int32 SelectedBone = Comp->GetSelectedBoneIndex();
 
+	// 바디 표시 방식 스냅샷. 둘 다 off 면 바디 루프 자체를 생략(조인트는 별개).
+	const bool bDrawWire = Comp->IsDrawBodyWireframe();
+	const bool bDrawSolid = Comp->IsDrawBodySolid();
+
 	for (const UBodySetup* Body : Asset->BodySetups)
 	{
-		if (!Comp->IsDrawBodies()) break;   // "Constraint 만 보기" 모드 — 바디 와이어 생략
+		if (!Comp->IsDrawBodies() || (!bDrawWire && !bDrawSolid)) break;   // "Constraint 만 보기" 모드 — 바디 생략
 		if (!Body) continue;
 
 		const int32 BoneIndex = FindBoneIndexByName(MeshAsset, Body->BoneName);
@@ -415,8 +419,8 @@ void FPhysicsAssetDebugSceneProxy::RebuildDebugRender()
 		for (const FKSphereElem& Elem : Body->AggGeom.SphereElems)
 		{
 			const FVector WC = ToWorld(Elem.Center);
-			BuildSphere(Out, WC, FVector(1, 0, 0), FVector(0, 1, 0), FVector(0, 0, 1), Elem.Radius * S);
-			BuildSolidSphere(SolidOut, WC, FVector(1, 0, 0), FVector(0, 1, 0), FVector(0, 0, 1), Elem.Radius * S);
+			if (bDrawWire)  BuildSphere(Out, WC, FVector(1, 0, 0), FVector(0, 1, 0), FVector(0, 0, 1), Elem.Radius * S);
+			if (bDrawSolid) BuildSolidSphere(SolidOut, WC, FVector(1, 0, 0), FVector(0, 1, 0), FVector(0, 0, 1), Elem.Radius * S);
 		}
 
 		// Box / Capsule — elem.Rotation 을 본 회전과 합성해 월드 기준 축 산출.
@@ -428,8 +432,8 @@ void FPhysicsAssetDebugSceneProxy::RebuildDebugRender()
 			const FVector AY = Q.RotateVector(FVector(0, 1, 0));
 			const FVector AZ = Q.RotateVector(FVector(0, 0, 1));
 			const FVector HE(Elem.HalfExtent.X * S, Elem.HalfExtent.Y * S, Elem.HalfExtent.Z * S);
-			BuildBox(Out, WC, AX, AY, AZ, HE);
-			BuildSolidBox(SolidOut, WC, AX, AY, AZ, HE);
+			if (bDrawWire)  BuildBox(Out, WC, AX, AY, AZ, HE);
+			if (bDrawSolid) BuildSolidBox(SolidOut, WC, AX, AY, AZ, HE);
 		}
 
 		for (const FKSphylElem& Elem : Body->AggGeom.SphylElems)
@@ -439,8 +443,8 @@ void FPhysicsAssetDebugSceneProxy::RebuildDebugRender()
 			const FVector AX = Q.RotateVector(FVector(1, 0, 0));
 			const FVector AY = Q.RotateVector(FVector(0, 1, 0));
 			const FVector AZ = Q.RotateVector(FVector(0, 0, 1));
-			BuildCapsule(Out, WC, AX, AY, AZ, Elem.Radius * S, Elem.Length * 0.5f * S);
-			BuildSolidCapsule(SolidOut, WC, AX, AY, AZ, Elem.Radius * S, Elem.Length * 0.5f * S);
+			if (bDrawWire)  BuildCapsule(Out, WC, AX, AY, AZ, Elem.Radius * S, Elem.Length * 0.5f * S);
+			if (bDrawSolid) BuildSolidCapsule(SolidOut, WC, AX, AY, AZ, Elem.Radius * S, Elem.Length * 0.5f * S);
 		}
 	}
 

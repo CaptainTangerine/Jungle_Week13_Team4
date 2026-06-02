@@ -3,6 +3,7 @@
 #include "Render/Command/DrawCommandList.h"
 #include "Render/Types/FrameContext.h"
 #include "Render/Geometry/LineGeometry.h"
+#include "Render/Geometry/TriangleGeometry.h"
 #include "Render/Geometry/FontGeometry.h"
 #include "Render/Proxy/PrimitiveSceneProxy.h"
 
@@ -53,6 +54,7 @@ private:
 
 	// BuildDynamicDrawCommands 서브 메서드
 	void BuildEditorLineCommands(EViewMode ViewMode);
+	void BuildPhysicsBodyCommands(EViewMode ViewMode);
 	void BuildFogCommands(const FFrameContext& Frame, const FScene* Scene);
 	void BuildPostProcessCommands(const FFrameContext& Frame, const FScene* Scene);
 	void BuildFontCommands(EViewMode ViewMode);
@@ -84,6 +86,7 @@ private:
 	FLineGeometry  GridLines;
 	FLineGeometry  DebugBoneLines;
 	FLineGeometry  OverlayLines;   // 깊이 무시(NoDepth)로 메시 위에 덮어 그리는 에디터 라인(조인트 한계 등)
+	FTriangleGeometry PhysicsBodies; // PhysicsAsset 솔리드 바디(반투명) — AlphaBlend 패스
 	FFontGeometry  FontGeometry;
 
 	// PerObject CB 풀

@@ -1745,6 +1745,22 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 	{
 		ViewportClient.SetDrawConstraints(bShowConstraints);
 	}
+
+	// 바디 표시 방식 — 솔리드(반투명)/와이어프레임 독립 토글. 둘 다 켜면 UE PhAT 기본 모양.
+	// "Show Bodies" 가 꺼져 있으면 비활성.
+	ImGui::BeginDisabled(!bShowBodies);
+	bool bBodySolid = ViewportClient.IsDrawBodySolid();
+	if (ImGui::Checkbox("Solid", &bBodySolid))
+	{
+		ViewportClient.SetDrawBodySolid(bBodySolid);
+	}
+	ImGui::SameLine();
+	bool bBodyWire = ViewportClient.IsDrawBodyWireframe();
+	if (ImGui::Checkbox("Wireframe", &bBodyWire))
+	{
+		ViewportClient.SetDrawBodyWireframe(bBodyWire);
+	}
+	ImGui::EndDisabled();
 	if (ImGui::SmallButton("Constraints Only"))
 	{
 		ViewportClient.SetDrawBodies(false);
