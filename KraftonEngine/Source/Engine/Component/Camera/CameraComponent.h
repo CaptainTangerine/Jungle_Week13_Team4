@@ -1,6 +1,7 @@
-#pragma once
+﻿#pragma once
 #include "Object/Reflection/ObjectFactory.h"
 #include "Component/SceneComponent.h"
+#include "FPostProcessSettings.h"
 #include "Math/MathUtils.h"
 #include "Math/Vector.h"
 
@@ -33,6 +34,8 @@ public:
 	void LookAt(const FVector& Target);
 	void SetCameraState(const FCameraState& NewState);
 	const FCameraState& GetCameraState() const { return CameraState; }
+	void SetPostProcessSettings(const FPostProcessSettings& InSetting) { PostProcessSettings = InSetting; }
+	const FPostProcessSettings& GetPostProcessSettings() const { return PostProcessSettings; }
 
 	// 카메라 POV 통화 산출 — UE: UCameraComponent::GetCameraView.
 	// CameraManager / RenderPipeline 이 이걸 받아 매트릭스/프러스텀을 빌드한다.
@@ -58,4 +61,7 @@ private:
 	UPROPERTY(Edit, Save, Category="Camera", DisplayName="Orthographic", Member=CameraState.bIsOrthogonal, Type=Bool);
 	UPROPERTY(Edit, Save, Category="Camera", DisplayName="Ortho Width", Member=CameraState.OrthoWidth, Type=Float, Min=0.1f, Max=1000.0f, Speed=0.5f);
 	FCameraState CameraState;
+
+	UPROPERTY(Edit, Save, Category="Post Process", DisplayName="Post Process Settings", Type=Struct)
+	FPostProcessSettings PostProcessSettings;
 };
