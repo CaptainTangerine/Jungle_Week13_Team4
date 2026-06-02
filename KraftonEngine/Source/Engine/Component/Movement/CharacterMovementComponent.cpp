@@ -20,12 +20,14 @@
 
 UCharacterMovementComponent::UCharacterMovementComponent()
 {
-	// USkeletalMeshComponent::TickComponent (TG_PrePhysics, default) 가 UpdateAnimation 으로
-	// AnimInstance->PendingRootMotion 을 채운 다음에 CMC 가 그 값을 가져가야 같은 frame 데이터를
-	// 쓸 수 있다. Prerequisite API 가 우리 엔진에 없으므로 TickGroup 분리로 순서 보장.
-	// FTickManager 가 group 순서대로 실행하므로 PrePhysics 가 모두 끝난 뒤 DuringPhysics 가 돈다.
-	PrimaryComponentTick.SetTickGroup(TG_DuringPhysics);
-	PrimaryComponentTick.SetEndTickGroup(TG_DuringPhysics);
+	// 순서 보장(group 단위): anim(PrePhysics) → simulate → CMC(PostPhysics).
+	//  - PrePhysics: USkeletalMeshComponent 가 UpdateAnimation 으로 PendingRootMotion 을 채움.
+	//  - CMC 는 그 뒤에 루트모션을 소비하고, 스윕/바닥 레이캐스트로 capsule 을 이동시킨다.
+	// CMC 는 PhysX scene query(스윕/레이캐스트)와 body 이동을 하므로 simulate 진행 중인
+	// TG_DuringPhysics 에 두면 안 된다(PxActor 접근 금지 구간). fetchResults 이후인
+	// TG_PostPhysics 에 둬서 최신 물리 상태로 안전하게 쿼리한다.
+	PrimaryComponentTick.SetTickGroup(TG_PostPhysics);
+	PrimaryComponentTick.SetEndTickGroup(TG_PostPhysics);
 }
 
 void UCharacterMovementComponent::AddInputVector(const FVector& WorldDirection, float ScaleValue)

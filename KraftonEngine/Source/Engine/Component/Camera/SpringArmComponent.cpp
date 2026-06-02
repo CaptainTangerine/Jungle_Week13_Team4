@@ -11,9 +11,11 @@
 
 USpringArmComponent::USpringArmComponent()
 {
-	// CharacterMovement rotates the parent capsule during physics. Evaluate the camera afterward.
-	PrimaryComponentTick.SetTickGroup(TG_PostPhysics);
-	PrimaryComponentTick.SetEndTickGroup(TG_PostPhysics);
+	// CharacterMovement(TG_PostPhysics) 가 capsule 을 이동/회전시킨 뒤 카메라를 평가해야 한다.
+	// CMC 가 PostPhysics 로 이동했으므로 카메라는 그 다음 그룹(PostUpdateWork)에 둬서
+	// "CMC 이동 → 카메라 추종" 순서를 group 단위로 보장한다.
+	PrimaryComponentTick.SetTickGroup(TG_PostUpdateWork);
+	PrimaryComponentTick.SetEndTickGroup(TG_PostUpdateWork);
 
 	// A scaled pawn must not scale the camera rig or corrupt rotation extraction.
 	SetAbsoluteScale(true);

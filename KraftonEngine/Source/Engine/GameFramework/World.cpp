@@ -348,21 +348,36 @@ void UWorld::Tick(float DeltaTime, ELevelTick TickType)
 		return;
 	}
 
-	// 물리를 tick group 사이에 끼워넣는다(UE 식 순서):
-	//   TG_PrePhysics(anim 등, pre-sync 쓰기) → simulate/fetchResults → 나머지 그룹(post-sync
-	//   읽기, CMC, 카메라). 랙돌 sync 가 simulate 를 정확히 감싸 한 프레임 지연이 사라지고,
-	//   simulate~fetchResults 윈도우 밖에서만 PxActor 에 접근하게 된다(향후 async 대비).
+	// 물리 simulate 를 tick group 사이에 끼워넣어 TG_DuringPhysics 와 오버랩시킨다(UE 식 순서):
+	//   TG_PrePhysics(anim 등, pre-sync 쓰기)
+	//     → StartSimulation(pre-sync → simulate 킥오프; PhysX 워커가 백그라운드로 적분)
+	//     → TG_DuringPhysics(simulate 와 동시 실행되는 물리 비의존 작업)
+	//     → FinishSimulation(fetchResults 로 블록 → post-sync → 이벤트)
+	//     → TG_PostPhysics..PostUpdateWork(시뮬 결과 사용: CMC 이동, 카메라)
+	//
+	// ★ 불변식: TG_DuringPhysics 틱은 simulate 진행 중 실행된다. PxActor 를 읽거나 쓰면 안 된다
+	//   (레이캐스트/스윕/속도 읽기/포즈 쓰기 금지). 물리 결과가 필요하거나 PxActor 를 만지는
+	//   컴포넌트는 TG_PostPhysics 이후에 둘 것. (CMC=PostPhysics, SpringArm=PostUpdateWork)
 	TickManager.Gather(this, TickType);
 	TickManager.RunTickGroups(DeltaTime, TickType, TG_PrePhysics, TG_PrePhysics);
 
-	if (bHasBegunPlay && PhysicsScene)
+	const bool bRunPhysics = bHasBegunPlay && PhysicsScene;
+	if (bRunPhysics)
 	{
 		SCOPE_STAT_CAT("PhysicsScene", "1_WorldTick");
 		PhysicsScene->StartSimulation(DeltaTime);
+	}
+
+	// simulate 와 오버랩되는 구간 — 여기 등록된 틱은 PhysX 워커와 동시에 메인 스레드에서 돈다.
+	TickManager.RunTickGroups(DeltaTime, TickType, TG_DuringPhysics, TG_DuringPhysics);
+
+	if (bRunPhysics)
+	{
+		SCOPE_STAT_CAT("PhysicsScene", "1_WorldTick");
 		PhysicsScene->FinishSimulation();
 	}
 
-	TickManager.RunTickGroups(DeltaTime, TickType, TG_DuringPhysics, static_cast<ETickingGroup>(TG_MAX - 1));
+	TickManager.RunTickGroups(DeltaTime, TickType, TG_PostPhysics, static_cast<ETickingGroup>(TG_MAX - 1));
 
 	// 카메라는 물리/액터 Tick 이후 갱신 — 차량 1인칭처럼 physics body 에 붙은 카메라가
 	// 같은 프레임의 최신 transform 으로 POV cache 를 채운다.
