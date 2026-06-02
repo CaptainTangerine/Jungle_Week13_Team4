@@ -534,6 +534,9 @@
     <FxCompile Include="Shaders\Editor\Gizmo.hlsl">
       <Filter>Shaders\Editor</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\Editor\PhysicsBody.hlsl">
+      <Filter>Shaders\Editor</Filter>
+    </FxCompile>
     <FxCompile Include="Shaders\Geometry\Decal.hlsl">
       <Filter>Shaders\Geometry</Filter>
     </FxCompile>

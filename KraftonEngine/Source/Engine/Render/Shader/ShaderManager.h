@@ -93,6 +93,7 @@ namespace EShaderPath
 
 	inline constexpr const char* Editor = "Shaders/Editor/Editor.hlsl";
 	inline constexpr const char* Gizmo = "Shaders/Editor/Gizmo.hlsl";
+	inline constexpr const char* PhysicsBody = "Shaders/Editor/PhysicsBody.hlsl";
 
 	inline constexpr const char* FXAA = "Shaders/PostProcess/FXAA.hlsl";
 	inline constexpr const char* Outline = "Shaders/PostProcess/Outline.hlsl";
