@@ -9,6 +9,7 @@
 #include "Physics/Asset/BodySetup.h"
 #include "Physics/Asset/PhysicsAsset.h"
 #include "Physics/Cloth/ClothAsset.h"
+#include "Physics/Cloth/ClothAssetManager.h"
 #include "Render/Proxy/ClothSceneProxy.h"
 
 #include <algorithm>
@@ -78,6 +79,7 @@ FPrimitiveSceneProxy* UClothComponent::CreateSceneProxy()
 void UClothComponent::BeginPlay()
 {
 	UPrimitiveComponent::BeginPlay();
+	ResolveClothAsset();
 	UseRestPoseRenderData();
 	InitializeSimulation();
 }
@@ -91,10 +93,7 @@ void UClothComponent::EndPlay()
 void UClothComponent::PostDuplicate()
 {
 	UPrimitiveComponent::PostDuplicate();
-	if (UObject* Cached = ClothAssetPath.Get())
-	{
-		ClothAsset = Cast<UClothAsset>(Cached);
-	}
+	ResolveClothAsset();
 	UseRestPoseRenderData();
 }
 
@@ -108,7 +107,7 @@ void UClothComponent::PostEditProperty(const char* PropertyName)
 
 	if (std::strcmp(PropertyName, "ClothAssetPath") == 0 || std::strcmp(PropertyName, "Cloth Asset") == 0)
 	{
-		ClothAsset = Cast<UClothAsset>(ClothAssetPath.Get());
+		ResolveClothAsset();
 		ResetSimulation();
 	}
 	else if (std::strcmp(PropertyName, "AttachBoneName") == 0 || std::strcmp(PropertyName, "Attach Bone Name") == 0)
@@ -160,10 +159,33 @@ UMaterial* UClothComponent::GetResolvedMaterial() const
 void UClothComponent::ResetSimulation()
 {
 	ReleaseSimulation();
+	ResolveClothAsset();
 	UseRestPoseRenderData();
 	InitializeSimulation();
 	MarkWorldBoundsDirty();
 	MarkProxyDirty(EDirtyFlag::Mesh);
+}
+
+UClothAsset* UClothComponent::ResolveClothAsset()
+{
+	if (UObject* Cached = ClothAssetPath.Get())
+	{
+		ClothAsset = Cast<UClothAsset>(Cached);
+		return ClothAsset;
+	}
+
+	if (ClothAssetPath.IsNull())
+	{
+		ClothAsset = nullptr;
+		return nullptr;
+	}
+
+	ClothAsset = FClothAssetManager::Get().Load(ClothAssetPath.ToString());
+	if (ClothAsset)
+	{
+		ClothAssetPath.SetCachedObject(ClothAsset);
+	}
+	return ClothAsset;
 }
 
 FMeshDataView UClothComponent::GetMeshDataView() const
@@ -242,8 +264,12 @@ void UClothComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 
 	if (!ClothAsset)
 	{
-		bHasPendingSimulationInput = false;
-		return;
+		ResolveClothAsset();
+		if (!ClothAsset)
+		{
+			bHasPendingSimulationInput = false;
+			return;
+		}
 	}
 
 	if (!bEnableSimulation)

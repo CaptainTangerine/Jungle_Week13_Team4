@@ -9,6 +9,7 @@
 #include "Mesh/Static/StaticMesh.h"
 #include "Mesh/Static/StaticMeshAsset.h"
 #include "Physics/Asset/BodySetup.h"
+#include "Physics/Cloth/ClothAssetManager.h"
 #include "Runtime/Engine.h"
 #include "Settings/EditorSettings.h"
 #include "Slate/SlateApplication.h"
@@ -305,6 +306,33 @@ void FStaticMeshEditorWidget::RenderDetailsPanel(UStaticMesh* StaticMesh)
 	ImGui::Text("Indices: %s", FormatStaticMeshStatCount(Asset->Indices.size()).c_str());
 	ImGui::Text("Triangles: %s", FormatStaticMeshStatCount(Asset->Indices.size() / 3).c_str());
 	ImGui::Text("Sections: %s", FormatStaticMeshStatCount(Asset->Sections.size()).c_str());
+
+	ImGui::Separator();
+	ImGui::Text("Cloth");
+	if (ImGui::Button("Create Cloth Asset From Mesh") && StaticMesh)
+	{
+		FString CreatedPath;
+		FString Error;
+		if (FClothAssetManager::Get().CreateFromStaticMesh(StaticMesh, CreatedPath, nullptr, &Error))
+		{
+			LastCreatedClothAssetPath = CreatedPath;
+			LastClothAssetError.clear();
+		}
+		else
+		{
+			LastClothAssetError = Error.empty() ? "Unknown ClothAsset build error." : Error;
+			ImGui::OpenPopup("StaticMeshClothAssetFailed");
+		}
+	}
+	if (!LastCreatedClothAssetPath.empty())
+	{
+		ImGui::TextWrapped("Created: %s", LastCreatedClothAssetPath.c_str());
+	}
+	if (ImGui::BeginPopup("StaticMeshClothAssetFailed"))
+	{
+		ImGui::TextWrapped("%s", LastClothAssetError.c_str());
+		ImGui::EndPopup();
+	}
 
 	ImGui::Separator();
 	ImGui::Text("Collision");

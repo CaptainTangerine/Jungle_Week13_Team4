@@ -510,6 +510,7 @@ namespace
 		if (AssetType == "UAnimGraphAsset")  { RegistryCombo("##AnimGraphAsset", "UAnimGraphAsset");  return bChanged; }
 		if (AssetType == "UParticleSystem")  { RegistryCombo("##ParticleSystem", "UParticleSystem");  return bChanged; }
 		if (AssetType == "UVectorFieldAsset"){ RegistryCombo("##VectorField",    "UVectorFieldAsset"); return bChanged; }
+		if (AssetType == "ClothAsset" || AssetType == "UClothAsset") { RegistryCombo("##ClothAsset", "UClothAsset"); return bChanged; }
 
 		if (AssetType == "LuaAnimScript")
 		{

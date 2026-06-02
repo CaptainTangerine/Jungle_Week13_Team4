@@ -25,6 +25,7 @@
 #include "Input/InputSystem.h"
 #include "GameFramework/AActor.h"
 #include "Materials/MaterialManager.h"
+#include "Physics/Cloth/ClothAssetManager.h"
 #include "Engine/Platform/Paths.h"
 #include "Lua/LuaScriptManager.h"
 #include <filesystem>
@@ -70,6 +71,11 @@ void UEditorEngine::Init(FWindowsWindow* InWindow)
 	{
 		SCOPE_STARTUP_STAT("MaterialManager::ScanAssets");
 		FMaterialManager::Get().ScanMaterialAssets();
+	}
+
+	{
+		SCOPE_STARTUP_STAT("ClothAssetManager::RefreshAvailableClothAssets");
+		FClothAssetManager::Get().RefreshAvailableClothAssets();
 	}
 
 	// 에디터 전용 초기화

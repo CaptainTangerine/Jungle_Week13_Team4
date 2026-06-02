@@ -1394,6 +1394,12 @@
     <ClCompile Include="Source\Engine\Physics\Cloth\ClothAsset.cpp">
       <Filter>Source\Engine\Physics\Cloth</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Physics\Cloth\ClothAssetBuilder.cpp">
+      <Filter>Source\Engine\Physics\Cloth</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Physics\Cloth\ClothAssetManager.cpp">
+      <Filter>Source\Engine\Physics\Cloth</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Platform\CrashDump.cpp">
       <Filter>Source\Engine\Platform</Filter>
     </ClCompile>
@@ -2664,6 +2670,12 @@
       <Filter>Source\Engine\Physics\Asset</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Physics\Cloth\ClothAsset.h">
+      <Filter>Source\Engine\Physics\Cloth</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\Cloth\ClothAssetBuilder.h">
+      <Filter>Source\Engine\Physics\Cloth</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\Cloth\ClothAssetManager.h">
       <Filter>Source\Engine\Physics\Cloth</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Platform\ConsoleHelper.h">

@@ -699,6 +699,8 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClCompile Include="Source\Engine\Physics\Asset\PhysicsAsset.cpp" />
     <ClCompile Include="Source\Engine\Physics\Asset\PhysicsAssetManager.cpp" />
     <ClCompile Include="Source\Engine\Physics\Cloth\ClothAsset.cpp" />
+    <ClCompile Include="Source\Engine\Physics\Cloth\ClothAssetBuilder.cpp" />
+    <ClCompile Include="Source\Engine\Physics\Cloth\ClothAssetManager.cpp" />
     <ClCompile Include="Source\Engine\Platform\CrashDump.cpp" />
     <ClCompile Include="Source\Engine\Platform\DirectoryWatcher.cpp" />
     <ClCompile Include="Source\Engine\Platform\Paths.cpp" />
@@ -1125,6 +1127,8 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAssetManager.h" />
     <ClInclude Include="Source\Engine\Physics\Asset\PhysicsAssetTypes.h" />
     <ClInclude Include="Source\Engine\Physics\Cloth\ClothAsset.h" />
+    <ClInclude Include="Source\Engine\Physics\Cloth\ClothAssetBuilder.h" />
+    <ClInclude Include="Source\Engine\Physics\Cloth\ClothAssetManager.h" />
     <ClInclude Include="Source\Engine\Platform\ConsoleHelper.h" />
     <ClInclude Include="Source\Engine\Platform\CrashDump.h" />
     <ClInclude Include="Source\Engine\Platform\DirectoryWatcher.h" />

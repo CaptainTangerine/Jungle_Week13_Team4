@@ -37,4 +37,6 @@ private:
 	uint32 InstanceId;
 	FName PreviewWorldHandle = FName::None;
 	FString WindowIdSuffix;
+	FString LastCreatedClothAssetPath;
+	FString LastClothAssetError;
 };

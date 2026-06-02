@@ -69,6 +69,7 @@ protected:
 	void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction) override;
 
 private:
+	UClothAsset* ResolveClothAsset();
 	bool InitializeSimulation();
 	void ReleaseSimulation();
 	void UpdateClothFrameFromMaster();

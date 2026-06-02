@@ -9,6 +9,7 @@
 #include "Animation/Skeleton/SkeletonManager.h"
 #include "Particle/Asset/ParticleSystemManager.h"
 #include "Particle/VectorField/VectorFieldManager.h"
+#include "Physics/Cloth/ClothAssetManager.h"
 #include "Platform/Paths.h"
 
 #include <cstring>
@@ -55,6 +56,11 @@ namespace FAssetRegistry
 		{
 			FVectorFieldManager::Get().RefreshAvailableVectorFields();
 			return FVectorFieldManager::Get().GetAvailableVectorFieldFiles();
+		}
+		if (std::strcmp(AssetTypeName, "UClothAsset") == 0 || std::strcmp(AssetTypeName, "ClothAsset") == 0)
+		{
+			FClothAssetManager::Get().RefreshAvailableClothAssets();
+			return FClothAssetManager::Get().GetAvailableClothAssetFiles();
 		}
 		if (std::strcmp(AssetTypeName, "LuaAnimScript") == 0)
 		{

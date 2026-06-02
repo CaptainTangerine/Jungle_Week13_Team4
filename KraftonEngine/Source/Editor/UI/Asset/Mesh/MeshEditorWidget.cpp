@@ -29,6 +29,7 @@
 #include "Physics/Asset/BodySetup.h"
 #include "Physics/Asset/BodyConstraintGenerator.h"
 #include "Physics/BodyInstance.h"
+#include "Physics/Cloth/ClothAssetManager.h"
 #include "Physics/IPhysicsScene.h"
 #include "Physics/PhysicsInterfaceTypes.h"
 #include "GameFramework/World.h"
@@ -888,6 +889,34 @@ void FMeshEditorWidget::RenderMeshLayout()
 			if (!Path.empty() && Path != "None")
 			{
 				ImGui::TextWrapped("Path:\n%s", Path.c_str());
+			}
+
+			ImGui::Dummy(ImVec2(0, 8));
+			ImGui::Separator();
+			ImGui::TextUnformatted("Cloth");
+			if (ImGui::Button("Create Cloth Asset From Mesh", ImVec2(-1.0f, 0.0f)))
+			{
+				FString CreatedPath;
+				FString Error;
+				if (FClothAssetManager::Get().CreateFromSkeletalMesh(SkeletalMesh, CreatedPath, nullptr, &Error))
+				{
+					LastCreatedClothAssetPath = CreatedPath;
+					LastClothAssetError.clear();
+				}
+				else
+				{
+					LastClothAssetError = Error.empty() ? "Unknown ClothAsset build error." : Error;
+					ImGui::OpenPopup("SkeletalMeshClothAssetFailed");
+				}
+			}
+			if (!LastCreatedClothAssetPath.empty())
+			{
+				ImGui::TextWrapped("Created: %s", LastCreatedClothAssetPath.c_str());
+			}
+			if (ImGui::BeginPopup("SkeletalMeshClothAssetFailed"))
+			{
+				ImGui::TextWrapped("%s", LastClothAssetError.c_str());
+				ImGui::EndPopup();
 			}
 		}
 	}
