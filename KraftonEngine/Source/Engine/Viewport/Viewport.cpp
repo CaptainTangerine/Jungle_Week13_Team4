@@ -377,13 +377,19 @@ bool FViewport::CreateDOFResources()
 {
 	ReleaseDOFResources();
 
-	if (!CreateDOFResource(DOFResources.CoCResources, Width, Height, "ViewportDOFCoC"))
+	// CoC/Blur run at reduced resolution; Composite upscales the blurred layer.
+	uint32 DOFWidth = ceil(Width / EDOF::Downscale);
+	uint32 DOFHeight = ceil(Height / EDOF::Downscale);
+	if (DOFWidth == 0) DOFWidth = 1;
+	if (DOFHeight == 0) DOFHeight = 1;
+
+	if (!CreateDOFResource(DOFResources.CoCResources, DOFWidth, DOFHeight, "ViewportDOFCoC"))
 	{
 		ReleaseDOFResources();
 		return false;
 	}
 
-	if (!CreateDOFResource(DOFResources.BlurResources, Width, Height, "ViewportDOFBlur"))
+	if (!CreateDOFResource(DOFResources.BlurResources, DOFWidth, DOFHeight, "ViewportDOFBlur"))
 	{
 		ReleaseDOFResources();
 		return false;
