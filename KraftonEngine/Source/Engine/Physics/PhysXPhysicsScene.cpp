@@ -913,7 +913,10 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 	if (WorkerThreadCount == 0)
 	{
 		const unsigned HardwareConcurrency = std::thread::hardware_concurrency();
-		WorkerThreadCount = (HardwareConcurrency > 3) ? (HardwareConcurrency - 2) : 1;
+		const unsigned AutoWorkers = (HardwareConcurrency > 3) ? (HardwareConcurrency - 2) : 1;
+		// 하이퍼스레드까지 다 쓰면 과구독 — PhysX 솔버는 ~16 에서 수확 체감하고, 남는 스레드는
+		// 메인/렌더에 양보하는 게 낫다. auto 는 16 으로 캡(명시적 설정은 아래 32 까지 허용).
+		WorkerThreadCount = (std::min)(AutoWorkers, 16u);
 	}
 	WorkerThreadCount = (std::max)(1u, (std::min)(WorkerThreadCount, 32u));
 
