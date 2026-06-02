@@ -940,6 +940,7 @@ xcopy /Y "$(ProjectDir)ThirdParty\fbx\lib\x64\release\libfbxsdk.dll" "$(OutDir)"
     <ClInclude Include="Source\Engine\Collision\Ray\RayUtils.h" />
     <ClInclude Include="Source\Engine\Collision\Ray\RayUtilsSIMD.h" />
     <ClInclude Include="Source\Engine\Component\ActorComponent.h" />
+    <ClInclude Include="Source\Engine\Component\Camera\FPostProcessSettings.h" />
     <ClInclude Include="Source\Engine\Component\MeshComponent.h" />
     <ClInclude Include="Source\Engine\Component\PrimitiveComponent.h" />
     <ClInclude Include="Source\Engine\Component\SceneComponent.h" />
