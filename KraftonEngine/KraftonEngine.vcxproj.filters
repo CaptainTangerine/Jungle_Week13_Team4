@@ -1424,6 +1424,9 @@
     <ClCompile Include="Source\Engine\Profiling\Stats\MemoryStats.cpp">
       <Filter>Source\Engine\Profiling\Stats</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Profiling\Stats\PhysicsStats.cpp">
+      <Filter>Source\Engine\Profiling\Stats</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Profiling\Stats\ShadowStats.cpp">
       <Filter>Source\Engine\Profiling\Stats</Filter>
     </ClCompile>
@@ -2132,6 +2135,9 @@
     <ClInclude Include="Source\Engine\Component\Camera\CineCameraComponent.h">
       <Filter>Source\Engine\Component\Camera</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Component\Camera\FPostProcessSettings.h">
+      <Filter>Source\Engine\Component\Camera</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Component\Camera\SpringArmComponent.h">
       <Filter>Source\Engine\Component\Camera</Filter>
     </ClInclude>
@@ -2642,6 +2648,9 @@
     <ClInclude Include="Source\Engine\Physics\ConstraintInstance.h">
       <Filter>Source\Engine\Physics</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\IPhysicsBodySync.h">
+      <Filter>Source\Engine\Physics</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Physics\IPhysicsScene.h">
       <Filter>Source\Engine\Physics</Filter>
     </ClInclude>
@@ -2706,6 +2715,9 @@
       <Filter>Source\Engine\Profiling</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Profiling\Stats\MemoryStats.h">
+      <Filter>Source\Engine\Profiling\Stats</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Profiling\Stats\PhysicsStats.h">
       <Filter>Source\Engine\Profiling\Stats</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Profiling\Stats\ShadowStats.h">
