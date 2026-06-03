@@ -28,10 +28,11 @@
 
 using namespace physx;
 
-// 컴포넌트 물리 바디 경로 토글(IPhysicsScene.h 선언). Phase 4 는 per-body 동기화 머신만 추가하고
-// 플래그는 OFF 로 둔다(ComponentBodies 비어 dormant). Phase 5 에서 NotifyPhysicsBodyDirty 재정의와
-// 함께 ON 으로 플립한다. 구 BodyMappings 경로는 Phase 7 에서 제거 — 그때까지 false 로 즉시 롤백 가능.
-bool GUsePerComponentBodyInstance = false;
+// 컴포넌트 물리 바디 경로 토글(IPhysicsScene.h 선언). Phase 5 에서 ON — 컴포넌트가 per-component
+// FBodyInstance 를 소유하고, 생성/재생성/해제와 트랜스폼 동기화가 모두 신 경로로 동작한다.
+// 구 BodyMappings 경로(RegisterComponent/RebuildBody)는 Phase 7 에서 제거 — 그때까지 false 로
+// 되돌리면 즉시 롤백 가능.
+bool GUsePerComponentBodyInstance = true;
 
 // ============================================================
 // PhysX Error Callback

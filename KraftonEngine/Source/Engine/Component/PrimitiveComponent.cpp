@@ -79,6 +79,34 @@ void UPrimitiveComponent::EndPlay()
 	USceneComponent::EndPlay();
 }
 
+void UPrimitiveComponent::InitBodyInstanceInScene(IPhysicsScene* PS)
+{
+	if (!PS) return;
+
+	// 콜라이더(BodySetup)가 없으면 바디를 만들지 않는다.
+	UBodySetup* Setup = GetBodySetup();
+	if (!Setup) return;
+
+	// static = 시뮬도 키네마틱도 아님(월드 정적 지오메트리). 그 외엔 dynamic 으로 만들고
+	// InitBody 가 시뮬/키네마틱을 결정한다.
+	const bool bStatic = !GetSimulatePhysics() && !IsKinematic();
+	const FTransform WorldXf(GetWorldLocation(), GetWorldMatrix().ToQuat(), FVector(1.0f, 1.0f, 1.0f));
+
+	BodyInstance.OwnerComponent = this;
+	BodyInstance.Scale3D = GetBodySetupScale();
+	if (BodyInstance.InitBody(Setup, WorldXf, PS, -1, {}, bStatic))
+	{
+		PS->AddBody(&BodyInstance);
+	}
+}
+
+void UPrimitiveComponent::TermBodyInstanceInScene(IPhysicsScene* PS)
+{
+	if (!PS) return;
+	PS->RemoveBody(&BodyInstance);
+	BodyInstance.TermBody(PS);
+}
+
 void UPrimitiveComponent::OnCreatePhysicsState()
 {
 	Super::OnCreatePhysicsState();
@@ -91,21 +119,7 @@ void UPrimitiveComponent::OnCreatePhysicsState()
 
 	if (GUsePerComponentBodyInstance)
 	{
-		// 신 경로: 컴포넌트가 자신의 FBodyInstance 를 소유. 콜라이더(BodySetup)가 없으면 skip.
-		UBodySetup* Setup = GetBodySetup();
-		if (!Setup) return;
-
-		// static = 시뮬도 키네마틱도 아님(월드 정적 지오메트리). 그 외엔 dynamic 으로 만들고
-		// InitBody 가 시뮬/키네마틱을 결정한다.
-		const bool bStatic = !GetSimulatePhysics() && !IsKinematic();
-		const FTransform WorldXf(GetWorldLocation(), GetWorldMatrix().ToQuat(), FVector(1.0f, 1.0f, 1.0f));
-
-		BodyInstance.OwnerComponent = this;
-		BodyInstance.Scale3D = GetBodySetupScale();
-		if (BodyInstance.InitBody(Setup, WorldXf, PS, -1, {}, bStatic))
-		{
-			PS->AddBody(&BodyInstance);
-		}
+		InitBodyInstanceInScene(PS);
 	}
 	else
 	{
@@ -123,8 +137,7 @@ void UPrimitiveComponent::OnDestroyPhysicsState()
 			{
 				if (GUsePerComponentBodyInstance)
 				{
-					PS->RemoveBody(&BodyInstance);
-					BodyInstance.TermBody(PS);
+					TermBodyInstanceInScene(PS);
 				}
 				else
 				{
@@ -153,7 +166,17 @@ void UPrimitiveComponent::NotifyPhysicsBodyDirty()
 	if (!Owner) return;
 	UWorld* World = Owner->GetWorld();
 	if (!World) return;
-	if (IPhysicsScene* PS = World->GetPhysicsScene())
+	IPhysicsScene* PS = World->GetPhysicsScene();
+	if (!PS) return;
+
+	if (GUsePerComponentBodyInstance)
+	{
+		// SimulatePhysics/Kinematic/ObjectType/Response/geometry 변경 → 바디 통째 재생성.
+		// PxActor 타입(static↔dynamic) 변경, shape filterData 재계산, 지오메트리 재구성을 모두 포괄.
+		TermBodyInstanceInScene(PS);
+		InitBodyInstanceInScene(PS);
+	}
+	else
 	{
 		PS->RebuildBody(this);
 	}

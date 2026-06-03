@@ -230,6 +230,11 @@ protected:
 	// 컴포넌트가 BeginPlay 후에만 PhysicsScene::RebuildBody 호출. 이전이면 skip.
 	void NotifyPhysicsBodyDirty();
 
+	// 신 경로(GUsePerComponentBodyInstance) 바디 생성/해제 — OnCreate/OnDestroyPhysicsState 와
+	// NotifyPhysicsBodyDirty(재생성)가 공유한다. 콜라이더(GetBodySetup())가 없으면 생성은 no-op.
+	void InitBodyInstanceInScene(IPhysicsScene* PS);
+	void TermBodyInstanceInScene(IPhysicsScene* PS);
+
 	FVector LocalExtents = { 0.5f, 0.5f, 0.5f };
 	mutable FVector WorldAABBMinLocation;
 	mutable FVector WorldAABBMaxLocation;
