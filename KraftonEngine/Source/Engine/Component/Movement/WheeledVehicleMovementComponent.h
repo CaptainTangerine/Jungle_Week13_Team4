@@ -122,10 +122,11 @@ protected:
 	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Mass", Min=1.0f, Max=10000.0f, Speed=1.0f)
 	float ChassisMass = 1500.0f;        // kg
 
-	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Radius", Min=0.01f, Max=2.0f, Speed=0.01f)
+	// 휠 반경/폭 — 휠 static mesh 가 지정돼 있으면 그 로컬 바운드에서 유도되고, 이 값은 fallback.
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Radius (fallback)", Min=0.01f, Max=2.0f, Speed=0.01f)
 	float WheelRadius = 0.35f;          // m
 
-	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Width", Min=0.01f, Max=2.0f, Speed=0.01f)
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Width (fallback)", Min=0.01f, Max=2.0f, Speed=0.01f)
 	float WheelWidth = 0.25f;           // m
 
 	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Wheel Mass", Min=0.1f, Max=200.0f, Speed=0.1f)
@@ -141,14 +142,15 @@ protected:
 	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Max Steer Angle (deg)", Min=0.0f, Max=90.0f, Speed=0.5f)
 	float MaxSteerAngle = 30.0f;        // deg
 
-	// 차체 박스 치수 (parametric convex hull 의 소스). +X=forward, Y=side, +Z=up.
-	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Length (X)", Min=0.1f, Max=20.0f, Speed=0.05f)
+	// 차체 박스 치수 — 차체 static mesh(= UpdatedComponent) 가 지정돼 있으면 그 로컬 바운드에서
+	// 유도되고, 이 값들은 mesh 없을 때의 fallback. +X=forward, Y=side, +Z=up.
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Length (X, fallback)", Min=0.1f, Max=20.0f, Speed=0.05f)
 	float ChassisLength = 4.0f;         // m
 
-	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Width (Y)", Min=0.1f, Max=10.0f, Speed=0.05f)
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Width (Y, fallback)", Min=0.1f, Max=10.0f, Speed=0.05f)
 	float ChassisWidth = 2.0f;          // m
 
-	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Height (Z)", Min=0.1f, Max=10.0f, Speed=0.05f)
+	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="Chassis Height (Z, fallback)", Min=0.1f, Max=10.0f, Speed=0.05f)
 	float ChassisHeight = 1.0f;         // m
 
 	// 무게중심 Z 오프셋 (actor 중심 기준) — 보통 음수로 낮춰 전복 안정성↑.

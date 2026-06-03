@@ -3,6 +3,7 @@
 #include "Physics/PhysXPhysicsScene.h"
 #include "Physics/PhysXVehicleManager.h"
 #include "Component/SceneComponent.h"
+#include "Component/Primitive/StaticMeshComponent.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
 #include "Core/Types/CollisionTypes.h"   // ECollisionChannel, ObjectTypeBit
@@ -190,12 +191,48 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	using WO = PxVehicleDrive4WWheelOrder;
 	const PxU32 NW = static_cast<PxU32>(NumWheels);
 
-	// --- 차체 박스 치수 + parametric wheel 위치 (chassis 박스 4코너). +X=forward, Y=side, +Z=up ---
-	const float HalfX  = ChassisLength * 0.5f;
-	const float HalfY  = ChassisWidth  * 0.5f;
-	const float HalfZ  = ChassisHeight * 0.5f;
+	// --- 차체/휠 치수는 배치된 mesh 의 로컬 바운드에서 유도 (property 는 mesh 없을 때의 fallback) ---
+	// +X=forward, Y=side, +Z=up. 차체 = MC 의 UpdatedComponent(= AWheeledVehicle 의 Root BodyMesh),
+	// 휠 = 그 BodyMesh 의 static-mesh 자식(순서 = PxVehicleDrive4WWheelOrder: 0=FL,1=FR,2=RL,3=RR).
+	UStaticMeshComponent* BodyMesh = Cast<UStaticMeshComponent>(GetUpdatedComponent());
 
-	const float FrontX = HalfX - WheelRadius;
+	// 차체 박스 half-extent + 메시 지오메트리 중심(컴포넌트 원점 대비). 기본은 property fallback.
+	float  HalfX = ChassisLength * 0.5f;
+	float  HalfY = ChassisWidth  * 0.5f;
+	float  HalfZ = ChassisHeight * 0.5f;
+	PxVec3 ChassisShapeCenter(0.0f);   // mesh pivot 이 지오메트리 중심과 다를 때의 보정 (shape localPose)
+	{
+		FVector BC, BE;
+		if (BodyMesh && BodyMesh->GetLocalBounds(BC, BE))
+		{
+			const FVector S = BodyMesh->GetWorldScale();   // 메시-로컬 바운드를 월드 치수로
+			HalfX = BE.X * PxAbs((float)S.X);
+			HalfY = BE.Y * PxAbs((float)S.Y);
+			HalfZ = BE.Z * PxAbs((float)S.Z);
+			ChassisShapeCenter = PxVec3(BC.X * (float)S.X, BC.Y * (float)S.Y, BC.Z * (float)S.Z);
+		}
+	}
+
+	// 휠 컴포넌트 수집 (BodyMesh 의 static-mesh 자식, 순서대로 — actor EnsureComponents 와 동일 규칙).
+	UStaticMeshComponent* WheelComps[4] = { nullptr, nullptr, nullptr, nullptr };
+	if (BodyMesh)
+	{
+		int32 Found = 0;
+		for (USceneComponent* Child : BodyMesh->GetChildren())
+		{
+			if (Found >= NumWheels) break;
+			if (UStaticMeshComponent* SM = Cast<UStaticMeshComponent>(Child))
+				WheelComps[Found++] = SM;
+		}
+	}
+
+	// 휠 반경/폭: 첫 번째 "메시가 지정된" 휠의 바운드에서 유도 (없으면 property fallback).
+	// 휠 컨벤션: 허브=컴포넌트 원점, 회전축=로컬 Y, 단면 원=X-Z → radius=X·Z half-extent 의 max, width=Y 전폭.
+	float DerivedWheelRadius = WheelRadius;
+	float DerivedWheelWidth  = WheelWidth;
+
+	// 휠 중심: 우선 parametric 4코너로 채운 뒤, 메시가 지정된 휠은 실제 배치 위치(relative location)로 덮어쓴다.
+	const float FrontX = HalfX - DerivedWheelRadius;
 	const float TrackY = HalfY;
 	const float WheelZ = -HalfZ;
 
@@ -205,7 +242,29 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	WheelCenters[WO::eREAR_LEFT]   = PxVec3(-FrontX,  TrackY, WheelZ);
 	WheelCenters[WO::eREAR_RIGHT]  = PxVec3(-FrontX, -TrackY, WheelZ);
 
-	const PxVec3 ChassisCM(0.0f, 0.0f, CenterOfMassOffsetZ);
+	bool bWheelSizeFromMesh = false;
+	for (PxU32 i = 0; i < NW; ++i)
+	{
+		UStaticMeshComponent* WC = WheelComps[i];
+		FVector WBC, WBE;
+		if (!WC || !WC->GetLocalBounds(WBC, WBE))
+			continue;   // 메시 미지정 휠은 parametric 코너 유지
+
+		// 실제 배치 위치 = BodyMesh(=actor origin) 기준 relative location → 휠 중심 오프셋(actor frame).
+		const FVector L = WC->GetRelativeLocation();
+		WheelCenters[i] = PxVec3((float)L.X, (float)L.Y, (float)L.Z);
+
+		if (!bWheelSizeFromMesh)
+		{
+			const FVector WS = WC->GetWorldScale();
+			DerivedWheelRadius = std::max(WBE.X * PxAbs((float)WS.X), WBE.Z * PxAbs((float)WS.Z));
+			DerivedWheelWidth  = 2.0f * WBE.Y * PxAbs((float)WS.Y);
+			bWheelSizeFromMesh = true;
+		}
+	}
+
+	// CoM 은 지오메트리 중심(X,Y) 위에 두고 Z 만 CenterOfMassOffsetZ 로 낮춰 전복 안정성↑.
+	const PxVec3 ChassisCM(ChassisShapeCenter.x, ChassisShapeCenter.y, ChassisShapeCenter.z + CenterOfMassOffsetZ);
 
 	const PxU32 OwnerUUID = GetOwner() ? GetOwner()->GetUUID() : 0;
 
@@ -227,7 +286,7 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	ChassisSimFilter.word3 = OwnerUUID;
 
 	// --- chassis/wheel convex cook (mutation 전에 먼저 — 실패 시 깨끗이 abort) ---
-	PxConvexMesh* WheelMesh   = CreateWheelConvex(Cooking, Physics, WheelRadius, WheelWidth);
+	PxConvexMesh* WheelMesh   = CreateWheelConvex(Cooking, Physics, DerivedWheelRadius, DerivedWheelWidth);
 	PxConvexMesh* ChassisMesh = CreateChassisConvex(Cooking, Physics, HalfX, HalfY, HalfZ);
 	if (!WheelMesh || !ChassisMesh)
 	{
@@ -242,7 +301,7 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	PxShape* ChassisShape = PxRigidActorExt::createExclusiveShape(*Actor, PxConvexMeshGeometry(ChassisMesh), *Material);
 	ChassisShape->setSimulationFilterData(ChassisSimFilter);
 	ChassisShape->setQueryFilterData(VehicleQryFilter);
-	ChassisShape->setLocalPose(PxTransform(PxIdentity));
+	ChassisShape->setLocalPose(PxTransform(ChassisShapeCenter));   // mesh pivot↔지오메트리 중심 보정
 
 	// 스폰 위치 — UpdatedComponent 월드 트랜스폼.
 	if (USceneComponent* Updated = GetUpdatedComponent())
@@ -278,7 +337,7 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	float SprungMasses[4];
 	PxVehicleComputeSprungMasses(NW, WheelCenters, ChassisCM, Mass, /*gravityDir=Z*/2, SprungMasses);
 
-	const float WheelMOI    = 0.5f * WheelMass * WheelRadius * WheelRadius;
+	const float WheelMOI    = 0.5f * WheelMass * DerivedWheelRadius * DerivedWheelRadius;
 	const float MaxSteerRad = MaxSteerAngle * (PxPi / 180.0f);
 
 	for (PxU32 i = 0; i < NW; ++i)
@@ -291,8 +350,8 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 		PxVehicleWheelData Wheel;
 		Wheel.mMass               = WheelMass;
 		Wheel.mMOI                = WheelMOI;
-		Wheel.mRadius             = WheelRadius;
-		Wheel.mWidth              = WheelWidth;
+		Wheel.mRadius             = DerivedWheelRadius;
+		Wheel.mWidth              = DerivedWheelWidth;
 		Wheel.mMaxBrakeTorque     = 1500.0f;
 		Wheel.mMaxSteer           = bSteer ? MaxSteerRad : 0.0f;
 		Wheel.mMaxHandBrakeTorque = bHand  ? 4000.0f : 0.0f;
@@ -372,7 +431,8 @@ bool UWheeledVehicleMovementComponent::CreateVehicle()
 	PVehicle      = Vehicle;
 	PVehicleActor = Actor;
 
-	UE_LOG("[WheeledVehicleMC] CreateVehicle: PxVehicleDrive4W created (parametric chassis, mass=%.1f kg).", Mass);
+	UE_LOG("[WheeledVehicleMC] CreateVehicle: PxVehicleDrive4W created (chassis %.2fx%.2fx%.2f m, wheel r=%.2f w=%.2f, wheels-from-mesh=%d, mass=%.1f kg).",
+		HalfX * 2.0f, HalfY * 2.0f, HalfZ * 2.0f, DerivedWheelRadius, DerivedWheelWidth, bWheelSizeFromMesh ? 1 : 0, Mass);
 	return true;
 }
 
