@@ -13,6 +13,13 @@ class AActor;
 class UPrimitiveComponent;
 class IPhysicsBodySync;
 struct FHitResult;
+struct FBodyInstance;
+
+// (전역) 컴포넌트 물리 바디 생성 경로 토글 — 마이그레이션용.
+//   false : 구 경로(RegisterComponent → BodyMappings, AActor 단위 compound)
+//   true  : 신 경로(UPrimitiveComponent 가 FBodyInstance 소유, per-component 바디)
+// Phase 4 동기화 전환과 함께 true 로 플립한다. 마이그레이션 완료 후 제거 예정.
+extern bool GUsePerComponentBodyInstance;
 
 // ============================================================
 // IPhysicsScene — 물리 시스템 어댑터 인터페이스
@@ -36,6 +43,13 @@ public:
 	// 컴포넌트의 SimulatePhysics/ObjectType/Response 등이 변경된 경우 호출.
 	// PhysX는 actor 단위로 unregister + register (compound shape의 다른 컴포넌트도 함께 재등록).
 	virtual void RebuildBody(UPrimitiveComponent* Comp) = 0;
+
+	// --- Per-component body 레지스트리 (신 경로) ---
+	// UPrimitiveComponent 가 소유한 FBodyInstance 를 씬의 동기화 대상으로 등록/해제한다.
+	// Start/FinishSimulation 이 등록된 바디를 순회하며 OwnerComponent 와 트랜스폼을 동기화한다.
+	// (랙돌 본 바디는 여기 등록하지 않는다 — IPhysicsBodySync 로 별도 동기화.)
+	virtual void AddBody(FBodyInstance* Body) = 0;
+	virtual void RemoveBody(FBodyInstance* Body) = 0;
 
 	// --- Raw physics actor path (PhysicsAsset / ragdoll) ---
 	virtual FPhysicsActorHandle CreateActor(const FActorCreationParams& Params) = 0;

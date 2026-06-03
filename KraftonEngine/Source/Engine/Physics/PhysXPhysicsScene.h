@@ -24,6 +24,7 @@ namespace physx
 class FPhysXSimulationCallback;
 class FPhysXVehicleManager;
 class IPhysicsBodySync;
+struct FBodyInstance;
 
 // ============================================================
 // FPhysXPhysicsScene — PhysX 4.1 기반 물리 시스템
@@ -48,6 +49,9 @@ public:
 	void RegisterComponent(UPrimitiveComponent* Comp) override;
 	void UnregisterComponent(UPrimitiveComponent* Comp) override;
 	void RebuildBody(UPrimitiveComponent* Comp) override;
+
+	void AddBody(FBodyInstance* Body) override;
+	void RemoveBody(FBodyInstance* Body) override;
 
 	// --- Raw physics actor path (PhysicsAsset / ragdoll) ---
 	// 기존 RegisterComponent 경로는 AActor/Component 단위 compound body를 만든다.
@@ -145,6 +149,11 @@ private:
 		TArray<UPrimitiveComponent*> Components; // 등록된 컴포넌트들 (shape 1:1 매칭)
 	};
 	std::vector<FBodyMapping> BodyMappings;
+
+	// 신 경로: UPrimitiveComponent 가 소유한 FBodyInstance 들. Start/FinishSimulation 이
+	// 순회하며 OwnerComponent ↔ PhysX 트랜스폼을 동기화한다(구 BodyMappings 동기화 대체).
+	// 씬은 소유권이 없다 — 컴포넌트가 TermBody 후 RemoveBody 로 빠진다.
+	std::vector<FBodyInstance*> ComponentBodies;
 
 	// Raw actor 경로(PhysicsAsset/랙돌)로 만든 actor·aggregate·constraint 를 씬이 멤버로
 	// 추적한다. 컴포넌트 경로(BodyMappings)와 동일하게 씬이 소유권/가시성을 갖게 해 일관성을

@@ -83,12 +83,33 @@ void UPrimitiveComponent::OnCreatePhysicsState()
 {
 	Super::OnCreatePhysicsState();
 
-	if (Owner)
+	if (!Owner) return;
+	UWorld* World = Owner->GetWorld();
+	if (!World) return;
+	IPhysicsScene* PS = World->GetPhysicsScene();
+	if (!PS) return;
+
+	if (GUsePerComponentBodyInstance)
 	{
-		if (UWorld* World = Owner->GetWorld())
+		// 신 경로: 컴포넌트가 자신의 FBodyInstance 를 소유. 콜라이더(BodySetup)가 없으면 skip.
+		UBodySetup* Setup = GetBodySetup();
+		if (!Setup) return;
+
+		// static = 시뮬도 키네마틱도 아님(월드 정적 지오메트리). 그 외엔 dynamic 으로 만들고
+		// InitBody 가 시뮬/키네마틱을 결정한다.
+		const bool bStatic = !GetSimulatePhysics() && !IsKinematic();
+		const FTransform WorldXf(GetWorldLocation(), GetWorldMatrix().ToQuat(), FVector(1.0f, 1.0f, 1.0f));
+
+		BodyInstance.OwnerComponent = this;
+		BodyInstance.Scale3D = GetBodySetupScale();
+		if (BodyInstance.InitBody(Setup, WorldXf, PS, -1, {}, bStatic))
 		{
-			World->GetPhysicsScene()->RegisterComponent(this);
+			PS->AddBody(&BodyInstance);
 		}
+	}
+	else
+	{
+		PS->RegisterComponent(this);
 	}
 }
 
@@ -100,7 +121,15 @@ void UPrimitiveComponent::OnDestroyPhysicsState()
 		{
 			if (IPhysicsScene* PS = World->GetPhysicsScene())
 			{
-				PS->UnregisterComponent(this);
+				if (GUsePerComponentBodyInstance)
+				{
+					PS->RemoveBody(&BodyInstance);
+					BodyInstance.TermBody(PS);
+				}
+				else
+				{
+					PS->UnregisterComponent(this);
+				}
 			}
 		}
 	}

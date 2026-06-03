@@ -9,6 +9,7 @@
 #include "Core/Delegate.h"
 #include "Render/Types/VertexTypes.h"
 #include "Render/Proxy/DirtyFlag.h"
+#include "Physics/BodyInstance.h"
 
 #include "Source/Engine/Component/PrimitiveComponent.generated.h"
 class FPrimitiveSceneProxy;
@@ -182,6 +183,10 @@ public:
 	// 메시의 BodySetup 을 반환한다.
 	virtual UBodySetup* GetBodySetup() { return nullptr; }
 
+	// 바디 생성 시 AggGeom 에 적용할 스케일. StaticMesh 는 메시-로컬 지오메트리라 월드 스케일을
+	// 적용하지만, ShapeComponent 는 GetBodySetup 이 이미 scaled extent 로 만들므로 (1,1,1)을 쓴다.
+	virtual FVector GetBodySetupScale() const { return GetWorldScale(); }
+
 	void SetGenerateOverlapEvents(bool bInGenerateOverlapEvents);
 	bool GetGenerateOverlapEvents() const { return bGenerateOverlapEvents; }
 
@@ -263,4 +268,8 @@ protected:
 
 	FOctree* OctreeNode = nullptr;
 	bool bInOctreeOverflow = false;
+
+	// 이 컴포넌트의 물리 바디(신 경로). OnCreatePhysicsState 에서 InitBody, OnDestroyPhysicsState
+	// 에서 TermBody. 콜라이더가 없으면(GetBodySetup()==nullptr) 미초기화 상태로 남는다.
+	FBodyInstance BodyInstance;
 };

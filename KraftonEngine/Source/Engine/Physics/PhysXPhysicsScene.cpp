@@ -12,6 +12,7 @@
 #include "Mesh/Static/StaticMesh.h"
 #include "Physics/Asset/BodySetup.h"
 #include "Physics/Asset/ConstraintSetup.h"
+#include "Physics/BodyInstance.h"
 #include "Physics/IPhysicsBodySync.h"
 #include "Profiling/Stats/Stats.h"
 #include "Profiling/Stats/PhysicsStats.h"
@@ -26,6 +27,10 @@
 #include <cstring>
 
 using namespace physx;
+
+// 컴포넌트 물리 바디 경로 토글(IPhysicsScene.h 선언). Phase 3 동안 false(구 BodyMappings 경로),
+// Phase 4 동기화 전환과 함께 true. 마이그레이션 완료 후 제거.
+bool GUsePerComponentBodyInstance = false;
 
 // ============================================================
 // PhysX Error Callback
@@ -1027,6 +1032,14 @@ void FPhysXPhysicsScene::Shutdown()
 	}
 	Aggregates.clear();
 	BodySyncs.clear();
+	// 컴포넌트 바디의 PxActor 는 위 RawActors 루프가 이미 해제했다(InitBody→CreateActor 가
+	// RawActors 에 등록). 소유 FBodyInstance 의 핸들을 무효화해, 이후 컴포넌트 파괴 시 TermBody 가
+	// 이미 해제된 actor 를 재해제(double free)하지 않도록 한다.
+	for (FBodyInstance* Body : ComponentBodies)
+	{
+		if (Body) Body->ActorHandle = {};
+	}
+	ComponentBodies.clear();
 
 	// Body 정리
 	for (auto& Mapping : BodyMappings)
@@ -1203,6 +1216,18 @@ void FPhysXPhysicsScene::RebuildBody(UPrimitiveComponent* Comp)
 	{
 		RegisterComponent(C);
 	}
+}
+
+void FPhysXPhysicsScene::AddBody(FBodyInstance* Body)
+{
+	if (!Body) return;
+	if (std::find(ComponentBodies.begin(), ComponentBodies.end(), Body) != ComponentBodies.end()) return;
+	ComponentBodies.push_back(Body);
+}
+
+void FPhysXPhysicsScene::RemoveBody(FBodyInstance* Body)
+{
+	ComponentBodies.erase(std::remove(ComponentBodies.begin(), ComponentBodies.end(), Body), ComponentBodies.end());
 }
 
 FPhysicsActorHandle FPhysXPhysicsScene::CreateActor(const FActorCreationParams& Params)
