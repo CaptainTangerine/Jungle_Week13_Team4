@@ -28,8 +28,9 @@
 
 using namespace physx;
 
-// 컴포넌트 물리 바디 경로 토글(IPhysicsScene.h 선언). Phase 3 동안 false(구 BodyMappings 경로),
-// Phase 4 동기화 전환과 함께 true. 마이그레이션 완료 후 제거.
+// 컴포넌트 물리 바디 경로 토글(IPhysicsScene.h 선언). Phase 4 는 per-body 동기화 머신만 추가하고
+// 플래그는 OFF 로 둔다(ComponentBodies 비어 dormant). Phase 5 에서 NotifyPhysicsBodyDirty 재정의와
+// 함께 ON 으로 플립한다. 구 BodyMappings 경로는 Phase 7 에서 제거 — 그때까지 false 로 즉시 롤백 가능.
 bool GUsePerComponentBodyInstance = false;
 
 // ============================================================
@@ -1672,6 +1673,64 @@ void FPhysXPhysicsScene::ReleaseConstraint(FPhysicsConstraintHandle Constraint)
 // Simulation
 // ============================================================
 
+// 엔진→PhysX pre-sync teleport 임계값. post-sync 가 매 프레임 엔진=PhysX 로 맞추므로 정상 흐름에선
+// 차이 ≈ 0 이지만, round-trip 부동소수 오차로 작은 차이가 매 프레임 생길 수 있어 false-positive
+// teleport 를 막도록 충분히 크게 잡는다.
+static constexpr float GTeleportPosThresholdSq = 1.0f;   // 1m² (1m 이상 차이 시만 teleport)
+static constexpr float GTeleportRotThreshold   = 0.99f;  // ~8° 차이 시만 teleport
+
+// 한 바디 엔진→PhysX 동기화: kinematic=타깃 푸시(setKinematicTarget — 캐릭터 캡슐 등 코드 구동),
+// dynamic=임계값 초과 시에만 teleport(velocity 보존, lua spawn 등 외부 변경 흡수), static=setGlobalPose.
+// 컴포넌트 바디(ComponentBodies)와 구 BodyMappings 가 공유한다.
+static void PreSyncBodyToPhysics(PxRigidActor* Actor, UPrimitiveComponent* Comp)
+{
+	if (!Actor || !Comp) return;
+
+	const PxTransform NewPose = GetPxTransform(Comp);
+
+	if (PxRigidDynamic* Dynamic = Actor->is<PxRigidDynamic>())
+	{
+		if (Dynamic->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC)
+		{
+			Dynamic->setKinematicTarget(NewPose);
+		}
+		else
+		{
+			const PxTransform PxPose = Dynamic->getGlobalPose();
+			const PxVec3 dp = NewPose.p - PxPose.p;
+			const float DistSq = dp.x * dp.x + dp.y * dp.y + dp.z * dp.z;
+			const float QDot = std::abs(
+				NewPose.q.x * PxPose.q.x + NewPose.q.y * PxPose.q.y +
+				NewPose.q.z * PxPose.q.z + NewPose.q.w * PxPose.q.w);
+
+			if (DistSq > GTeleportPosThresholdSq || QDot < GTeleportRotThreshold)
+			{
+				Dynamic->setGlobalPose(NewPose);
+			}
+		}
+	}
+	else if (Actor->is<PxRigidStatic>())
+	{
+		Actor->setGlobalPose(NewPose);
+	}
+}
+
+// 한 바디 PhysX→엔진 동기화: dynamic·비kinematic·비sleeping 일 때만 write-back. kinematic 은 코드가
+// 구동하므로 PhysX 가 덮어쓰면 안 되고, sleeping 은 변화 없음.
+static void PostSyncBodyFromPhysics(PxRigidActor* Actor, UPrimitiveComponent* Comp)
+{
+	if (!Actor || !Comp) return;
+
+	PxRigidDynamic* Dynamic = Actor->is<PxRigidDynamic>();
+	if (!Dynamic) return;
+	if (Dynamic->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC) return;
+	if (Dynamic->isSleeping()) return;
+
+	const PxTransform Pose = Dynamic->getGlobalPose();
+	Comp->SetWorldLocation(ToFVector(Pose.p));
+	Comp->SetRelativeRotation(ToFQuat(Pose.q));
+}
+
 void FPhysXPhysicsScene::Tick(float DeltaTime)
 {
 	// 편의 래퍼 — 분리 호출이 필요 없는 경로(에디터 프리뷰 등)용.
@@ -1695,52 +1754,16 @@ void FPhysXPhysicsScene::StartSimulation(float DeltaTime)
 	}
 
 	// ── Pre-simulate: Engine → PhysX Transform 동기화 ──
-	// 한 PxActor가 여러 컴포넌트를 가지므로 RootComp 기준으로만 한 번 동기화.
-	//
-	// Dynamic actor도 Engine 측 transform이 PhysX와 충분히 크게 다르면 teleport한다.
-	// (lua spawn 직후 m.Location = pos 같은 외부 변경 흡수용)
-	//
-	// 정상 시뮬레이션 흐름에서는 post-simulate가 Engine = PhysX로 맞춰주므로
-	// 다음 frame pre에서 차이 ≈ 0 → skip. 단 round-trip의 부동소수 오차로 작은
-	// 차이는 매 frame 발생할 수 있어 threshold를 충분히 크게 잡아 false-positive
-	// teleport를 막는다.
-	//
-	// velocity는 의도적으로 보존 — PhysX의 정상 시뮬레이션 momentum 유지.
-	constexpr float TeleportPosThresholdSq = 1.0f;   // 1m² (1m 이상 차이 시만 teleport)
-	constexpr float TeleportRotThreshold = 0.99f;    // ~8° 차이 시만 teleport
-
+	// 신 경로: per-component FBodyInstance. 구 경로: AActor 단위 compound BodyMappings.
+	// (마이그레이션 중 한쪽만 채워지므로 두 루프는 서로 disjoint 집합을 순회한다.)
+	for (FBodyInstance* Body : ComponentBodies)
+	{
+		if (!Body) continue;
+		PreSyncBodyToPhysics(static_cast<PxRigidActor*>(Body->ActorHandle.Internal), Body->OwnerComponent);
+	}
 	for (auto& Mapping : BodyMappings)
 	{
-		if (!Mapping.RootComp || !Mapping.Actor) continue;
-
-		PxTransform NewPose = GetPxTransform(Mapping.RootComp);
-
-		if (PxRigidDynamic* Dynamic = Mapping.Actor->is<PxRigidDynamic>())
-		{
-			if (Dynamic->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC)
-			{
-				Dynamic->setKinematicTarget(NewPose);
-			}
-			else
-			{
-				PxTransform PxPose = Dynamic->getGlobalPose();
-				PxVec3 dp = NewPose.p - PxPose.p;
-				const float DistSq = dp.x * dp.x + dp.y * dp.y + dp.z * dp.z;
-				const float QDot = std::abs(
-					NewPose.q.x * PxPose.q.x + NewPose.q.y * PxPose.q.y +
-					NewPose.q.z * PxPose.q.z + NewPose.q.w * PxPose.q.w);
-
-				if (DistSq > TeleportPosThresholdSq || QDot < TeleportRotThreshold)
-				{
-					// 큰 외부 변경 → teleport. velocity는 보존.
-					Dynamic->setGlobalPose(NewPose);
-				}
-			}
-		}
-		else if (Mapping.Actor->is<PxRigidStatic>())
-		{
-			Mapping.Actor->setGlobalPose(NewPose);
-		}
+		PreSyncBodyToPhysics(Mapping.Actor, Mapping.RootComp);
 	}
 
 	// ── 등록된 sync 핸들러 Pre (랙돌 등): anim → 키네마틱 타깃. 반드시 simulate 이전 ──
@@ -1791,22 +1814,15 @@ void FPhysXPhysicsScene::FinishSimulation()
 #endif
 
 	// ── Post-simulate: PhysX → Engine Transform 동기화 ──
-	// RootComp에만 transform 적용 → 자식 컴포넌트는 attach로 자동 따라감.
+	// 컴포넌트 트랜스폼에 적용 → 자식 컴포넌트는 attach로 자동 따라감.
+	for (FBodyInstance* Body : ComponentBodies)
+	{
+		if (!Body) continue;
+		PostSyncBodyFromPhysics(static_cast<PxRigidActor*>(Body->ActorHandle.Internal), Body->OwnerComponent);
+	}
 	for (auto& Mapping : BodyMappings)
 	{
-		if (!Mapping.RootComp || !Mapping.Actor) continue;
-
-		PxRigidDynamic* Dynamic = Mapping.Actor->is<PxRigidDynamic>();
-		if (!Dynamic) continue;
-		if (Dynamic->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC) continue;
-		if (Dynamic->isSleeping()) continue;
-
-		PxTransform Pose = Dynamic->getGlobalPose();
-		FVector NewPos = ToFVector(Pose.p);
-		FQuat NewRot = ToFQuat(Pose.q);
-
-		Mapping.RootComp->SetWorldLocation(NewPos);
-		Mapping.RootComp->SetRelativeRotation(NewRot);
+		PostSyncBodyFromPhysics(Mapping.Actor, Mapping.RootComp);
 	}
 
 	// ── 등록된 sync 핸들러 Post (랙돌 등): 시뮬 결과 → 본 포즈. fetchResults 이후 ──
