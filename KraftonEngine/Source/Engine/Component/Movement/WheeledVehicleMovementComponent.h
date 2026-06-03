@@ -68,6 +68,9 @@ public:
 	float GetSteeringInput()  const { return SteeringInput; }
 	bool  GetHandbrakeInput() const { return bHandbrakeInput; }
 
+	float GetEngineRotationSpeed() const;   // rad/s, 0 if no vehicle
+	float GetEngineRotationRatio() const;   // omega / EngineMaxOmega, [0,1]
+
 	// 현재 전진 속도 (m/s, 차체 forward 축 투영). UI/기어 로직용. 미생성 시 0.
 	float GetForwardSpeed() const;
 
@@ -156,4 +159,18 @@ protected:
 	// 무게중심 Z 오프셋 (actor 중심 기준) — 보통 음수로 낮춰 전복 안정성↑.
 	UPROPERTY(Edit, Save, Category="Vehicle", DisplayName="CoM Offset Z", Min=-5.0f, Max=5.0f, Speed=0.01f)
 	float CenterOfMassOffsetZ = -0.5f;  // m
+
+	// --- Audio Property ---
+	UPROPERTY(Edit, Save, Category = "Vehicle|Audio", DisplayName = "Engine Loop Key")
+	FString EngineLoopKey = "CarEngineLoop";       // FAudioManager::LoadDefaultAudios
+
+	UPROPERTY(Edit, Save, Category = "Vehicle|Audio", DisplayName = "Engine Start Key")
+	FString EngineStartKey = "CarEngineStart";     // one-shot ignition
+
+	UPROPERTY(Edit, Save, Category = "Vehicle|Audio", DisplayName = "Idle Pitch")
+	float IdlePitch = 0.6f;
+	UPROPERTY(Edit, Save, Category = "Vehicle|Audio", DisplayName = "Max Pitch")
+	float MaxPitch = 2.0f;
+
+	FString EngineLoopName;
 };
