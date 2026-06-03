@@ -223,7 +223,6 @@ void UStaticMesh::BuildDefaultBodySetup()
 	Setup->AggGeom.SphereElems.clear();
 	Setup->AggGeom.BoxElems.clear();
 	Setup->AggGeom.SphylElems.clear();
-	Setup->TriMesh.Clear();
 
 	if (!StaticMeshAsset || StaticMeshAsset->Vertices.empty())
 	{
