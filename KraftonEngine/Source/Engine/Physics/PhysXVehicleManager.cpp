@@ -24,8 +24,8 @@ namespace
 	{
 		0.0f,        0.75f,
 		5.0f,        0.75f,
-		30.0f,       0.125f,
-		120.0f,      0.1f,
+		30.0f,       0.225f,
+		120.0f,      0.2f,
 	};
 	static const PxFixedSizeLookupTable<8> gSteerVsForwardSpeedTable(gSteerVsForwardSpeedData, 4);
 
