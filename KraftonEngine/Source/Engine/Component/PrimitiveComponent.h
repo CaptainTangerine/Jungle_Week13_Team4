@@ -15,6 +15,7 @@ class FPrimitiveSceneProxy;
 class FScene;
 class FMeshBuffer;
 class FOctree;
+class UBodySetup;
 
 // Overlap/Hit 델리게이트 시그니처
 // OnComponentBeginOverlap(OverlappedComp, OtherActor, OtherComp, OtherBodyIndex, bFromSweep, SweepResult)
@@ -175,6 +176,11 @@ public:
 	float GetMass() const;
 	void SetCenterOfMass(const FVector& LocalOffset);
 	FVector GetCenterOfMass() const;
+
+	// 이 컴포넌트의 콜리전 지오메트리를 담은 UBodySetup. 물리 바디 생성(InitBody) 시 사용한다.
+	// 기본 nullptr(콜라이더 없음). ShapeComponent 는 extent 로 절차적 생성, StaticMeshComponent 는
+	// 메시의 BodySetup 을 반환한다.
+	virtual UBodySetup* GetBodySetup() { return nullptr; }
 
 	void SetGenerateOverlapEvents(bool bInGenerateOverlapEvents);
 	bool GetGenerateOverlapEvents() const { return bGenerateOverlapEvents; }

@@ -40,6 +40,9 @@ struct FGeometryAddParams
 	FTransform LocalTransform;
 	FTransform WorldTransform;
 	const FKAggregateGeom* Geometry = nullptr;
+	// 설정 시 쿡된 트라이앵글 메시 shape 로 attach 한다(정적/키네마틱 actor 전용). Geometry 와
+	// 둘 중 하나만 유효하면 된다 — trimesh 가 있으면 trimesh, 없으면 Geometry(convex) 를 쓴다.
+	const TArray<uint8>* CookedTriMesh = nullptr;
 	void* UserData = nullptr;
 	// shape 셋업 정책. 기본 RawBody = 기존 랙돌 거동 그대로.
 	EShapeSetupMode ShapeSetupMode = EShapeSetupMode::RawBody;

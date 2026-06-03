@@ -36,6 +36,9 @@ public:
 	void SetStaticMesh(UStaticMesh* InMesh);
 	UStaticMesh* GetStaticMesh() const;
 
+	// 물리 바디 생성용 콜리전 셋업 — 메시 에셋의 BodySetup(AggGeom convex / TriMesh)을 그대로 사용.
+	UBodySetup* GetBodySetup() override;
+
 	void SetMaterial(int32 ElementIndex, UMaterial* InMaterial);
 	UMaterial* GetMaterial(int32 ElementIndex) const;
 	const TArray<UMaterial*>& GetOverrideMaterials() const { return OverrideMaterials; }

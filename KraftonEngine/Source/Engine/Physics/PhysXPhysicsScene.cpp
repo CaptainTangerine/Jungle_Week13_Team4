@@ -1354,32 +1354,35 @@ void FPhysXPhysicsScene::ReleaseAggregate(FPhysicsAggregateHandle Handle)
 bool FPhysXPhysicsScene::AddGeometry(FPhysicsActorHandle Actor, const FGeometryAddParams& Params)
 {
 	PxRigidActor* RigidActor = static_cast<PxRigidActor*>(Actor.Internal);
-	if (!RigidActor || !DefaultMaterial || !Params.Geometry)
+	const bool bHasAggGeom = Params.Geometry != nullptr && Params.Geometry->GetElementCount() > 0;
+	const bool bHasTriMesh = Params.CookedTriMesh != nullptr && !Params.CookedTriMesh->empty();
+	if (!RigidActor || !DefaultMaterial || (!bHasAggGeom && !bHasTriMesh))
 	{
 		return false;
 	}
 
-	const PxTransform BaseLocalPose = ToPxTransform(Params.LocalTransform);
-	PxShape* FirstShape = AddAggregateGeometryShapes(
-		RigidActor,
-		DefaultMaterial,
-		*Params.Geometry,
-		Params.Scale,
-		BaseLocalPose,
-		[&](PxShape* Shape)
+	// shape 셋업 공통 람다 — aggregate/trimesh 빌더가 공유한다.
+	//   Component 모드: 채널/응답/트리거/owner-UUID 필터 + shape userData = 컴포넌트.
+	//   RawBody 모드(기본, 랙돌): block-all 필터 + userData = Params.UserData.
+	auto SetupShape = [&](PxShape* Shape)
+	{
+		if (Params.ShapeSetupMode == EShapeSetupMode::Component && Params.FilterSourceComponent)
 		{
-			// Component 모드: 채널/응답/트리거/owner-UUID 필터 + shape userData = 컴포넌트.
-			// RawBody 모드(기본, 랙돌): block-all 필터 + userData = Params.UserData.
-			if (Params.ShapeSetupMode == EShapeSetupMode::Component && Params.FilterSourceComponent)
-			{
-				SetupComponentShape(Shape, Params.FilterSourceComponent);
-			}
-			else
-			{
-				Shape->userData = Params.UserData;
-				SetupDefaultRawBodyFilterData(Shape);
-			}
-		});
+			SetupComponentShape(Shape, Params.FilterSourceComponent);
+		}
+		else
+		{
+			Shape->userData = Params.UserData;
+			SetupDefaultRawBodyFilterData(Shape);
+		}
+	};
+
+	const PxTransform BaseLocalPose = ToPxTransform(Params.LocalTransform);
+	PxShape* FirstShape = bHasTriMesh
+		? AttachTriangleMeshShape(Physics, RigidActor, DefaultMaterial, *Params.CookedTriMesh,
+			Params.Scale, BaseLocalPose, SetupShape)
+		: AddAggregateGeometryShapes(RigidActor, DefaultMaterial, *Params.Geometry,
+			Params.Scale, BaseLocalPose, SetupShape);
 
 	if (FirstShape)
 	{
