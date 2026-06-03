@@ -4,6 +4,7 @@
 #include "Serialization/Archive.h"
 #include "Render/Scene/FScene.h"
 #include "Math/Quat.h"
+#include "Physics/Asset/BodySetup.h"
 
 #include <cstring>
 #include <cmath>
@@ -24,6 +25,13 @@ FVector UBoxComponent::GetScaledBoxExtent() const
 {
 	FVector Scale = GetWorldScale();
 	return FVector(BoxExtent.X * Scale.X, BoxExtent.Y * Scale.Y, BoxExtent.Z * Scale.Z);
+}
+
+void UBoxComponent::BuildShapeBodySetup(UBodySetup& Setup) const
+{
+	FKBoxElem Elem;
+	Elem.HalfExtent = GetScaledBoxExtent();
+	Setup.AggGeom.BoxElems.push_back(Elem);
 }
 
 void UBoxComponent::ContributeSelectedVisuals(FScene& Scene) const

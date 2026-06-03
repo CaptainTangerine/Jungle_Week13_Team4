@@ -79,17 +79,45 @@ void UPrimitiveComponent::EndPlay()
 	USceneComponent::EndPlay();
 }
 
+void UPrimitiveComponent::InitBodyInstanceInScene(IPhysicsScene* PS)
+{
+	if (!PS) return;
+
+	// 콜라이더(BodySetup)가 없으면 바디를 만들지 않는다.
+	UBodySetup* Setup = GetBodySetup();
+	if (!Setup) return;
+
+	// static = 시뮬도 키네마틱도 아님(월드 정적 지오메트리). 그 외엔 dynamic 으로 만들고
+	// InitBody 가 시뮬/키네마틱을 결정한다.
+	const bool bStatic = !GetSimulatePhysics() && !IsKinematic();
+	const FTransform WorldXf(GetWorldLocation(), GetWorldMatrix().ToQuat(), FVector(1.0f, 1.0f, 1.0f));
+
+	BodyInstance.OwnerComponent = this;
+	BodyInstance.Scale3D = GetBodySetupScale();
+	if (BodyInstance.InitBody(Setup, WorldXf, PS, -1, {}, bStatic))
+	{
+		PS->AddBody(&BodyInstance);
+	}
+}
+
+void UPrimitiveComponent::TermBodyInstanceInScene(IPhysicsScene* PS)
+{
+	if (!PS) return;
+	PS->RemoveBody(&BodyInstance);
+	BodyInstance.TermBody(PS);
+}
+
 void UPrimitiveComponent::OnCreatePhysicsState()
 {
 	Super::OnCreatePhysicsState();
 
-	if (Owner)
-	{
-		if (UWorld* World = Owner->GetWorld())
-		{
-			World->GetPhysicsScene()->RegisterComponent(this);
-		}
-	}
+	if (!Owner) return;
+	UWorld* World = Owner->GetWorld();
+	if (!World) return;
+	IPhysicsScene* PS = World->GetPhysicsScene();
+	if (!PS) return;
+
+	InitBodyInstanceInScene(PS);
 }
 
 void UPrimitiveComponent::OnDestroyPhysicsState()
@@ -100,7 +128,7 @@ void UPrimitiveComponent::OnDestroyPhysicsState()
 		{
 			if (IPhysicsScene* PS = World->GetPhysicsScene())
 			{
-				PS->UnregisterComponent(this);
+				TermBodyInstanceInScene(PS);
 			}
 		}
 	}
@@ -124,10 +152,13 @@ void UPrimitiveComponent::NotifyPhysicsBodyDirty()
 	if (!Owner) return;
 	UWorld* World = Owner->GetWorld();
 	if (!World) return;
-	if (IPhysicsScene* PS = World->GetPhysicsScene())
-	{
-		PS->RebuildBody(this);
-	}
+	IPhysicsScene* PS = World->GetPhysicsScene();
+	if (!PS) return;
+
+	// SimulatePhysics/Kinematic/ObjectType/Response/geometry 변경 → 바디 통째 재생성.
+	// PxActor 타입(static↔dynamic) 변경, shape filterData 재계산, 지오메트리 재구성을 모두 포괄.
+	TermBodyInstanceInScene(PS);
+	InitBodyInstanceInScene(PS);
 }
 
 void UPrimitiveComponent::SetSimulatePhysics(bool bInSimulate)
@@ -235,13 +266,10 @@ void UPrimitiveComponent::PostEditProperty(const char* PropertyName)
 		{
 			if (UWorld* World = Owner->GetWorld())
 			{
-				if (IsQueryCollisionEnabled())
+				if (IPhysicsScene* PS = World->GetPhysicsScene())
 				{
-					World->GetPhysicsScene()->RegisterComponent(this);
-				}
-				else
-				{
-					World->GetPhysicsScene()->UnregisterComponent(this);
+					if (IsQueryCollisionEnabled()) InitBodyInstanceInScene(PS);
+					else                           TermBodyInstanceInScene(PS);
 				}
 			}
 		}
@@ -425,13 +453,13 @@ void UPrimitiveComponent::SetCollisionEnabled(ECollisionEnabled InEnabled)
 	if (!Owner) return;
 	UWorld* World = Owner->GetWorld();
 	if (!World) return;
+	IPhysicsScene* PS = World->GetPhysicsScene();
+	if (!PS) return;
 
 	if (bWasQuery != bIsQuery)
 	{
-		if (bIsQuery)
-			World->GetPhysicsScene()->RegisterComponent(this);
-		else
-			World->GetPhysicsScene()->UnregisterComponent(this);
+		if (bIsQuery) InitBodyInstanceInScene(PS);
+		else          TermBodyInstanceInScene(PS);
 	}
 	else if (bWasQuery && bIsQuery)
 	{
@@ -481,81 +509,96 @@ ECollisionResponse UPrimitiveComponent::GetMinResponse(const UPrimitiveComponent
 // --- Overlap / Hit ---
 
 // --- Physics Force/Velocity API ---
+// 신 경로(GUsePerComponentBodyInstance): 이 컴포넌트의 FBodyInstance 핸들로 직접 적용 —
+//   컴포넌트 바디와 랙돌 본이 공유하는 단일 force 경로. 구 경로: 컴포넌트 기반 scene API.
 
 void UPrimitiveComponent::AddForce(const FVector& Force)
 {
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				PS->AddForce(this, Force);
+	if (!Owner) return;
+	UWorld* W = Owner->GetWorld();
+	if (!W) return;
+	if (IPhysicsScene* PS = W->GetPhysicsScene())
+		PS->AddForce(BodyInstance.GetPhysicsActorHandle(), Force);
 }
 
 void UPrimitiveComponent::AddForceAtLocation(const FVector& Force, const FVector& Location)
 {
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				PS->AddForceAtLocation(this, Force, Location);
+	if (!Owner) return;
+	UWorld* W = Owner->GetWorld();
+	if (!W) return;
+	if (IPhysicsScene* PS = W->GetPhysicsScene())
+		PS->AddForceAtLocation(BodyInstance.GetPhysicsActorHandle(), Force, Location);
 }
 
 void UPrimitiveComponent::AddTorque(const FVector& Torque)
 {
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				PS->AddTorque(this, Torque);
+	if (!Owner) return;
+	UWorld* W = Owner->GetWorld();
+	if (!W) return;
+	if (IPhysicsScene* PS = W->GetPhysicsScene())
+		PS->AddTorque(BodyInstance.GetPhysicsActorHandle(), Torque);
 }
 
 FVector UPrimitiveComponent::GetLinearVelocity() const
 {
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				return PS->GetLinearVelocity(const_cast<UPrimitiveComponent*>(this));
+	if (!Owner) return { 0, 0, 0 };
+	UWorld* W = Owner->GetWorld();
+	if (!W) return { 0, 0, 0 };
+	if (IPhysicsScene* PS = W->GetPhysicsScene())
+		return PS->GetLinearVelocity(BodyInstance.GetPhysicsActorHandle());
 	return { 0, 0, 0 };
 }
 
 void UPrimitiveComponent::SetLinearVelocity(const FVector& Vel)
 {
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				PS->SetLinearVelocity(this, Vel);
+	if (!Owner) return;
+	UWorld* W = Owner->GetWorld();
+	if (!W) return;
+	if (IPhysicsScene* PS = W->GetPhysicsScene())
+		PS->SetLinearVelocity(BodyInstance.GetPhysicsActorHandle(), Vel);
 }
 
 FVector UPrimitiveComponent::GetAngularVelocity() const
 {
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				return PS->GetAngularVelocity(const_cast<UPrimitiveComponent*>(this));
+	if (!Owner) return { 0, 0, 0 };
+	UWorld* W = Owner->GetWorld();
+	if (!W) return { 0, 0, 0 };
+	if (IPhysicsScene* PS = W->GetPhysicsScene())
+		return PS->GetAngularVelocity(BodyInstance.GetPhysicsActorHandle());
 	return { 0, 0, 0 };
 }
 
 void UPrimitiveComponent::SetAngularVelocity(const FVector& Vel)
 {
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				PS->SetAngularVelocity(this, Vel);
+	if (!Owner) return;
+	UWorld* W = Owner->GetWorld();
+	if (!W) return;
+	if (IPhysicsScene* PS = W->GetPhysicsScene())
+		PS->SetAngularVelocity(BodyInstance.GetPhysicsActorHandle(), Vel);
 }
 
 void UPrimitiveComponent::SetMass(float NewMass)
 {
 	Mass = NewMass;
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				PS->SetMass(this, NewMass);
+	if (!Owner) return;
+	UWorld* W = Owner->GetWorld();
+	if (!W) return;
+	if (IPhysicsScene* PS = W->GetPhysicsScene())
+	{
+		// SetActorMass(setMassAndUpdateInertia)는 COM 을 shape 분포로 재계산하므로 COM 오프셋 재적용.
+		PS->SetActorMass(BodyInstance.GetPhysicsActorHandle(), NewMass);
+		PS->SetCenterOfMass(BodyInstance.GetPhysicsActorHandle(), CenterOfMassOffset);
+	}
 }
 
 void UPrimitiveComponent::SetCenterOfMass(const FVector& LocalOffset)
 {
 	CenterOfMassOffset = LocalOffset;
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				PS->SetCenterOfMass(this, LocalOffset);
+	if (!Owner) return;
+	UWorld* W = Owner->GetWorld();
+	if (!W) return;
+	if (IPhysicsScene* PS = W->GetPhysicsScene())
+		PS->SetCenterOfMass(BodyInstance.GetPhysicsActorHandle(), LocalOffset);
 }
 
 FVector UPrimitiveComponent::GetCenterOfMass() const

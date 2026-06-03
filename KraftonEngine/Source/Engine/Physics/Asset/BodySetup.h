@@ -5,12 +5,14 @@
 #include "Math/Transform.h"
 #include "Physics/Asset/PhysicsAssetTypes.h"
 #include "Physics/PhysicsHandles.h"
+#include "Physics/PhysicsInterfaceTypes.h"
 #include "Physics/BodyInstanceCore.h"
 #include "Object/Reflection/ObjectMacros.h"
 
 #include "Source/Engine/Physics/Asset/BodySetup.generated.h"
 
 class IPhysicsScene;
+class UPrimitiveComponent;
 struct FStaticMesh;
 
 UENUM()
@@ -57,11 +59,18 @@ public:
 	// 오버라이드는 불필요. SerializeProperties 가 부모 UBodySetupCore(BoneName/PhysicsType)까지
 	// 순회하며 FStructProperty(AggGeom)·FArrayProperty·Vec3·Rotator 를 모두 재귀 처리한다.
 
+	// ShapeSetupMode/FilterSourceComponent: 컴포넌트 경로면 Component 모드로 채널/응답/트리거 필터를
+	//   FilterSourceComponent 에서 끌어온다(shape userData 도 그 컴포넌트). 기본 RawBody = 랙돌.
+	// bAllowTriMesh: 바디가 static/kinematic 이라 트라이앵글 메시 shape 를 붙여도 되는 경우 true.
+	//   true 이고 HasTriMeshCollision() 이면 trimesh 를, 아니면 AggGeom(convex) 를 사용한다.
 	bool AddShapesToRigidActor(IPhysicsScene* Scene, FPhysicsActorHandle ActorHandle,
 		const FVector& Scale3D = FVector(1.0f, 1.0f, 1.0f),
 		const FTransform& RelativeTM = FTransform(),
 		const FTransform& WorldTransform = FTransform(),
-		void* UserData = nullptr) const;
+		void* UserData = nullptr,
+		EShapeSetupMode ShapeSetupMode = EShapeSetupMode::RawBody,
+		UPrimitiveComponent* FilterSourceComponent = nullptr,
+		bool bAllowTriMesh = false) const;
 	bool BuildTriMeshFromStaticMesh(const FStaticMesh& Mesh, FString* OutError = nullptr);
 	bool HasTriMeshCollision() const { return TriMesh.HasCookedData(); }
 

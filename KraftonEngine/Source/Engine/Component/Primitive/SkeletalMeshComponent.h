@@ -94,6 +94,11 @@ public:
     const TArray<FConstraintInstance*>& GetConstraints() const { return Constraints; }
     FBodyInstance* GetBodyInstance(FName BoneName) const;
     FBodyInstance* GetBodyInstance(int32 BoneIndex) const;
+
+    // 랙돌 본에 힘/임펄스 적용 — 컴포넌트 바디와 동일한 handle 기반 force 경로를 공유한다.
+    // 해당 본의 FBodyInstance 가 시뮬레이션(dynamic) 중일 때만 효과(키네마틱/없음이면 no-op).
+    void AddForceToBone(FName BoneName, const FVector& Force);
+    void AddForceToAllBodies(const FVector& Force);
     FConstraintInstance* GetConstraintInstance(FName ChildBoneName) const;
 
     // SingleNode 모드에서 현재 자동 생성된 노드를 반환한다. NodeName 은 현재 단일 노드 구조에서는 무시한다.

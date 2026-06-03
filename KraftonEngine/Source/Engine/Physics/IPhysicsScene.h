@@ -13,6 +13,7 @@ class AActor;
 class UPrimitiveComponent;
 class IPhysicsBodySync;
 struct FHitResult;
+struct FBodyInstance;
 
 // ============================================================
 // IPhysicsScene — 물리 시스템 어댑터 인터페이스
@@ -30,12 +31,12 @@ public:
 	virtual void Shutdown() = 0;
 	virtual bool IsInitialized() const = 0;
 
-	// --- Body 관리 ---
-	virtual void RegisterComponent(UPrimitiveComponent* Comp) = 0;
-	virtual void UnregisterComponent(UPrimitiveComponent* Comp) = 0;
-	// 컴포넌트의 SimulatePhysics/ObjectType/Response 등이 변경된 경우 호출.
-	// PhysX는 actor 단위로 unregister + register (compound shape의 다른 컴포넌트도 함께 재등록).
-	virtual void RebuildBody(UPrimitiveComponent* Comp) = 0;
+	// --- Per-component body 레지스트리 ---
+	// UPrimitiveComponent 가 소유한 FBodyInstance 를 씬의 동기화 대상으로 등록/해제한다.
+	// Start/FinishSimulation 이 등록된 바디를 순회하며 OwnerComponent 와 트랜스폼을 동기화한다.
+	// (랙돌 본 바디는 여기 등록하지 않는다 — IPhysicsBodySync 로 별도 동기화.)
+	virtual void AddBody(FBodyInstance* Body) = 0;
+	virtual void RemoveBody(FBodyInstance* Body) = 0;
 
 	// --- Raw physics actor path (PhysicsAsset / ragdoll) ---
 	virtual FPhysicsActorHandle CreateActor(const FActorCreationParams& Params) = 0;
@@ -78,24 +79,20 @@ public:
 	virtual void RegisterBodySync(IPhysicsBodySync* Sync) = 0;
 	virtual void UnregisterBodySync(IPhysicsBodySync* Sync) = 0;
 
-	// --- 힘/토크 ---
-	virtual void AddForce(UPrimitiveComponent* Comp, const FVector& Force) = 0;
-	virtual void AddForceAtLocation(UPrimitiveComponent* Comp, const FVector& Force, const FVector& WorldLocation) = 0;
-	virtual void AddTorque(UPrimitiveComponent* Comp, const FVector& Torque) = 0;
-
-	// --- 속도 읽기/쓰기 ---
-	virtual FVector GetLinearVelocity(UPrimitiveComponent* Comp) const = 0;
-	virtual void SetLinearVelocity(UPrimitiveComponent* Comp, const FVector& Vel) = 0;
-	virtual FVector GetAngularVelocity(UPrimitiveComponent* Comp) const = 0;
-	virtual void SetAngularVelocity(UPrimitiveComponent* Comp, const FVector& Vel) = 0;
-
-	// --- Mass / Center of Mass ---
-	virtual void SetMass(UPrimitiveComponent* Comp, float Mass) = 0;
-	virtual float GetMass(UPrimitiveComponent* Comp) const = 0;
-	// CenterOfMass는 RootComponent의 local 좌표계 기준 offset.
-	// 차량처럼 mass center를 차체 아래로 내리면 회전 안정성↑.
-	virtual void SetCenterOfMass(UPrimitiveComponent* Comp, const FVector& LocalOffset) = 0;
-	virtual FVector GetCenterOfMass(UPrimitiveComponent* Comp) const = 0;
+	// --- 힘/토크/속도/질량 (handle 경로) ---
+	// 컴포넌트 바디와 랙돌 본(FBodyInstance)이 공유하는 단일 force 경로. handle 이 가리키는
+	// PxRigidDynamic 에 직접 적용한다(static/kinematic 이면 no-op). SetActorMass 는 위쪽 raw 섹션 참조.
+	// CenterOfMass 는 액터 local 좌표계 기준 offset.
+	virtual void AddForce(FPhysicsActorHandle Actor, const FVector& Force) = 0;
+	virtual void AddForceAtLocation(FPhysicsActorHandle Actor, const FVector& Force, const FVector& WorldLocation) = 0;
+	virtual void AddTorque(FPhysicsActorHandle Actor, const FVector& Torque) = 0;
+	virtual FVector GetLinearVelocity(FPhysicsActorHandle Actor) const = 0;
+	virtual void SetLinearVelocity(FPhysicsActorHandle Actor, const FVector& Vel) = 0;
+	virtual FVector GetAngularVelocity(FPhysicsActorHandle Actor) const = 0;
+	virtual void SetAngularVelocity(FPhysicsActorHandle Actor, const FVector& Vel) = 0;
+	virtual float GetMass(FPhysicsActorHandle Actor) const = 0;
+	virtual void SetCenterOfMass(FPhysicsActorHandle Actor, const FVector& LocalOffset) = 0;
+	virtual FVector GetCenterOfMass(FPhysicsActorHandle Actor) const = 0;
 
 	// --- Raycast ---
 	// TraceChannel: shape의 응답이 이 채널에 대해 Block일 때만 hit으로 인정 (UE 패턴).

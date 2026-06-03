@@ -4,6 +4,7 @@
 #include "Serialization/Archive.h"
 #include "Render/Scene/FScene.h"
 #include "Math/MathUtils.h"
+#include "Physics/Asset/BodySetup.h"
 
 #include <cstring>
 #include <cmath>
@@ -28,6 +29,19 @@ float UCapsuleComponent::GetScaledCapsuleHalfHeight() const
 {
 	FVector Scale = GetWorldScale();
 	return CapsuleHalfHeight * Scale.Z;
+}
+
+void UCapsuleComponent::BuildShapeBodySetup(UBodySetup& Setup) const
+{
+	const float Radius = GetScaledCapsuleRadius();
+	const float HalfHeight = GetScaledCapsuleHalfHeight();
+	FKSphylElem Elem;
+	Elem.Radius = Radius;
+	Elem.Length = 2.0f * std::max(HalfHeight - Radius, 0.0f);  // 원통부 길이(반구 제외)
+	// UCapsuleComponent 는 세로(Z축) 캡슐. FKSphylElem 장축은 elem-Y 규약이라 Rotation=identity 면
+	// Y 축으로 누워 등록된다. Roll +90°(X축 회전)로 elem-Y 를 컴포넌트 Z 로 세워 수직 캡슐로 만든다.
+	Elem.Rotation = FRotator(0.0f, 0.0f, 90.0f);
+	Setup.AggGeom.SphylElems.push_back(Elem);
 }
 
 namespace

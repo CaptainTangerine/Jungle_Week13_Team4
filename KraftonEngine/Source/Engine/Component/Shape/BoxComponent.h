@@ -21,6 +21,8 @@ public:
 	void PostEditProperty(const char* PropertyName) override;
 
 protected:
+	void BuildShapeBodySetup(UBodySetup& Setup) const override;
+
 	UPROPERTY(Edit, Save, Category="Shape", DisplayName="Box Extent", Type=Vec3, Min=0.01f, Max=0.0f, Speed=0.1f)
 	FVector BoxExtent = { 1.0f, 1.0f, 1.0f };
 };

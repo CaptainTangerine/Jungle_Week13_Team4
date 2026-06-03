@@ -22,6 +22,8 @@ public:
 	void PostEditProperty(const char* PropertyName) override;
 
 protected:
+	void BuildShapeBodySetup(UBodySetup& Setup) const override;
+
 	UPROPERTY(Edit, Save, Category="Shape", DisplayName="Capsule Radius", Min=0.01f, Max=10000.0f, Speed=1.0f)
 	float CapsuleRadius = 1.8f;
 	UPROPERTY(Edit, Save, Category="Shape", DisplayName="Capsule Half Height", Min=0.01f, Max=10000.0f, Speed=1.0f)

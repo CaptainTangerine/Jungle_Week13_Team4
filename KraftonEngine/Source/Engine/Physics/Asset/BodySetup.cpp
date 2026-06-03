@@ -8,9 +8,18 @@
 #include <utility>
 
 bool UBodySetup::AddShapesToRigidActor(IPhysicsScene* Scene, FPhysicsActorHandle ActorHandle,
-	const FVector& Scale3D, const FTransform& RelativeTM, const FTransform& WorldTransform, void* UserData) const
+	const FVector& Scale3D, const FTransform& RelativeTM, const FTransform& WorldTransform, void* UserData,
+	EShapeSetupMode ShapeSetupMode, UPrimitiveComponent* FilterSourceComponent, bool bAllowTriMesh) const
 {
-	if (!Scene || !ActorHandle.IsValid() || AggGeom.GetElementCount() <= 0)
+	if (!Scene || !ActorHandle.IsValid())
+	{
+		return false;
+	}
+
+	// trimesh 는 static/kinematic 만 백업 가능 — bAllowTriMesh 가 켜진 경우에만 사용한다.
+	// 쿡된 trimesh 가 있으면 그것을, 없으면 AggGeom(convex/primitive)을 attach.
+	const bool bUseTriMesh = bAllowTriMesh && HasTriMeshCollision();
+	if (!bUseTriMesh && AggGeom.GetElementCount() <= 0)
 	{
 		return false;
 	}
@@ -19,8 +28,17 @@ bool UBodySetup::AddShapesToRigidActor(IPhysicsScene* Scene, FPhysicsActorHandle
 	AddParams.Scale = Scale3D;
 	AddParams.LocalTransform = RelativeTM;
 	AddParams.WorldTransform = WorldTransform;
-	AddParams.Geometry = &AggGeom;
 	AddParams.UserData = UserData;
+	AddParams.ShapeSetupMode = ShapeSetupMode;
+	AddParams.FilterSourceComponent = FilterSourceComponent;
+	if (bUseTriMesh)
+	{
+		AddParams.CookedTriMesh = &TriMesh.CookedData;
+	}
+	else
+	{
+		AddParams.Geometry = &AggGeom;
+	}
 
 	return Scene->AddGeometry(ActorHandle, AddParams);
 }
