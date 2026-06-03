@@ -208,6 +208,30 @@ namespace
 		return false;
 	}
 
+	// 자동 일괄 생성(GenerateAll)에서 바디를 만들지 않을 본 — 손가락/발가락/치맛자락처럼
+	// 물리적 의미는 작고 바디 수만 크게 늘리는 본. 바디 수는 simulate 비용에 거의 비례하므로
+	// 이걸 빼는 게 가장 큰 절감 레버다. 이름 기반 휴리스틱(스켈레톤 의존, 필요 시 키 추가).
+	// ※ 수동 Add(GenerateBody)는 이 필터를 거치지 않으므로 원하면 개별 본에 바디를 추가할 수 있다.
+	bool ShouldSkipBoneForAutoBody(const FString& Name)
+	{
+		FString L = Name;
+		std::transform(L.begin(), L.end(), L.begin(),
+			[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+		static const char* Keys[] = {
+			// 손가락 (Mixamo: HandIndex/Middle/Ring/Pinky/Thumb, Bip001: Finger/Thumb)
+			"finger", "thumb", "index", "middle", "pinky", "pinki", "ring",
+			// 발가락
+			"toe",
+			// 의상/장식 다이내믹 본
+			"skirt", "cloth", "dress", "hair", "tail", "ribbon", "scarf", "cape",
+		};
+		for (const char* K : Keys)
+		{
+			if (L.find(K) != FString::npos) { return true; }
+		}
+		return false;
+	}
+
 	// 본의 첫 자식 방향/거리로 캡슐(본-로컬)을 피팅. 자식 없으면(=leaf) 작은 기본값.
 	// (Fallback) 부모→첫 자식 세그먼트로 캡슐 피팅. 스킨 버텍스가 없을 때만 사용.
 	bool FitCapsuleFromChildSegment(const FSkeletalMesh* Mesh, int32 BoneIndex, FKSphylElem& Out)
@@ -472,6 +496,11 @@ void FBodyConstraintGenerator::GenerateAll(UPhysicsAsset* Asset, const FSkeletal
 	for (int32 i = 0; i < BoneCount; ++i)
 	{
 		if (!Mesh->IsBoneSkinned(i))
+		{
+			continue;
+		}
+		// 손가락/발가락/치맛자락 등은 바디 생성 제외(수동 Add 로는 추가 가능).
+		if (ShouldSkipBoneForAutoBody(FName(Mesh->Bones[i].Name).ToString()))
 		{
 			continue;
 		}

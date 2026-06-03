@@ -47,6 +47,14 @@ public:
 	bool IsDrawBodies() const { return bDrawBodies; }
 	void SetDrawBodies(bool bEnabled) { bDrawBodies = bEnabled; MarkRenderStateDirty(); }
 
+	// 바디 표시 방식. 솔리드(반투명 채움)·와이어프레임은 독립 토글이며 동시에 켤 수 있다
+	// (둘 다 on = UE PhAT 기본값). 둘 다 off 면 바디는 보이지 않는다.
+	bool IsDrawBodySolid() const { return bDrawBodySolid; }
+	void SetDrawBodySolid(bool bEnabled) { bDrawBodySolid = bEnabled; MarkRenderStateDirty(); }
+
+	bool IsDrawBodyWireframe() const { return bDrawBodyWireframe; }
+	void SetDrawBodyWireframe(bool bEnabled) { bDrawBodyWireframe = bEnabled; MarkRenderStateDirty(); }
+
 private:
 	UPhysicsAsset*          PhysicsAsset       = nullptr;
 	USkeletalMeshComponent* TargetMeshComponent = nullptr;
@@ -54,4 +62,6 @@ private:
 	bool                    bDrawEnabled       = true;
 	bool                    bDrawConstraints   = true;
 	bool                    bDrawBodies        = true;
+	bool                    bDrawBodySolid     = true;
+	bool                    bDrawBodyWireframe = true;
 };

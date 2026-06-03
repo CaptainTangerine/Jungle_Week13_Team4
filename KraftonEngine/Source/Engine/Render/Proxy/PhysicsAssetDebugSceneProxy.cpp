@@ -1,4 +1,4 @@
-#include "PhysicsAssetDebugSceneProxy.h"
+﻿#include "PhysicsAssetDebugSceneProxy.h"
 
 #include "Component/Debug/PhysicsAssetDebugComponent.h"
 #include "Component/Primitive/SkeletalMeshComponent.h"
@@ -108,6 +108,150 @@ namespace
 		AddWireQuarterArc(Lines, Bottom, Z * -1.0f, Y * -1.0f, Radius, 6);
 	}
 
+	// ─────────────────────────────────────────────────────────────────────────
+	//  솔리드 빌더 — 와이어 빌더의 삼각형 대응물. 정점은 월드 공간, 법선은 외향.
+	//  CachedSolidTris 에 평평한 삼각형 수프(3정점 = 1삼각형)로 누적한다.
+	// ─────────────────────────────────────────────────────────────────────────
+
+	void AddSolidTri(TArray<FPhysicsDebugVertex>& Out,
+		const FVector& P0, const FVector& N0,
+		const FVector& P1, const FVector& N1,
+		const FVector& P2, const FVector& N2)
+	{
+		Out.push_back({ P0, N0 });
+		Out.push_back({ P1, N1 });
+		Out.push_back({ P2, N2 });
+	}
+
+	// 외향 법선 N 을 공유하는 사각형(A→B→C→D, CCW) → 삼각형 2개.
+	void AddSolidQuad(TArray<FPhysicsDebugVertex>& Out,
+		const FVector& A, const FVector& B, const FVector& C, const FVector& D, const FVector& N)
+	{
+		AddSolidTri(Out, A, N, B, N, C, N);
+		AddSolidTri(Out, A, N, C, N, D, N);
+	}
+
+	// UV 구. Z = 극축, X/Y = 적도 평면. 법선 = (점-중심) 방향.
+	void BuildSolidSphere(TArray<FPhysicsDebugVertex>& Out, const FVector& Center,
+		const FVector& X, const FVector& Y, const FVector& Z, float Radius)
+	{
+		if (Radius <= 0.0f) return;
+		constexpr int32 Stacks = 12;   // theta: 0(+Z극) → pi(-Z극)
+		constexpr int32 Sectors = 16;  // phi:   0 → 2pi
+
+		auto Dir = [&](int32 i, int32 j) -> FVector
+		{
+			const float Theta = FMath::Pi * static_cast<float>(i) / static_cast<float>(Stacks);
+			const float Phi = 2.0f * FMath::Pi * static_cast<float>(j) / static_cast<float>(Sectors);
+			return Z * std::cos(Theta) + (X * std::cos(Phi) + Y * std::sin(Phi)) * std::sin(Theta);
+		};
+
+		for (int32 i = 0; i < Stacks; ++i)
+		{
+			for (int32 j = 0; j < Sectors; ++j)
+			{
+				const FVector N00 = Dir(i, j);
+				const FVector N01 = Dir(i, j + 1);
+				const FVector N10 = Dir(i + 1, j);
+				const FVector N11 = Dir(i + 1, j + 1);
+
+				const FVector P00 = Center + N00 * Radius;
+				const FVector P01 = Center + N01 * Radius;
+				const FVector P10 = Center + N10 * Radius;
+				const FVector P11 = Center + N11 * Radius;
+
+				AddSolidTri(Out, P00, N00, P10, N10, P11, N11);
+				AddSolidTri(Out, P00, N00, P11, N11, P01, N01);
+			}
+		}
+	}
+
+	// OBB. 6면 평면 셰이딩(면 법선).
+	void BuildSolidBox(TArray<FPhysicsDebugVertex>& Out, const FVector& Center,
+		const FVector& X, const FVector& Y, const FVector& Z, const FVector& HalfExtent)
+	{
+		const FVector EX = X * HalfExtent.X;
+		const FVector EY = Y * HalfExtent.Y;
+		const FVector EZ = Z * HalfExtent.Z;
+
+		FVector C[8];
+		C[0] = Center - EX - EY - EZ;
+		C[1] = Center + EX - EY - EZ;
+		C[2] = Center + EX + EY - EZ;
+		C[3] = Center - EX + EY - EZ;
+		C[4] = Center - EX - EY + EZ;
+		C[5] = Center + EX - EY + EZ;
+		C[6] = Center + EX + EY + EZ;
+		C[7] = Center - EX + EY + EZ;
+
+		AddSolidQuad(Out, C[4], C[5], C[6], C[7],  Z);		 // +Z
+		AddSolidQuad(Out, C[0], C[3], C[2], C[1], Z * -1);   // -Z
+		AddSolidQuad(Out, C[1], C[2], C[6], C[5],  X);		 // +X
+		AddSolidQuad(Out, C[0], C[4], C[7], C[3], X * -1);   // -X
+		AddSolidQuad(Out, C[3], C[7], C[6], C[2],  Y);		 // +Y
+		AddSolidQuad(Out, C[0], C[1], C[5], C[4], Y * -1);   // -Y
+	}
+
+	// 한쪽 반구 캡. Apex 방향 = ApexAxis(단위). 적도(theta=0) → 극(theta=pi/2).
+	void BuildSolidHemisphere(TArray<FPhysicsDebugVertex>& Out, const FVector& Origin,
+		const FVector& X, const FVector& Z, const FVector& ApexAxis, float Radius)
+	{
+		constexpr int32 Stacks = 6;
+		constexpr int32 Sectors = 16;
+
+		auto Dir = [&](int32 i, int32 j) -> FVector
+		{
+			const float Theta = (FMath::Pi * 0.5f) * static_cast<float>(i) / static_cast<float>(Stacks);
+			const float Phi = 2.0f * FMath::Pi * static_cast<float>(j) / static_cast<float>(Sectors);
+			return (X * std::cos(Phi) + Z * std::sin(Phi)) * std::cos(Theta) + ApexAxis * std::sin(Theta);
+		};
+
+		for (int32 i = 0; i < Stacks; ++i)
+		{
+			for (int32 j = 0; j < Sectors; ++j)
+			{
+				const FVector N00 = Dir(i, j);
+				const FVector N01 = Dir(i, j + 1);
+				const FVector N10 = Dir(i + 1, j);
+				const FVector N11 = Dir(i + 1, j + 1);
+
+				AddSolidTri(Out, Origin + N00 * Radius, N00, Origin + N10 * Radius, N10, Origin + N11 * Radius, N11);
+				AddSolidTri(Out, Origin + N00 * Radius, N00, Origin + N11 * Radius, N11, Origin + N01 * Radius, N01);
+			}
+		}
+	}
+
+	// 길이축 = Y. 원통 측면 + 양끝 반구 캡. HalfLength = 원통 절반(반구 제외).
+	void BuildSolidCapsule(TArray<FPhysicsDebugVertex>& Out, const FVector& Center,
+		const FVector& X, const FVector& Y, const FVector& Z, float Radius, float HalfLength)
+	{
+		if (Radius <= 0.0f) return;
+		const FVector Top = Center + Y * HalfLength;
+		const FVector Bottom = Center - Y * HalfLength;
+		constexpr int32 Sectors = 16;
+
+		// 원통 측면: 라디얼 법선.
+		for (int32 j = 0; j < Sectors; ++j)
+		{
+			const float Phi0 = 2.0f * FMath::Pi * static_cast<float>(j) / static_cast<float>(Sectors);
+			const float Phi1 = 2.0f * FMath::Pi * static_cast<float>(j + 1) / static_cast<float>(Sectors);
+			const FVector D0 = X * std::cos(Phi0) + Z * std::sin(Phi0);
+			const FVector D1 = X * std::cos(Phi1) + Z * std::sin(Phi1);
+
+			const FVector T0 = Top + D0 * Radius;
+			const FVector T1 = Top + D1 * Radius;
+			const FVector B0 = Bottom + D0 * Radius;
+			const FVector B1 = Bottom + D1 * Radius;
+
+			AddSolidTri(Out, T0, D0, B0, D0, B1, D1);
+			AddSolidTri(Out, T0, D0, B1, D1, T1, D1);
+		}
+
+		// 반구 캡: 위쪽은 +Y, 아래쪽은 -Y 로 볼록.
+		BuildSolidHemisphere(Out, Top, X, Z, Y, Radius);
+		BuildSolidHemisphere(Out, Bottom, X, Z, Y * -1.0f, Radius);
+	}
+
 	int32 FindBoneIndexByName(const FSkeletalMesh* Mesh, const FName& BoneName)
 	{
 		const FString Name = BoneName.ToString();
@@ -208,7 +352,7 @@ FPhysicsAssetDebugSceneProxy::FPhysicsAssetDebugSceneProxy(UPhysicsAssetDebugCom
 	BodyColor       = FVector4(0.30f, 0.75f, 1.00f, 1.0f);   // 하늘색
 	SelectedColor   = FVector4(1.00f, 0.80f, 0.20f, 1.0f);   // 노랑(선택 본)
 	ConstraintColor = FVector4(0.40f, 1.00f, 0.45f, 1.0f);   // 연두(조인트 프레임/한계)
-	RebuildLines();
+	RebuildDebugRender();
 }
 
 FPhysicsAssetDebugSceneProxy::~FPhysicsAssetDebugSceneProxy()
@@ -218,14 +362,16 @@ FPhysicsAssetDebugSceneProxy::~FPhysicsAssetDebugSceneProxy()
 void FPhysicsAssetDebugSceneProxy::UpdateTransform()
 {
 	FPrimitiveSceneProxy::UpdateTransform();
-	RebuildLines();
+	RebuildDebugRender();
 }
 
-void FPhysicsAssetDebugSceneProxy::RebuildLines()
+void FPhysicsAssetDebugSceneProxy::RebuildDebugRender()
 {
 	CachedLines.clear();
 	CachedSelectedLines.clear();
 	CachedConstraintLines.clear();
+	CachedSolidTris.clear();
+	CachedSelectedSolidTris.clear();
 
 	UPhysicsAssetDebugComponent* Comp = static_cast<UPhysicsAssetDebugComponent*>(GetOwner());
 	if (!Comp || !Comp->IsVisibleDebug()) return;
@@ -240,9 +386,13 @@ void FPhysicsAssetDebugSceneProxy::RebuildLines()
 
 	const int32 SelectedBone = Comp->GetSelectedBoneIndex();
 
+	// 바디 표시 방식 스냅샷. 둘 다 off 면 바디 루프 자체를 생략(조인트는 별개).
+	const bool bDrawWire = Comp->IsDrawBodyWireframe();
+	const bool bDrawSolid = Comp->IsDrawBodySolid();
+
 	for (const UBodySetup* Body : Asset->BodySetups)
 	{
-		if (!Comp->IsDrawBodies()) break;   // "Constraint 만 보기" 모드 — 바디 와이어 생략
+		if (!Comp->IsDrawBodies() || (!bDrawWire && !bDrawSolid)) break;   // "Constraint 만 보기" 모드 — 바디 생략
 		if (!Body) continue;
 
 		const int32 BoneIndex = FindBoneIndexByName(MeshAsset, Body->BoneName);
@@ -261,27 +411,40 @@ void FPhysicsAssetDebugSceneProxy::RebuildLines()
 			return BonePos + BoneQuat.RotateVector(FVector(Local.X * BoneScale.X, Local.Y * BoneScale.Y, Local.Z * BoneScale.Z));
 		};
 
-		TArray<FWireLine>& Out = (BoneIndex == SelectedBone) ? CachedSelectedLines : CachedLines;
+		const bool bSelected = (BoneIndex == SelectedBone);
+		TArray<FWireLine>& Out = bSelected ? CachedSelectedLines : CachedLines;
+		TArray<FPhysicsDebugVertex>& SolidOut = bSelected ? CachedSelectedSolidTris : CachedSolidTris;
 
-		// Sphere — 회전 불필요. 월드 축 정렬 링.
+		// Sphere — 회전 불필요. 월드 축 정렬.
 		for (const FKSphereElem& Elem : Body->AggGeom.SphereElems)
 		{
-			BuildSphere(Out, ToWorld(Elem.Center), FVector(1, 0, 0), FVector(0, 1, 0), FVector(0, 0, 1), Elem.Radius * S);
+			const FVector WC = ToWorld(Elem.Center);
+			if (bDrawWire)  BuildSphere(Out, WC, FVector(1, 0, 0), FVector(0, 1, 0), FVector(0, 0, 1), Elem.Radius * S);
+			if (bDrawSolid) BuildSolidSphere(SolidOut, WC, FVector(1, 0, 0), FVector(0, 1, 0), FVector(0, 0, 1), Elem.Radius * S);
 		}
 
 		// Box / Capsule — elem.Rotation 을 본 회전과 합성해 월드 기준 축 산출.
 		for (const FKBoxElem& Elem : Body->AggGeom.BoxElems)
 		{
 			const FQuat Q = BoneQuat * Elem.Rotation.ToQuaternion();
-			BuildBox(Out, ToWorld(Elem.Center), Q.RotateVector(FVector(1, 0, 0)), Q.RotateVector(FVector(0, 1, 0)), Q.RotateVector(FVector(0, 0, 1)),
-				FVector(Elem.HalfExtent.X * S, Elem.HalfExtent.Y * S, Elem.HalfExtent.Z * S));
+			const FVector WC = ToWorld(Elem.Center);
+			const FVector AX = Q.RotateVector(FVector(1, 0, 0));
+			const FVector AY = Q.RotateVector(FVector(0, 1, 0));
+			const FVector AZ = Q.RotateVector(FVector(0, 0, 1));
+			const FVector HE(Elem.HalfExtent.X * S, Elem.HalfExtent.Y * S, Elem.HalfExtent.Z * S);
+			if (bDrawWire)  BuildBox(Out, WC, AX, AY, AZ, HE);
+			if (bDrawSolid) BuildSolidBox(SolidOut, WC, AX, AY, AZ, HE);
 		}
 
 		for (const FKSphylElem& Elem : Body->AggGeom.SphylElems)
 		{
 			const FQuat Q = BoneQuat * Elem.Rotation.ToQuaternion();
-			BuildCapsule(Out, ToWorld(Elem.Center), Q.RotateVector(FVector(1, 0, 0)), Q.RotateVector(FVector(0, 1, 0)), Q.RotateVector(FVector(0, 0, 1)),
-				Elem.Radius * S, Elem.Length * 0.5f * S);
+			const FVector WC = ToWorld(Elem.Center);
+			const FVector AX = Q.RotateVector(FVector(1, 0, 0));
+			const FVector AY = Q.RotateVector(FVector(0, 1, 0));
+			const FVector AZ = Q.RotateVector(FVector(0, 0, 1));
+			if (bDrawWire)  BuildCapsule(Out, WC, AX, AY, AZ, Elem.Radius * S, Elem.Length * 0.5f * S);
+			if (bDrawSolid) BuildSolidCapsule(SolidOut, WC, AX, AY, AZ, Elem.Radius * S, Elem.Length * 0.5f * S);
 		}
 	}
 

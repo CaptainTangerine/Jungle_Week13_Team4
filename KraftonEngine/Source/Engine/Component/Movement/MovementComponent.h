@@ -25,7 +25,7 @@ public:
 	void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction) override;
 	void PostEditProperty(const char* PropertyName) override;
 
-	void SetUpdatedComponent(USceneComponent* NewUpdatedComponent);
+	virtual void SetUpdatedComponent(USceneComponent* NewUpdatedComponent);
 	USceneComponent* GetUpdatedComponent() const;
 	bool HasValidUpdatedComponent() const { return GetUpdatedComponent() != nullptr; }
 	FString GetUpdatedComponentDisplayName() const;

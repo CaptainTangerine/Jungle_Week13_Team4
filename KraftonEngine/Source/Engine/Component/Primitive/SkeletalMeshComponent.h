@@ -3,6 +3,8 @@
 #include "Component/Primitive/SkinnedMeshComponent.h"
 #include "Animation/AnimationMode.h"
 #include "Object/Ptr/SubclassOf.h"
+#include "Physics/PhysicsHandles.h"
+#include "Physics/IPhysicsBodySync.h"
 
 #include "Source/Engine/Component/Primitive/SkeletalMeshComponent.generated.h"
 
@@ -17,7 +19,7 @@ struct FConstraintInstance;
 // SkeletalMesh 전용 render proxy만 제공하는 얇은 wrapper.
 // Skinning/bone/material/bounds 상태는 모두 USkinnedMeshComponent가 소유한다.
 UCLASS()
-class USkeletalMeshComponent : public USkinnedMeshComponent
+class USkeletalMeshComponent : public USkinnedMeshComponent, public IPhysicsBodySync
 {
 public:
 	GENERATED_BODY()
@@ -78,14 +80,25 @@ public:
     float GetPhysicsBlendWeight() const;   // 최대 바디 가중치(정보용)
     void  SetPhysicsBlendInterpSpeed(float InSpeed) { PhysicsBlendInterpSpeed = InSpeed; }
 
-    // 에디터 프리뷰 전용: 물리 씬을 스텝한 뒤 매 프레임 호출해 시뮬 바디 포즈를 본에 되읽는다
-    // (런타임 TickComponent 의 물리 경로만 수행; anim 인스턴스가 없으면 ref 포즈를 기준으로).
-    // 게임 월드에선 TickComponent 가 자동 처리하므로 호출 불필요.
-    void  SimulatePhysicsPreview(float DeltaTime);
+    // 에디터 프리뷰 전용: Scene->Tick 직전에 호출해 기준 포즈를 캐시한다(anim 인스턴스가 없어
+    // ref 포즈 사용). 이후 Scene->Tick 이 등록된 핸들러(Pre/PostPhysicsSimulate)를 통해 키네마틱
+    // 추종과 시뮬 결과 반영을 구동한다. 게임 월드에선 TickComponent 가 캐시를 채우므로 불필요.
+    void  PreparePhysicsPreview(float DeltaTime);
+
+    // IPhysicsBodySync — 씬이 simulate 전후로 호출(World::Tick / 에디터 Scene->Tick).
+    //   Pre  : 키네마틱(weight 0) 바디를 캐시된 anim 포즈로 추종(simulate 이전).
+    //   Post : 시뮬 결과를 본 포즈에 블렌드 반영(fetchResults 이후).
+    void PrePhysicsSimulate(float DeltaTime) override;
+    void PostPhysicsSimulate(float DeltaTime) override;
     const TArray<FBodyInstance*>& GetBodies() const { return Bodies; }
     const TArray<FConstraintInstance*>& GetConstraints() const { return Constraints; }
     FBodyInstance* GetBodyInstance(FName BoneName) const;
     FBodyInstance* GetBodyInstance(int32 BoneIndex) const;
+
+    // 랙돌 본에 힘/임펄스 적용 — 컴포넌트 바디와 동일한 handle 기반 force 경로를 공유한다.
+    // 해당 본의 FBodyInstance 가 시뮬레이션(dynamic) 중일 때만 효과(키네마틱/없음이면 no-op).
+    void AddForceToBone(FName BoneName, const FVector& Force);
+    void AddForceToAllBodies(const FVector& Force);
     FConstraintInstance* GetConstraintInstance(FName ChildBoneName) const;
 
     // SingleNode 모드에서 현재 자동 생성된 노드를 반환한다. NodeName 은 현재 단일 노드 구조에서는 무시한다.
@@ -154,6 +167,15 @@ protected:
     UPhysicsAsset*             PhysicsAssetOverride = nullptr;
     TArray<FBodyInstance*>     Bodies;
     TArray<FConstraintInstance*> Constraints;
+    // 이 랙돌의 모든 본 바디를 묶는 aggregate(selfCollision=false). 바디들끼리의 내부 충돌을
+    // broad-phase 에서 차단한다. TermArticulated 에서 바디 해제 후 마지막에 release.
+    FPhysicsAggregateHandle    RagdollAggregate;
+
+    // pre-simulate 단계(TickComponent/PreparePhysicsPreview)에서 캐시되는 anim 기준 포즈와
+    // 블렌드 여부. simulate 전후의 Pre/PostPhysicsSimulate 핸들러가 이 캐시를 소비한다 —
+    // 한 프레임 안에서 anim→sync→simulate→blend 가 같은 포즈로 일관되게 묶이도록.
+    TArray<FMatrix>            CachedAnimGlobals;
+    bool                       bCachedWantBlend = false;
 
     // 블렌드 가중치는 바디별(FBodyInstance::PhysicsBlendWeight/Target)로 보관한다.
     //   weight 0   : 순수 anim(바디 키네마틱 추종)

@@ -16,6 +16,14 @@ void ACharacter::InitDefaultComponents(const FString& SkeletalMeshFileName)
 	CapsuleComponent = AddComponent<UCapsuleComponent>();
 	SetRootComponent(CapsuleComponent);
 
+	// 캡슐은 코드(CMC)가 움직이는 콜라이더 — kinematic 으로 등록되게 한다(static 으로 등록되어
+	// 매 프레임 teleport 되면 다이내믹/랙돌을 제대로 못 밀어냄). ObjectType 은 Pawn — 다른
+	// 캐릭터의 바닥 raycast(WorldStatic 마스크)가 이 캡슐을 바닥으로 오인하지 않게 한다.
+	// CollisionEnabled 는 기본 NoCollision 유지 — QueryAndPhysics 로 켜면 kinematic 콜라이더로
+	// 동작(랙돌을 밀어내고 sweep 대상이 됨). 켜는 건 씬/사용자 선택.
+	CapsuleComponent->SetKinematic(true);
+	CapsuleComponent->SetCollisionObjectType(ECollisionChannel::Pawn);
+
 	// 2) SkeletalMesh — Capsule 의 자식.
 	Mesh = AddComponent<USkeletalMeshComponent>();
 	Mesh->AttachToComponent(CapsuleComponent);

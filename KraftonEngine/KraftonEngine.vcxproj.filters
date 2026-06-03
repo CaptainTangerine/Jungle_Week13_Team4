@@ -540,6 +540,9 @@
     <FxCompile Include="Shaders\Editor\Gizmo.hlsl">
       <Filter>Shaders\Editor</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\Editor\PhysicsBody.hlsl">
+      <Filter>Shaders\Editor</Filter>
+    </FxCompile>
     <FxCompile Include="Shaders\Geometry\Decal.hlsl">
       <Filter>Shaders\Geometry</Filter>
     </FxCompile>
@@ -1019,6 +1022,9 @@
     <ClCompile Include="Source\Engine\Component\Movement\MovementComponent.cpp">
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Component\Movement\PawnMovementComponent.cpp">
+      <Filter>Source\Engine\Component\Movement</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Component\Movement\PendulumMovementComponent.cpp">
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClCompile>
@@ -1026,6 +1032,9 @@
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Component\Movement\RotatingMovementComponent.cpp">
+      <Filter>Source\Engine\Component\Movement</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Component\Movement\WheeledVehicleMovementComponent.cpp">
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Component\Primitive\BillboardComponent.cpp">
@@ -1238,6 +1247,9 @@
     <ClCompile Include="Source\Engine\GameFramework\Pawn\Pawn.cpp">
       <Filter>Source\Engine\GameFramework\Pawn</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\GameFramework\Pawn\WheeledVehicle.cpp">
+      <Filter>Source\Engine\GameFramework\Pawn</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Gizmo\BoneTransformGizmoTarget.cpp">
       <Filter>Source\Engine\Gizmo</Filter>
     </ClCompile>
@@ -1388,6 +1400,9 @@
     <ClCompile Include="Source\Engine\Physics\PhysXPhysicsScene.cpp">
       <Filter>Source\Engine\Physics</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Physics\PhysXVehicleManager.cpp">
+      <Filter>Source\Engine\Physics</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Physics\Asset\BodyConstraintGenerator.cpp">
       <Filter>Source\Engine\Physics\Asset</Filter>
     </ClCompile>
@@ -1433,6 +1448,9 @@
     <ClCompile Include="Source\Engine\Profiling\Stats\MemoryStats.cpp">
       <Filter>Source\Engine\Profiling\Stats</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Profiling\Stats\PhysicsStats.cpp">
+      <Filter>Source\Engine\Profiling\Stats</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Profiling\Stats\ShadowStats.cpp">
       <Filter>Source\Engine\Profiling\Stats</Filter>
     </ClCompile>
@@ -1464,6 +1482,9 @@
       <Filter>Source\Engine\Render\Geometry</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\Geometry\LineGeometry.cpp">
+      <Filter>Source\Engine\Render\Geometry</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Geometry\TriangleGeometry.cpp">
       <Filter>Source\Engine\Render\Geometry</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\Pipeline\DefaultRenderPipeline.cpp">
@@ -2147,6 +2168,9 @@
     <ClInclude Include="Source\Engine\Component\Camera\CineCameraComponent.h">
       <Filter>Source\Engine\Component\Camera</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Component\Camera\FPostProcessSettings.h">
+      <Filter>Source\Engine\Component\Camera</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Component\Camera\SpringArmComponent.h">
       <Filter>Source\Engine\Component\Camera</Filter>
     </ClInclude>
@@ -2195,6 +2219,9 @@
     <ClInclude Include="Source\Engine\Component\Movement\MovementComponent.h">
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Component\Movement\PawnMovementComponent.h">
+      <Filter>Source\Engine\Component\Movement</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Component\Movement\PendulumMovementComponent.h">
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClInclude>
@@ -2202,6 +2229,9 @@
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Component\Movement\RotatingMovementComponent.h">
+      <Filter>Source\Engine\Component\Movement</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Component\Movement\WheeledVehicleMovementComponent.h">
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Component\Primitive\BillboardComponent.h">
@@ -2447,6 +2477,9 @@
     <ClInclude Include="Source\Engine\GameFramework\Pawn\Pawn.h">
       <Filter>Source\Engine\GameFramework\Pawn</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\GameFramework\Pawn\WheeledVehicle.h">
+      <Filter>Source\Engine\GameFramework\Pawn</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Gizmo\BoneTransformGizmoTarget.h">
       <Filter>Source\Engine\Gizmo</Filter>
     </ClInclude>
@@ -2651,6 +2684,9 @@
     <ClInclude Include="Source\Engine\Physics\ConstraintInstance.h">
       <Filter>Source\Engine\Physics</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\IPhysicsBodySync.h">
+      <Filter>Source\Engine\Physics</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Physics\IPhysicsScene.h">
       <Filter>Source\Engine\Physics</Filter>
     </ClInclude>
@@ -2658,6 +2694,9 @@
       <Filter>Source\Engine\Physics</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Physics\PhysXPhysicsScene.h">
+      <Filter>Source\Engine\Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Physics\PhysXVehicleManager.h">
       <Filter>Source\Engine\Physics</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Physics\PhysicsHandles.h">
@@ -2723,6 +2762,9 @@
     <ClInclude Include="Source\Engine\Profiling\Stats\MemoryStats.h">
       <Filter>Source\Engine\Profiling\Stats</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Profiling\Stats\PhysicsStats.h">
+      <Filter>Source\Engine\Profiling\Stats</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Profiling\Stats\ShadowStats.h">
       <Filter>Source\Engine\Profiling\Stats</Filter>
     </ClInclude>
@@ -2760,6 +2802,9 @@
       <Filter>Source\Engine\Render\Geometry</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Geometry\LineGeometry.h">
+      <Filter>Source\Engine\Render\Geometry</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Geometry\TriangleGeometry.h">
       <Filter>Source\Engine\Render\Geometry</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Pipeline\DefaultRenderPipeline.h">

@@ -19,6 +19,8 @@ public:
 	void UpdateWorldAABB() const override;
 	void PostEditProperty(const char* PropertyName) override;
 protected:
+	void BuildShapeBodySetup(UBodySetup& Setup) const override;
+
 	UPROPERTY(Edit, Save, Category="Shape", DisplayName="Sphere Radius", Min=0.01f, Max=10000.0f, Speed=1.0f)
 	float SphereRadius = 2.0f;
 };

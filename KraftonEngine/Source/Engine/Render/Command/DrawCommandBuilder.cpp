@@ -92,6 +92,7 @@ void FDrawCommandBuilder::Create(ID3D11Device* InDevice, ID3D11DeviceContext* In
 	GridLines.Create(InDevice);
 	DebugBoneLines.Create(InDevice);
 	OverlayLines.Create(InDevice);
+	PhysicsBodies.Create(InDevice);
 	FontGeometry.Create(InDevice);
 
 	FogCB.Create(InDevice, sizeof(FFogConstants), "FogCB");
@@ -112,6 +113,7 @@ void FDrawCommandBuilder::Release()
 	GridLines.Release();
 	DebugBoneLines.Release();
 	OverlayLines.Release();
+	PhysicsBodies.Release();
 	FontGeometry.Release();
 
 	for (auto& Pair : PerSceneObjectCBPool)
@@ -154,6 +156,7 @@ void FDrawCommandBuilder::BeginCollect(const FFrameContext& Frame)
 	GridLines.Clear();
 	DebugBoneLines.Clear();
 	OverlayLines.Clear();
+	PhysicsBodies.Clear();
 	FontGeometry.Clear();
 	FontGeometry.ClearScreen();
 
@@ -498,6 +501,24 @@ void FDrawCommandBuilder::BuildProxyCommands(const FFrameContext& Frame, FScene&
 				{
 					EditorLines.AddLine(Line.Start, Line.End, PhysProxy->GetSelectedColor());
 				}
+
+				// 솔리드 바디 — 반투명. 캐시는 평평한 삼각형 수프(3정점=1삼각형). 색은 본 색에
+				// 알파만 덮어 AlphaBlend 패스로 채운다(BuildPhysicsBodyCommands 에서 1 드로우콜).
+				constexpr float SolidAlpha = 0.45f;
+				auto AppendSolid = [&](const TArray<FPhysicsDebugVertex>& Tris, const FVector4& InColor)
+				{
+					const FVector4 Col(InColor.X, InColor.Y, InColor.Z, SolidAlpha);
+					for (size_t i = 0; i + 2 < Tris.size(); i += 3)
+					{
+						const uint32 I0 = PhysicsBodies.AddVertex(Tris[i + 0].Position, Tris[i + 0].Normal, Col);
+						const uint32 I1 = PhysicsBodies.AddVertex(Tris[i + 1].Position, Tris[i + 1].Normal, Col);
+						const uint32 I2 = PhysicsBodies.AddVertex(Tris[i + 2].Position, Tris[i + 2].Normal, Col);
+						PhysicsBodies.AddTriangle(I0, I1, I2);
+					}
+				};
+				AppendSolid(PhysProxy->GetCachedSolidTris(), PhysProxy->GetBodyColor());
+				AppendSolid(PhysProxy->GetCachedSelectedSolidTris(), PhysProxy->GetSelectedColor());
+
 				// 조인트 한계 시각화는 메시에 가리지 않게 NoDepth 오버레이로(아래 BuildEditorLineCommands).
 				for (const FWireLine& Line : PhysProxy->GetCachedConstraintLines())
 				{
@@ -684,6 +705,7 @@ void FDrawCommandBuilder::BuildDynamicDrawCommands(const FFrameContext& Frame, c
 {
 	EViewMode ViewMode = Frame.RenderOptions.ViewMode;
 	BuildEditorLineCommands(ViewMode);
+	BuildPhysicsBodyCommands(ViewMode);
 	BuildFogCommands(Frame, Scene);
 	BuildPostProcessCommands(Frame, Scene);
 	BuildFontCommands(ViewMode);
@@ -723,6 +745,33 @@ void FDrawCommandBuilder::BuildEditorLineCommands(EViewMode ViewMode)
 	EmitLineCommand(DebugBoneLines, EditorShader, BoneLinesRS);
 	// 조인트 한계 등 — 메시 위에 항상 보이도록 깊이 무시로 오버레이.
 	EmitLineCommand(OverlayLines, EditorShader, BoneLinesRS);
+}
+
+// ============================================================
+// BuildPhysicsBodyCommands — PhysicsAsset 솔리드 바디(반투명) → AlphaBlend 단일 드로우콜
+// ============================================================
+void FDrawCommandBuilder::BuildPhysicsBodyCommands(EViewMode ViewMode)
+{
+	if (PhysicsBodies.GetTriangleCount() == 0) return;
+	if (!PhysicsBodies.UploadBuffers(CachedContext)) return;
+
+	FShader* Shader = FShaderManager::Get().GetOrCreate(EShaderPath::PhysicsBody);
+	if (!Shader) return;
+
+	// AlphaBlend 기반 + 두 가지 오버라이드:
+	//  - DepthReadOnly: 씬 메시에 가려지되, 서로 겹치는 반투명 바디끼리 깊이 충돌 없음.
+	//  - SolidNoCull : 양면. 한 바디 너머로 다른 바디 뒷면이 비쳐도 빈 곳이 안 생김.
+	FDrawCommandRenderState RS = PassRenderStateTable->ToDrawCommandState(ERenderPass::AlphaBlend, ViewMode);
+	RS.DepthStencil = EDepthStencilState::DepthReadOnly;
+	RS.Rasterizer   = ERasterizerState::SolidNoCull;
+
+	FDrawCommand& Cmd = DrawCommandList.AddCommand();
+	Cmd.Pass = ERenderPass::AlphaBlend;
+	Cmd.Shader = Shader;
+	Cmd.RenderState = RS;
+	Cmd.Buffer = { PhysicsBodies.GetVBBuffer(), PhysicsBodies.GetVBStride(), PhysicsBodies.GetIBBuffer() };
+	Cmd.Buffer.IndexCount = PhysicsBodies.GetIndexCount();
+	Cmd.BuildSortKey();
 }
 
 // ============================================================

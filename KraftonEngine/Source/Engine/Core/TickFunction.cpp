@@ -42,9 +42,18 @@ void FTickFunction::UnRegisterTickFunction()
 
 void FTickManager::Tick(UWorld* World, float DeltaTime, ELevelTick TickType)
 {
-	GatherTickFunctions(World, TickType);
+	Gather(World, TickType);
+	RunTickGroups(DeltaTime, TickType, static_cast<ETickingGroup>(0), static_cast<ETickingGroup>(TG_MAX - 1));
+}
 
-	for (int GroupIndex = 0; GroupIndex < TG_MAX; ++GroupIndex)
+void FTickManager::Gather(UWorld* World, ELevelTick TickType)
+{
+	GatherTickFunctions(World, TickType);
+}
+
+void FTickManager::RunTickGroups(float DeltaTime, ELevelTick TickType, ETickingGroup First, ETickingGroup Last)
+{
+	for (int GroupIndex = First; GroupIndex <= Last; ++GroupIndex)
 	{
 		const ETickingGroup CurrentGroup = static_cast<ETickingGroup>(GroupIndex);
 		for (FTickFunction* TickFunction : TickFunctions)

@@ -98,6 +98,11 @@ public:
 	virtual void UpdateLOD(uint32 /*LODLevel*/) {}
 	virtual void UpdatePerViewport(const FFrameContext& /*Frame*/) {}
 
+	// 매 프레임 게임 스레드에서 호출 — 컴포넌트의 동적 렌더 데이터(스킨 행렬 등)를 프록시에
+	// 스냅샷한다. 렌더 제출 단계는 이 스냅샷만 읽어야 한다(렌더 스레드 분리 전제). 기본은 no-op.
+	// dirty-flag 와 무관하게(스켈레탈은 매 프레임 변하지만 프록시를 dirty 로 안 만듦) 호출된다.
+	virtual void UpdateRenderSnapshot() {}
+
 	virtual bool PrepareDrawBuffer(ID3D11Device* Device, ID3D11DeviceContext* Context,
 		FDrawCommandBuffer& OutBuffer) const;
 

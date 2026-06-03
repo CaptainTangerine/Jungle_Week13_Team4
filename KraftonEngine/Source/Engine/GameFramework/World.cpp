@@ -235,6 +235,15 @@ bool UWorld::PhysicsRaycastByObjectTypes(const FVector& Start, const FVector& Di
 	return false;
 }
 
+bool UWorld::PhysicsSweepCapsuleByObjectTypes(const FVector& Start, const FQuat& Rot,
+	float Radius, float HalfHeight, const FVector& Dir, float MaxDist, FHitResult& OutHit,
+	uint32 ObjectTypeMask, const AActor* IgnoreActor) const
+{
+	if (PhysicsScene)
+		return PhysicsScene->SweepCapsuleByObjectTypes(Start, Rot, Radius, HalfHeight, Dir, MaxDist, OutHit, ObjectTypeMask, IgnoreActor);
+	return false;
+}
+
 
 void UWorld::InsertActorToOctree(AActor* Actor)
 {
@@ -349,13 +358,40 @@ void UWorld::Tick(float DeltaTime, ELevelTick TickType)
 		return;
 	}
 
-	if (bHasBegunPlay && PhysicsScene)
+	// 물리 simulate 를 tick group 사이에 끼워넣어 TG_DuringPhysics 와 오버랩시킨다(UE 식 순서):
+	//   TG_PrePhysics(anim 등, pre-sync 쓰기)
+	//     → StartSimulation(pre-sync → simulate 킥오프; PhysX 워커가 백그라운드로 적분)
+	//     → TG_DuringPhysics(simulate 와 동시 실행되는 물리 비의존 작업)
+	//     → FinishSimulation(fetchResults 로 블록 → post-sync → 이벤트)
+	//     → TG_PostPhysics..PostUpdateWork(시뮬 결과 사용: CMC 이동, 카메라)
+	//
+	// ★ 불변식: TG_DuringPhysics 틱은 simulate 진행 중 실행된다. PxActor 를 읽거나 쓰면 안 된다
+	//   (레이캐스트/스윕/속도 읽기/포즈 쓰기 금지). 물리 결과가 필요하거나 PxActor 를 만지는
+	//   컴포넌트는 TG_PostPhysics 이후에 둘 것. (CMC=PostPhysics, SpringArm=PostUpdateWork)
+	TickManager.Gather(this, TickType);
+	TickManager.RunTickGroups(DeltaTime, TickType, TG_PrePhysics, TG_PrePhysics);
+
+	const bool bRunPhysics = bHasBegunPlay && PhysicsScene;
+	if (bRunPhysics)
 	{
-		SCOPE_STAT_CAT("PhysicsScene", "1_WorldTick");
-		PhysicsScene->Tick(DeltaTime);
+		SCOPE_STAT_CAT("Physics.Start", "1_WorldTick");   // pre-sync + simulate 킥오프
+		PhysicsScene->StartSimulation(DeltaTime);
 	}
 
-	TickManager.Tick(this, DeltaTime, TickType);
+	// simulate 와 오버랩되는 구간 — 여기 등록된 틱은 PhysX 워커와 동시에 메인 스레드에서 돈다.
+	// 이 구간 시간이 fetchResults 블록(Physics.FetchBlock)보다 작으면 simulate 를 다 못 숨긴다.
+	{
+		SCOPE_STAT_CAT("Physics.OverlapWindow", "1_WorldTick");
+		TickManager.RunTickGroups(DeltaTime, TickType, TG_DuringPhysics, TG_DuringPhysics);
+	}
+
+	if (bRunPhysics)
+	{
+		SCOPE_STAT_CAT("Physics.Finish", "1_WorldTick");  // fetchResults 블록 + post-sync + 이벤트
+		PhysicsScene->FinishSimulation();
+	}
+
+	TickManager.RunTickGroups(DeltaTime, TickType, TG_PostPhysics, static_cast<ETickingGroup>(TG_MAX - 1));
 	FNvClothSystem::Get().Tick(DeltaTime);
 
 	// 카메라는 물리/액터 Tick 이후 갱신 — 차량 1인칭처럼 physics body 에 붙은 카메라가

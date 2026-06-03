@@ -3,6 +3,9 @@
 #include <cmath>
 #include "Object/Reflection/ObjectFactory.h"
 #include "Core/Types/PropertyTypes.h"
+#include "Core/Types/CollisionTypes.h"   // ECollisionEnabled
+#include "Core/Logging/Log.h"
+#include "Physics/Asset/BodySetup.h"      // UBodySetup::HasTriMeshCollision
 #include "Engine/Platform/Paths.h"
 #include "Collision/Ray/RayUtils.h"
 #include "Mesh/Static/StaticMeshAsset.h"
@@ -74,6 +77,33 @@ void UStaticMeshComponent::CacheLocalBounds()
 UStaticMesh* UStaticMeshComponent::GetStaticMesh() const
 {
 	return StaticMesh;
+}
+
+UBodySetup* UStaticMeshComponent::GetBodySetup()
+{
+	if (!StaticMesh) return nullptr;
+
+	UBodySetup* Setup = StaticMesh->GetBodySetup();
+
+	// 정적(non-sim) 월드 지오메트리 + QueryAndPhysics 면 실제 표면을 따르는 트라이메시 콜라이더가
+	// 필요하다. 기본 BodySetup(BuildDefaultBodySetup)은 bounds-box AggGeom 만 만들므로, 굽힌 트라이메시가
+	// 없으면 여기서 즉석에서 굽는다(임포트 후 에디터 베이크 스텝 불필요). 복잡한 메시(트랙/지형)는
+	// bounds-box 로는 표면을 못 살려 차가 박스 위에 떠버린다. (InitBodyInstanceInScene → InitBody 의
+	// bAllowTriMesh=bStatic 경로와 짝.) 한 번 구우면 HasTriMeshCollision()==true 라 재실행 안 됨.
+	const bool bStatic = !GetSimulatePhysics() && !IsKinematic();
+	if (Setup && bStatic
+		&& GetCollisionEnabled() == ECollisionEnabled::QueryAndPhysics
+		&& !Setup->HasTriMeshCollision())
+	{
+		FString TriMeshError;
+		if (!StaticMesh->BuildTriMeshBodySetup(&TriMeshError))
+		{
+			UE_LOG("[StaticMeshComponent] GetBodySetup: tri-mesh cook failed (%s) — falling back to AggGeom box.",
+				TriMeshError.empty() ? "unknown" : TriMeshError.c_str());
+		}
+	}
+
+	return Setup;
 }
 
 void UStaticMeshComponent::SetMaterial(int32 ElementIndex, UMaterial* InMaterial)

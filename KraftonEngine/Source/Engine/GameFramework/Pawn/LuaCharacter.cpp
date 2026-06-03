@@ -6,6 +6,8 @@
 #include "Component/Camera/SpringArmComponent.h"
 #include "Component/Input/InputComponent.h"
 #include "Component/Primitive/SkeletalMeshComponent.h"
+#include "GameFramework/World.h"
+#include "Core/Logging/Log.h"
 void ALuaCharacter::InitDefaultComponents(const FString& SkeletalMeshFileName, const FString& ScriptFile)
 {
 	Super::InitDefaultComponents(SkeletalMeshFileName);
@@ -67,6 +69,29 @@ void ALuaCharacter::SetupInputComponent()
 		{
 			MeshComp->SetBodyPhysicsBlendWeight("Bip001 R UpperArm", bOn ? 1.0f : 0.0f, true);
 		}
+	});
+
+	// [임시 디버그/측정] Y 키 = 월드의 모든 SkeletalMesh 를 동시에 전신 랙돌 토글.
+	// Physics.FetchBlock 부하를 키워 오버랩 실익을 측정하기 위한 예제 — 한 번에 N 개를
+	// 다이내믹으로 전환한다. (각 액터의 첫 SkeletalMeshComponent 대상.)
+	InputComponent->AddActionMapping("ToggleMassRagdoll", 'Y');
+	InputComponent->BindAction("ToggleMassRagdoll", EInputEvent::Pressed, [this, bOn = false]() mutable
+	{
+		bOn = !bOn;
+		UWorld* World = GetWorld();
+		if (!World) return;
+
+		int32 Count = 0;
+		for (AActor* Actor : World->GetActors())
+		{
+			if (!Actor) continue;
+			if (USkeletalMeshComponent* SkelComp = Actor->GetComponentByClass<USkeletalMeshComponent>())
+			{
+				SkelComp->SetSimulatePhysics(bOn);   // 전체 바디 weight 0/1 보간 전환
+				++Count;
+			}
+		}
+		UE_LOG("[MassRagdoll] %s - %d skeletal meshes", bOn ? "ON" : "OFF", Count);
 	});
 }
 

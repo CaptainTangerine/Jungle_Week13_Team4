@@ -1,4 +1,5 @@
 ﻿#include "Physics/PhysXPhysicsScene.h"
+#include "Physics/PhysXVehicleManager.h"
 #include "Component/PrimitiveComponent.h"
 #include "Component/Shape/BoxComponent.h"
 #include "Component/Shape/SphereComponent.h"
@@ -11,12 +12,17 @@
 #include "Mesh/Static/StaticMesh.h"
 #include "Physics/Asset/BodySetup.h"
 #include "Physics/Asset/ConstraintSetup.h"
+#include "Physics/BodyInstance.h"
+#include "Physics/IPhysicsBodySync.h"
+#include "Profiling/Stats/Stats.h"
+#include "Profiling/Stats/PhysicsStats.h"
 #include "Core/ProjectSettings.h"
 #include "Core/Logging/Log.h"
 
 // PhysX headers
 #include <PxPhysicsAPI.h>
 #include <algorithm>
+#include <thread>
 #include <cmath>
 #include <cstring>
 
@@ -54,9 +60,11 @@ static PxDefaultAllocator GPhysXAllocator;
 // ============================================================
 static PxFoundation* GSharedFoundation = nullptr;
 static PxPhysics* GSharedPhysics = nullptr;
+static PxCooking* GSharedCooking = nullptr;
 static PxPvd* GSharedPvd = nullptr;
 static PxPvdTransport* GSharedPvdTransport = nullptr;
 static bool GSharedExtensionsInitialized = false;
+static bool GVehicleSDKInitialized = false;
 static int32 GSharedRefCount = 0;
 
 static void ReleaseSharedPvd()
@@ -127,6 +135,18 @@ static void AcquireSharedPhysX(PxFoundation*& OutFoundation, PxPhysics*& OutPhys
 				UE_LOG("[PhysX] Extensions initialized (PVD=%d, Result=%d)",
 					GSharedPvd ? 1 : 0,
 					GSharedExtensionsInitialized ? 1 : 0);
+
+				GSharedCooking = PxCreateCooking(
+					PX_PHYSICS_VERSION,
+					*GSharedFoundation,
+					PxCookingParams(GSharedPhysics->getTolerancesScale()));
+
+				if (PxInitVehicleSDK(*GSharedPhysics))
+				{
+					PxVehicleSetBasisVectors(PxVec3(0.0f, 0.0f, 1.0f), PxVec3(1.0f, 0.0f, 0.0f));
+					PxVehicleSetUpdateMode(PxVehicleUpdateMode::eACCELERATION);
+					GVehicleSDKInitialized = true;
+				}
 			}
 		}
 	}
@@ -139,6 +159,16 @@ static void ReleaseSharedPhysX()
 {
 	if (--GSharedRefCount <= 0)
 	{
+		if (GVehicleSDKInitialized)
+		{
+			PxCloseVehicleSDK();
+			GVehicleSDKInitialized = false;
+		}
+		if (GSharedCooking)
+		{
+			GSharedCooking->release();
+			GSharedCooking = nullptr;
+		}
 		if (GSharedExtensionsInitialized)
 		{
 			PxCloseExtensions();
@@ -472,17 +502,6 @@ static PxTransform GetPxTransform(UPrimitiveComponent* Comp)
 	return PxTransform(ToPxVec3(Pos), ToPxQuat(Rot));
 }
 
-// Compound body의 mass와 center-of-mass를 RootComponent의 값으로 갱신.
-// shape 추가/제거 후 inertia 재계산이 필요하므로 RegisterComponent /
-// UnregisterComponent 끝에서 호출된다.
-static void ApplyRootMassAndCOM(PxRigidDynamic* Dyn, UPrimitiveComponent* Root)
-{
-	if (!Dyn || !Root) return;
-	const float MassKg = (Root->GetMass() > 0.0f) ? Root->GetMass() : 1.0f;
-	PxRigidBodyExt::setMassAndUpdateInertia(*Dyn, MassKg);
-	Dyn->setCMassLocalPose(PxTransform(ToPxVec3(Root->GetCenterOfMass())));
-}
-
 // ============================================================
 // Collision Filtering
 // ============================================================
@@ -580,7 +599,9 @@ static void SetupComponentShape(PxShape* Shape, UPrimitiveComponent* Comp)
 	Shape->userData = Comp;
 }
 
-static PxTransform GetComponentLocalPoseRelativeToRoot(UPrimitiveComponent* Comp, UPrimitiveComponent* RootComp)
+// 자식 컴포넌트의 RootComp 대비 상대 transform. 현재는 미사용이며, Phase 8 weld(자식 shape 를
+// 부모 actor 에 상대 포즈로 붙이기)에서 사용 예정 — 그때까지 보존.
+[[maybe_unused]] static PxTransform GetComponentLocalPoseRelativeToRoot(UPrimitiveComponent* Comp, UPrimitiveComponent* RootComp)
 {
 	if (!Comp || Comp == RootComp || !RootComp)
 	{
@@ -599,6 +620,20 @@ static PxTransform GetComponentLocalPoseRelativeToRoot(UPrimitiveComponent* Comp
 	return PxTransform(ToPxVec3(LocalPos), ToPxQuat(LocalRot));
 }
 
+// ============================================================================
+//  지오메트리 빌더 레이어
+//  모든 콜라이더 생성은 아래 두 빌더로 수렴한다:
+//    - AddAggregateGeometryShapes : FKAggregateGeom(Sphere/Box/Sphyl) → shape(들)
+//    - AttachTriangleMeshShape    : 쿡된 트라이앵글 메시 → shape
+//  컴포넌트 바디와 랙돌 본이 모두 AddGeometry 를 통해 이 빌더를 공유하고, 경로별 차이는
+//  SetupShape 콜백(필터/트리거/self-collision)으로만 표현한다.
+//
+//  [PxAggregate 불변식] 빌더는 PxRigidActor* 와 PxMaterial* 만 다루며 PxScene/PxAggregate
+//  를 절대 건드리지 않는다(actor-agnostic). 따라서 actor 가 이후 Scene->addActor 로 붙든
+//  PxAggregate->addActor 로 묶이든 shape 생성 로직은 그대로다. self-collision 도 빌더가
+//  아닌 SetupShape 콜백에서 처리하므로, 향후 PxAggregate(selfCollision=false) 도입 시
+//  콜백만 비우면 되고 빌더는 손대지 않는다.
+// ============================================================================
 template<typename ShapeSetupFunc>
 static PxShape* AddAggregateGeometryShapes(
 	PxRigidActor* RigidActor,
@@ -672,6 +707,51 @@ static PxShape* AddAggregateGeometryShapes(
 	}
 
 	return FirstShape;
+}
+
+// 쿡된 트라이앵글 메시 데이터로 단일 shape 를 만들어 붙인다. 트라이앵글 메시는 정적/키네마틱
+// actor 만 백업할 수 있어 월드 정적 지오메트리(StaticMesh) 전용이다.
+// AddAggregateGeometryShapes 와 마찬가지로 actor-agnostic — 씬이나 PxAggregate 를 일절
+// 건드리지 않으므로, actor 가 이후 어떻게 씬에 추가되든(addActor vs addAggregate) 영향이 없다.
+template<typename ShapeSetupFunc>
+static PxShape* AttachTriangleMeshShape(
+	PxPhysics* Physics,
+	PxRigidActor* RigidActor,
+	PxMaterial* Material,
+	const TArray<uint8>& CookedData,
+	const FVector& Scale,
+	const PxTransform& BaseLocalPose,
+	ShapeSetupFunc SetupShape)
+{
+	if (!Physics || !RigidActor || !Material || CookedData.empty())
+	{
+		return nullptr;
+	}
+
+	PxDefaultMemoryInputData InputData(const_cast<PxU8*>(CookedData.data()), static_cast<PxU32>(CookedData.size()));
+	PxTriangleMesh* TriangleMesh = Physics->createTriangleMesh(InputData);
+	if (!TriangleMesh)
+	{
+		UE_LOG("[PhysX] Failed to create PxTriangleMesh from cooked data");
+		return nullptr;
+	}
+
+	const PxVec3 MeshScale(
+		std::abs(Scale.X) > PX_MESH_SCALE_MIN ? Scale.X : (Scale.X < 0.0f ? -PX_MESH_SCALE_MIN : PX_MESH_SCALE_MIN),
+		std::abs(Scale.Y) > PX_MESH_SCALE_MIN ? Scale.Y : (Scale.Y < 0.0f ? -PX_MESH_SCALE_MIN : PX_MESH_SCALE_MIN),
+		std::abs(Scale.Z) > PX_MESH_SCALE_MIN ? Scale.Z : (Scale.Z < 0.0f ? -PX_MESH_SCALE_MIN : PX_MESH_SCALE_MIN));
+
+	PxTriangleMeshGeometry TriGeom(TriangleMesh, PxMeshScale(MeshScale));
+	PxShape* Shape = PxRigidActorExt::createExclusiveShape(*RigidActor, TriGeom, *Material);
+	TriangleMesh->release();   // shape 가 참조를 유지하므로 여기서 release 가능
+	if (!Shape)
+	{
+		return nullptr;
+	}
+
+	Shape->setLocalPose(BaseLocalPose);
+	SetupShape(Shape);
+	return Shape;
 }
 
 static bool IsSceneCCDEnabled()
@@ -820,7 +900,18 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 	}
 
 	const auto& PhysicsSettings = FProjectSettings::Get().Physics;
-	const uint32 WorkerThreadCount = (std::max)(1u, PhysicsSettings.WorkerThreadCount);
+	// WorkerThreadCount==0 → auto: 메인/렌더 스레드 여유분(2)을 빼고 남은 코어를 워커로(최소 1).
+	// PhysX simulate 의 솔버/브로드페이즈가 이 워커들로 병렬화된다.
+	uint32 WorkerThreadCount = PhysicsSettings.WorkerThreadCount;
+	if (WorkerThreadCount == 0)
+	{
+		const unsigned HardwareConcurrency = std::thread::hardware_concurrency();
+		const unsigned AutoWorkers = (HardwareConcurrency > 3) ? (HardwareConcurrency - 2) : 1;
+		// 하이퍼스레드까지 다 쓰면 과구독 — PhysX 솔버는 ~16 에서 수확 체감하고, 남는 스레드는
+		// 메인/렌더에 양보하는 게 낫다. auto 는 16 으로 캡(명시적 설정은 아래 32 까지 허용).
+		WorkerThreadCount = (std::min)(AutoWorkers, 16u);
+	}
+	WorkerThreadCount = (std::max)(1u, (std::min)(WorkerThreadCount, 32u));
 
 	// CPU Dispatcher
 	Dispatcher = PxDefaultCpuDispatcherCreate(static_cast<PxU32>(WorkerThreadCount));
@@ -875,7 +966,7 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 	}
 
 	// Default material (static friction, dynamic friction, restitution)
-	DefaultMaterial = Physics->createMaterial(0.5f, 0.5f, 0.3f);
+	DefaultMaterial = Physics->createMaterial(0.7f, 0.7f, 0.3f);
 	if (!DefaultMaterial)
 	{
 		UE_LOG("[PhysX] Failed to create default material");
@@ -883,6 +974,10 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 		Scene = nullptr;
 		return;
 	}
+
+	Cooking = GSharedCooking;
+	VehicleManager = new FPhysXVehicleManager();
+	VehicleManager->Init(Physics, Scene, Cooking, DefaultMaterial);
 
 	UE_LOG("[PhysX] Initialized successfully (Scene=%p, Workers=%u, CCD=%d, PCM=%d, ActiveActors=%d, PVD=%d)",
 		Scene,
@@ -895,26 +990,45 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 
 void FPhysXPhysicsScene::Shutdown()
 {
-	for (PxD6Joint* Joint : RawConstraints)
+	for (PxD6Joint* Joint : Owned.Constraints)
 	{
 		if (Joint)
 		{
 			Joint->release();
 		}
 	}
-	RawConstraints.clear();
+	Owned.Constraints.clear();
 
-	// Body 정리
-	for (auto& Mapping : BodyMappings)
+	// Raw actor 경로 정리 — 정상 흐름에선 소유자(SkeletalMeshComponent)가 먼저 TermArticulated
+	// 로 비우지만, 누수 없이 일괄 정리한다. actor release 가 aggregate/scene 에서 자동 분리한다.
+	for (PxRigidActor* Actor : Owned.Actors)
 	{
-		if (Mapping.Actor)
+		if (Actor)
 		{
-			Mapping.Actor->release();
-			Mapping.Actor = nullptr;
+			Actor->release();
 		}
 	}
-	BodyMappings.clear();
+	Owned.Actors.clear();
 
+	for (PxAggregate* Aggregate : Owned.Aggregates)
+	{
+		if (Aggregate)
+		{
+			Aggregate->release();
+		}
+	}
+	Owned.Aggregates.clear();
+	BodySyncs.clear();
+	// 컴포넌트 바디의 PxActor 는 위 Owned.Actors 루프가 이미 해제했다(InitBody→CreateActor 가
+	// Owned.Actors 에 등록). 소유 FBodyInstance 의 핸들을 무효화해, 이후 컴포넌트 파괴 시 TermBody 가
+	// 이미 해제된 actor 를 재해제(double free)하지 않도록 한다.
+	for (FBodyInstance* Body : ComponentBodies)
+	{
+		if (Body) Body->ActorHandle = {};
+	}
+	ComponentBodies.clear();
+
+	if (VehicleManager) { VehicleManager->Release(); delete VehicleManager; VehicleManager = nullptr; }
 	if (DefaultMaterial) { DefaultMaterial->release(); DefaultMaterial = nullptr; }
 	if (Scene) { Scene->release(); Scene = nullptr; }
 	if (EventCallback) { delete EventCallback; EventCallback = nullptr; }
@@ -926,144 +1040,28 @@ void FPhysXPhysicsScene::Shutdown()
 	ReleaseSharedPhysX();
 
 	World = nullptr;
+	PHYSICS_STATS_RESET();
 }
 
 // ============================================================
-// Body 관리 — Actor 단위 compound
+// Body 관리 — per-component FBodyInstance 레지스트리
 //
-// 한 액터의 여러 PrimitiveComponent는 같은 PxRigidActor에 shape로 합쳐진다.
-// shape의 LocalPose는 액터 RootComponent에 대한 상대 transform.
-// userData: PxActor → AActor, PxShape → UPrimitiveComponent.
+// UPrimitiveComponent 가 각자 FBodyInstance(=PxRigidActor 1개)를 소유하고, InitBody 가
+// 이 씬의 CreateActor/AddGeometry 를 호출해 actor 를 만든다. 컴포넌트는 AddBody 로 자신의
+// FBodyInstance 를 등록하고, Start/FinishSimulation 이 그 OwnerComponent 와 트랜스폼을 동기화한다.
+// userData: PxActor → AActor(컴포넌트) / FBodyInstance(랙돌), PxShape → UPrimitiveComponent.
 // ============================================================
 
-void FPhysXPhysicsScene::RegisterComponent(UPrimitiveComponent* Comp)
+void FPhysXPhysicsScene::AddBody(FBodyInstance* Body)
 {
-	if (!Comp || !Scene || !Physics || !DefaultMaterial) return;
-	if (FindMappingByComponent(Comp)) return; // 이미 등록됨
-
-	AActor* OwnerActor = Comp->GetOwner();
-	if (!OwnerActor) return;
-
-	FBodyMapping* Mapping = FindMappingByActor(OwnerActor);
-	bool bCreatedMapping = false;
-
-	if (!Mapping)
-	{
-		UPrimitiveComponent* RootPrim = Cast<UPrimitiveComponent>(OwnerActor->GetRootComponent());
-		if (!RootPrim) RootPrim = Comp;
-
-		const bool bDynamic = RootPrim->GetSimulatePhysics();
-		PxTransform BodyXf = GetPxTransform(RootPrim);
-
-		PxRigidActor* Body = bDynamic
-			? static_cast<PxRigidActor*>(Physics->createRigidDynamic(BodyXf))
-			: static_cast<PxRigidActor*>(Physics->createRigidStatic(BodyXf));
-		if (!Body) return;
-
-		if (PxRigidDynamic* DynamicBody = Body->is<PxRigidDynamic>())
-		{
-			SetDynamicCCDEnabled(DynamicBody, true);
-		}
-
-		Body->userData = OwnerActor;
-		DisablePvdActorVisualization(Body);
-		Scene->addActor(*Body);
-
-		FBodyMapping NewMapping;
-		NewMapping.OwnerActor = OwnerActor;
-		NewMapping.Actor = Body;
-		NewMapping.RootComp = RootPrim;
-		BodyMappings.push_back(NewMapping);
-		Mapping = &BodyMappings.back();
-		bCreatedMapping = true;
-	}
-
-	// shape 추가
-	PxShape* Shape = AddShapeForComponent(*Mapping, Comp);
-	if (!Shape)
-	{
-		if (bCreatedMapping && Mapping->Components.empty())
-		{
-			if (Mapping->Actor)
-			{
-				Scene->removeActor(*Mapping->Actor);
-				Mapping->Actor->release();
-			}
-			BodyMappings.pop_back();
-		}
-		return;
-	}
-	Mapping->Components.push_back(Comp);
-	LogPvdActorState("Component registered", Scene, Mapping->Actor);
-
-	// Dynamic이면 RootComp의 Mass / CenterOfMass로 갱신 (shape 추가될 때마다 inertia 재계산).
-	if (PxRigidDynamic* Dyn = Mapping->Actor->is<PxRigidDynamic>())
-	{
-		ApplyRootMassAndCOM(Dyn, Mapping->RootComp);
-	}
+	if (!Body) return;
+	if (std::find(ComponentBodies.begin(), ComponentBodies.end(), Body) != ComponentBodies.end()) return;
+	ComponentBodies.push_back(Body);
 }
 
-void FPhysXPhysicsScene::UnregisterComponent(UPrimitiveComponent* Comp)
+void FPhysXPhysicsScene::RemoveBody(FBodyInstance* Body)
 {
-	if (!Comp || !Scene) return;
-
-	FBodyMapping* Mapping = FindMappingByComponent(Comp);
-	if (!Mapping) return;
-
-	// 해당 컴포넌트의 shape detach
-	DetachShapeForComponent(*Mapping, Comp);
-
-	// Components 배열에서 제거
-	Mapping->Components.erase(
-		std::remove(Mapping->Components.begin(), Mapping->Components.end(), Comp),
-		Mapping->Components.end());
-
-	// 마지막 컴포넌트가 빠지면 actor 자체도 release
-	if (Mapping->Components.empty())
-	{
-		if (Mapping->Actor)
-		{
-			Scene->removeActor(*Mapping->Actor);
-			Mapping->Actor->release();
-		}
-
-		// swap-and-pop
-		*Mapping = BodyMappings.back();
-		BodyMappings.pop_back();
-		return;
-	}
-
-	// 남은 shape가 있으면 mass/inertia 재계산
-	if (PxRigidDynamic* Dyn = Mapping->Actor->is<PxRigidDynamic>())
-	{
-		ApplyRootMassAndCOM(Dyn, Mapping->RootComp);
-	}
-}
-
-void FPhysXPhysicsScene::RebuildBody(UPrimitiveComponent* Comp)
-{
-	// SimulatePhysics 변경(Dynamic ↔ Static)은 PxActor type 변경이라 actor를 통째 재생성해야 한다.
-	// 또한 ObjectType/Response 변경은 shape filterData도 새로 계산해야 정확.
-	// 단순화 위해 같은 액터의 모든 컴포넌트를 unregister + register로 일괄 재구성.
-	if (!Comp || !Scene) return;
-
-	AActor* OwnerActor = Comp->GetOwner();
-	if (!OwnerActor) return;
-
-	FBodyMapping* Mapping = FindMappingByActor(OwnerActor);
-	if (!Mapping) return; // 등록 안 됨 — skip
-
-	// 같은 actor의 모든 컴포넌트 캐시 (unregister가 mapping을 제거할 수 있어 미리 복사)
-	TArray<UPrimitiveComponent*> CompList = Mapping->Components;
-
-	for (UPrimitiveComponent* C : CompList)
-	{
-		UnregisterComponent(C);
-	}
-	for (UPrimitiveComponent* C : CompList)
-	{
-		RegisterComponent(C);
-	}
+	ComponentBodies.erase(std::remove(ComponentBodies.begin(), ComponentBodies.end(), Body), ComponentBodies.end());
 }
 
 FPhysicsActorHandle FPhysXPhysicsScene::CreateActor(const FActorCreationParams& Params)
@@ -1095,7 +1093,7 @@ FPhysicsActorHandle FPhysXPhysicsScene::CreateActor(const FActorCreationParams& 
 			//  - solverIterationCounts: 기본 (4,1)은 관절 체인이 길면 수렴 부족 → 지터/발산.
 			//    (8,2)로 상향해 조인트 안정성 확보.
 			//  (값은 스케일에 따라 튜닝 여지 있음.)
-			NewDynamic->setMaxDepenetrationVelocity(10.0f);
+			NewDynamic->setMaxDepenetrationVelocity(5.0f);
 			NewDynamic->setSolverIterationCounts(8, 2);
 		}
 		NewActor = NewDynamic;
@@ -1119,7 +1117,16 @@ FPhysicsActorHandle FPhysXPhysicsScene::CreateActor(const FActorCreationParams& 
 		NewActor->setActorFlag(PxActorFlag::eDISABLE_SIMULATION, true);
 	}
 
-	Scene->addActor(*NewActor);
+	// aggregate 가 지정되면 그 그룹에 넣는다(addActor 가 씬에도 자동 반영). 아니면 씬에 직접.
+	if (PxAggregate* Aggregate = static_cast<PxAggregate*>(Params.Aggregate.Internal))
+	{
+		Aggregate->addActor(*NewActor);
+	}
+	else
+	{
+		Scene->addActor(*NewActor);
+	}
+	Owned.Actors.push_back(NewActor);   // 씬 멤버로 추적 (해제는 ReleaseActor)
 
 	if (PxRigidDynamic* Dynamic = NewActor->is<PxRigidDynamic>())
 	{
@@ -1144,9 +1151,17 @@ void FPhysXPhysicsScene::ReleaseActor(FPhysicsActorHandle Actor)
 		return;
 	}
 
-	if (PxScene* OwningScene = RigidActor->getScene())
+	// 멤버 추적에서 제거
+	Owned.Actors.erase(std::remove(Owned.Actors.begin(), Owned.Actors.end(), RigidActor), Owned.Actors.end());
+
+	// aggregate 소속 actor 는 scene->removeActor 가 아니라 release() 가 aggregate/scene 양쪽에서
+	// 자동 분리한다. 비소속 actor 만 명시적으로 씬에서 제거한다.
+	if (RigidActor->getAggregate() == nullptr)
 	{
-		OwningScene->removeActor(*RigidActor);
+		if (PxScene* OwningScene = RigidActor->getScene())
+		{
+			OwningScene->removeActor(*RigidActor);
+		}
 	}
 	RigidActor->release();
 }
@@ -1156,26 +1171,77 @@ bool FPhysXPhysicsScene::IsActorValid(FPhysicsActorHandle Actor) const
 	return Actor.Internal != nullptr;
 }
 
+FPhysicsAggregateHandle FPhysXPhysicsScene::CreateAggregate(uint32 MaxActors, bool bSelfCollision)
+{
+	if (!Scene || !Physics || MaxActors == 0)
+	{
+		return {};
+	}
+
+	// PhysX 4.1: createAggregate(maxSize, enableSelfCollision). maxSize 는 actor 수 상한.
+	PxAggregate* Aggregate = Physics->createAggregate(MaxActors, bSelfCollision);
+	if (!Aggregate)
+	{
+		return {};
+	}
+
+	// 빈 상태로 씬에 추가해 두면, 이후 CreateActor 의 addActor 가 씬에도 자동 반영된다.
+	Scene->addAggregate(*Aggregate);
+	Owned.Aggregates.push_back(Aggregate);
+	return FPhysicsAggregateHandle{ Aggregate };
+}
+
+void FPhysXPhysicsScene::ReleaseAggregate(FPhysicsAggregateHandle Handle)
+{
+	PxAggregate* Aggregate = static_cast<PxAggregate*>(Handle.Internal);
+	if (!Aggregate)
+	{
+		return;
+	}
+
+	Owned.Aggregates.erase(std::remove(Owned.Aggregates.begin(), Owned.Aggregates.end(), Aggregate), Owned.Aggregates.end());
+
+	// 호출 시점엔 소속 actor 들이 이미 ReleaseActor 로 빠져나가 빈 aggregate 다.
+	// 씬에서 떼고 release. (release 는 actor 를 파괴하지 않으므로 순서 의존성 없음.)
+	if (Aggregate->getScene())
+	{
+		Scene->removeAggregate(*Aggregate);
+	}
+	Aggregate->release();
+}
+
 bool FPhysXPhysicsScene::AddGeometry(FPhysicsActorHandle Actor, const FGeometryAddParams& Params)
 {
 	PxRigidActor* RigidActor = static_cast<PxRigidActor*>(Actor.Internal);
-	if (!RigidActor || !DefaultMaterial || !Params.Geometry)
+	const bool bHasAggGeom = Params.Geometry != nullptr && Params.Geometry->GetElementCount() > 0;
+	const bool bHasTriMesh = Params.CookedTriMesh != nullptr && !Params.CookedTriMesh->empty();
+	if (!RigidActor || !DefaultMaterial || (!bHasAggGeom && !bHasTriMesh))
 	{
 		return false;
 	}
 
-	const PxTransform BaseLocalPose = ToPxTransform(Params.LocalTransform);
-	PxShape* FirstShape = AddAggregateGeometryShapes(
-		RigidActor,
-		DefaultMaterial,
-		*Params.Geometry,
-		Params.Scale,
-		BaseLocalPose,
-		[&](PxShape* Shape)
+	// shape 셋업 공통 람다 — aggregate/trimesh 빌더가 공유한다.
+	//   Component 모드: 채널/응답/트리거/owner-UUID 필터 + shape userData = 컴포넌트.
+	//   RawBody 모드(기본, 랙돌): block-all 필터 + userData = Params.UserData.
+	auto SetupShape = [&](PxShape* Shape)
+	{
+		if (Params.ShapeSetupMode == EShapeSetupMode::Component && Params.FilterSourceComponent)
+		{
+			SetupComponentShape(Shape, Params.FilterSourceComponent);
+		}
+		else
 		{
 			Shape->userData = Params.UserData;
 			SetupDefaultRawBodyFilterData(Shape);
-		});
+		}
+	};
+
+	const PxTransform BaseLocalPose = ToPxTransform(Params.LocalTransform);
+	PxShape* FirstShape = bHasTriMesh
+		? AttachTriangleMeshShape(Physics, RigidActor, DefaultMaterial, *Params.CookedTriMesh,
+			Params.Scale, BaseLocalPose, SetupShape)
+		: AddAggregateGeometryShapes(RigidActor, DefaultMaterial, *Params.Geometry,
+			Params.Scale, BaseLocalPose, SetupShape);
 
 	if (FirstShape)
 	{
@@ -1222,12 +1288,39 @@ void FPhysXPhysicsScene::SetActorKinematic(FPhysicsActorHandle Actor, bool bKine
 	if (bKinematic)
 	{
 		SetDynamicCCDEnabled(Dynamic, false);
+		Dynamic->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
+		Dynamic->wakeUp();
+		return;
 	}
-	Dynamic->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, bKinematic);
-	if (!bKinematic)
+
+	// kinematic → dynamic 전환. setKinematicTarget 으로 구동되던 바디는 "타깃 이동량/dt" 의
+	// 속도를 갖는데, anim catch-up(예: 직전 래그돌로 바닥에 쓰러진 바디를 한 프레임에 현재
+	// 포즈로 끌어당김)이나 점프 중 빠른 추종이면 이 implied velocity 가 폭발적으로 커진다.
+	// eKINEMATIC 만 해제하면 그 속도가 그대로 남아 랙돌 솔버가 발산(폭발)한다.
+	// → 전환 직전 속도를 읽어 합리적 상한으로 클램프해 다시 설정한다(모멘텀은 보존, 스파이크만 컷).
+	// 상한은 정상 이동/낙하 속도(보통 < ~20 m/s)보다 충분히 크고, catch-up 스파이크(수백/s)
+	// 보다 작게 잡는다. 필요 시 튜닝.
+	constexpr float MaxRagdollLinearSpeed  = 20.0f;   // m/s
+	constexpr float MaxRagdollAngularSpeed = 10.0f;   // rad/s
+
+	PxVec3 LinVel = Dynamic->getLinearVelocity();
+	PxVec3 AngVel = Dynamic->getAngularVelocity();
+
+	Dynamic->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, false);
+	SetDynamicCCDEnabled(Dynamic, true);
+
+	const float LinLen = LinVel.magnitude();
+	if (LinLen > MaxRagdollLinearSpeed)
 	{
-		SetDynamicCCDEnabled(Dynamic, true);
+		LinVel *= (MaxRagdollLinearSpeed / LinLen);
 	}
+	const float AngLen = AngVel.magnitude();
+	if (AngLen > MaxRagdollAngularSpeed)
+	{
+		AngVel *= (MaxRagdollAngularSpeed / AngLen);
+	}
+	Dynamic->setLinearVelocity(LinVel);
+	Dynamic->setAngularVelocity(AngVel);
 	Dynamic->wakeUp();
 }
 
@@ -1377,8 +1470,20 @@ FPhysicsConstraintHandle FPhysXPhysicsScene::CreateConstraint(const FConstraintC
 	}
 
 	Joint->setConstraintFlag(PxConstraintFlag::eCOLLISION_ENABLED, false);
+
+	// Projection — 반복 솔버가 한 프레임에 못 잡은 조인트 분리(특히 kinematic→dynamic 전환 시
+	// 본별 상대속도가 클 때)를 매 프레임 기하적으로 도로 끌어다 붙인다. 이게 없으면 한 번 벌어진
+	// 바디가 복구되지 않고 누적돼 래그돌이 "터지는" 것처럼 분리된다.
+	//   Linear tolerance: 이 거리(m) 이상 벌어지면 snap. Angular: 이 각(rad) 이상 틀어지면 snap.
+	// 너무 작게 잡으면 지터가 생길 수 있어 적당히. (필요 시 튜닝)
+	constexpr float ProjLinearTolerance  = 0.05f;            // 5 cm
+	constexpr float ProjAngularTolerance = 0.2618f;          // ~15도
+	Joint->setProjectionLinearTolerance(ProjLinearTolerance);
+	Joint->setProjectionAngularTolerance(ProjAngularTolerance);
+	Joint->setConstraintFlag(PxConstraintFlag::ePROJECTION, true);
+
 	Joint->userData = Params.UserData;
-	RawConstraints.push_back(Joint);
+	Owned.Constraints.push_back(Joint);
 
 	return FPhysicsConstraintHandle{ Joint };
 }
@@ -1391,9 +1496,9 @@ void FPhysXPhysicsScene::ReleaseConstraint(FPhysicsConstraintHandle Constraint)
 		return;
 	}
 
-	RawConstraints.erase(
-		std::remove(RawConstraints.begin(), RawConstraints.end(), Joint),
-		RawConstraints.end());
+	Owned.Constraints.erase(
+		std::remove(Owned.Constraints.begin(), Owned.Constraints.end(), Joint),
+		Owned.Constraints.end());
 	Joint->release();
 }
 
@@ -1401,8 +1506,73 @@ void FPhysXPhysicsScene::ReleaseConstraint(FPhysicsConstraintHandle Constraint)
 // Simulation
 // ============================================================
 
+// 엔진→PhysX pre-sync teleport 임계값. post-sync 가 매 프레임 엔진=PhysX 로 맞추므로 정상 흐름에선
+// 차이 ≈ 0 이지만, round-trip 부동소수 오차로 작은 차이가 매 프레임 생길 수 있어 false-positive
+// teleport 를 막도록 충분히 크게 잡는다.
+static constexpr float GTeleportPosThresholdSq = 1.0f;   // 1m² (1m 이상 차이 시만 teleport)
+static constexpr float GTeleportRotThreshold   = 0.99f;  // ~8° 차이 시만 teleport
+
+// 한 바디 엔진→PhysX 동기화: kinematic=타깃 푸시(setKinematicTarget — 캐릭터 캡슐 등 코드 구동),
+// dynamic=임계값 초과 시에만 teleport(velocity 보존, lua spawn 등 외부 변경 흡수), static=setGlobalPose.
+static void PreSyncBodyToPhysics(PxRigidActor* Actor, UPrimitiveComponent* Comp)
+{
+	if (!Actor || !Comp) return;
+
+	const PxTransform NewPose = GetPxTransform(Comp);
+
+	if (PxRigidDynamic* Dynamic = Actor->is<PxRigidDynamic>())
+	{
+		if (Dynamic->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC)
+		{
+			Dynamic->setKinematicTarget(NewPose);
+		}
+		else
+		{
+			const PxTransform PxPose = Dynamic->getGlobalPose();
+			const PxVec3 dp = NewPose.p - PxPose.p;
+			const float DistSq = dp.x * dp.x + dp.y * dp.y + dp.z * dp.z;
+			const float QDot = std::abs(
+				NewPose.q.x * PxPose.q.x + NewPose.q.y * PxPose.q.y +
+				NewPose.q.z * PxPose.q.z + NewPose.q.w * PxPose.q.w);
+
+			if (DistSq > GTeleportPosThresholdSq || QDot < GTeleportRotThreshold)
+			{
+				Dynamic->setGlobalPose(NewPose);
+			}
+		}
+	}
+	else if (Actor->is<PxRigidStatic>())
+	{
+		Actor->setGlobalPose(NewPose);
+	}
+}
+
+// 한 바디 PhysX→엔진 동기화: dynamic·비kinematic·비sleeping 일 때만 write-back. kinematic 은 코드가
+// 구동하므로 PhysX 가 덮어쓰면 안 되고, sleeping 은 변화 없음.
+static void PostSyncBodyFromPhysics(PxRigidActor* Actor, UPrimitiveComponent* Comp)
+{
+	if (!Actor || !Comp) return;
+
+	PxRigidDynamic* Dynamic = Actor->is<PxRigidDynamic>();
+	if (!Dynamic) return;
+	if (Dynamic->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC) return;
+	if (Dynamic->isSleeping()) return;
+
+	const PxTransform Pose = Dynamic->getGlobalPose();
+	Comp->SetWorldLocation(ToFVector(Pose.p));
+	Comp->SetRelativeRotation(ToFQuat(Pose.q));
+}
+
 void FPhysXPhysicsScene::Tick(float DeltaTime)
 {
+	// 편의 래퍼 — 분리 호출이 필요 없는 경로(에디터 프리뷰 등)용.
+	StartSimulation(DeltaTime);
+	FinishSimulation();
+}
+
+void FPhysXPhysicsScene::StartSimulation(float DeltaTime)
+{
+	CurrentSimDeltaTime = 0.0f;   // simulate 안 하면 FinishSimulation 이 fetchResults 를 건너뜀
 	if (!Scene || DeltaTime <= 0.0f) return;
 
 	// 어떤 이유로든 frame hitch (씬 로드 / 큰 OBJ 동기 로딩 / Alt-Tab / OS 스파이크) 가
@@ -1416,75 +1586,72 @@ void FPhysXPhysicsScene::Tick(float DeltaTime)
 	}
 
 	// ── Pre-simulate: Engine → PhysX Transform 동기화 ──
-	// 한 PxActor가 여러 컴포넌트를 가지므로 RootComp 기준으로만 한 번 동기화.
-	//
-	// Dynamic actor도 Engine 측 transform이 PhysX와 충분히 크게 다르면 teleport한다.
-	// (lua spawn 직후 m.Location = pos 같은 외부 변경 흡수용)
-	//
-	// 정상 시뮬레이션 흐름에서는 post-simulate가 Engine = PhysX로 맞춰주므로
-	// 다음 frame pre에서 차이 ≈ 0 → skip. 단 round-trip의 부동소수 오차로 작은
-	// 차이는 매 frame 발생할 수 있어 threshold를 충분히 크게 잡아 false-positive
-	// teleport를 막는다.
-	//
-	// velocity는 의도적으로 보존 — PhysX의 정상 시뮬레이션 momentum 유지.
-	constexpr float TeleportPosThresholdSq = 1.0f;   // 1m² (1m 이상 차이 시만 teleport)
-	constexpr float TeleportRotThreshold = 0.99f;    // ~8° 차이 시만 teleport
-
-	for (auto& Mapping : BodyMappings)
+	// 등록된 컴포넌트 바디(per-component FBodyInstance)를 순회. 랙돌 본은 아래 BodySync 가 처리.
+	for (FBodyInstance* Body : ComponentBodies)
 	{
-		if (!Mapping.RootComp || !Mapping.Actor) continue;
-
-		PxTransform NewPose = GetPxTransform(Mapping.RootComp);
-
-		if (PxRigidDynamic* Dynamic = Mapping.Actor->is<PxRigidDynamic>())
-		{
-			if (Dynamic->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC)
-			{
-				Dynamic->setKinematicTarget(NewPose);
-			}
-			else
-			{
-				PxTransform PxPose = Dynamic->getGlobalPose();
-				PxVec3 dp = NewPose.p - PxPose.p;
-				const float DistSq = dp.x * dp.x + dp.y * dp.y + dp.z * dp.z;
-				const float QDot = std::abs(
-					NewPose.q.x * PxPose.q.x + NewPose.q.y * PxPose.q.y +
-					NewPose.q.z * PxPose.q.z + NewPose.q.w * PxPose.q.w);
-
-				if (DistSq > TeleportPosThresholdSq || QDot < TeleportRotThreshold)
-				{
-					// 큰 외부 변경 → teleport. velocity는 보존.
-					Dynamic->setGlobalPose(NewPose);
-				}
-			}
-		}
-		else if (Mapping.Actor->is<PxRigidStatic>())
-		{
-			Mapping.Actor->setGlobalPose(NewPose);
-		}
+		if (!Body) continue;
+		PreSyncBodyToPhysics(static_cast<PxRigidActor*>(Body->ActorHandle.Internal), Body->OwnerComponent);
 	}
 
-	// ── Simulate ──
-	Scene->simulate(DeltaTime);
-	Scene->fetchResults(true);
+	// ── 등록된 sync 핸들러 Pre (랙돌 등): anim → 키네마틱 타깃. 반드시 simulate 이전 ──
+	for (IPhysicsBodySync* Sync : BodySyncs)
+	{
+		if (Sync) Sync->PrePhysicsSimulate(DeltaTime);
+	}
+
+	if (VehicleManager)
+	{
+		VehicleManager->PreTick(DeltaTime);
+		VehicleManager->Tick(DeltaTime);
+	}
+
+	// ── Simulate (async 윈도우 시작) ──
+	// 이후 FinishSimulation 의 fetchResults 까지는 어떤 PxActor 도 건드리면 안 된다.
+	// simulate() 는 워커에 디스패치만 하고 곧 반환 — 거의 0 에 가까워야 정상(킥오프 비용).
+	CurrentSimDeltaTime = DeltaTime;
+	{
+		SCOPE_STAT_CAT("Physics.SimulateKick", "Physics");
+		Scene->simulate(DeltaTime);
+	}
+}
+
+void FPhysXPhysicsScene::FinishSimulation()
+{
+	if (!Scene || CurrentSimDeltaTime <= 0.0f) return;   // StartSimulation 이 simulate 안 함 → skip
+	const float DeltaTime = CurrentSimDeltaTime;
+	CurrentSimDeltaTime = 0.0f;
+
+	// fetchResults(true) 는 시뮬 완료까지 메인 스레드를 블록한다. 이 시간이 곧 오버랩으로
+	// 숨길 수 있는 시간의 상한 — TG_DuringPhysics 에 물리 비의존 작업을 얼마나 넣을지의 기준.
+	{
+		SCOPE_STAT_CAT("Physics.FetchBlock", "Physics");
+		Scene->fetchResults(true);
+	}
+
+	// ── Sim 통계 수집 (stat physics 오버레이용) ──
+	// getSimulationStatistics 는 fetchResults 완료 이후에만 유효한 직전 step 의 결과를 준다.
+	// 타이밍은 위 SCOPE_STAT_CAT 가 FStatManager 스냅샷에 넣으므로 여기서는 카운트만.
+#if STATS
+	{
+		PxSimulationStatistics SimStats;
+		Scene->getSimulationStatistics(SimStats);
+		PHYSICS_STATS_SET_CONSTRAINTS(SimStats.nbActiveConstraints);
+		PHYSICS_STATS_SET_SIMULATING_BODIES(SimStats.nbActiveDynamicBodies);
+	}
+#endif
 
 	// ── Post-simulate: PhysX → Engine Transform 동기화 ──
-	// RootComp에만 transform 적용 → 자식 컴포넌트는 attach로 자동 따라감.
-	for (auto& Mapping : BodyMappings)
+	// 컴포넌트 트랜스폼에 적용 → 자식 컴포넌트는 attach로 자동 따라감.
+	for (FBodyInstance* Body : ComponentBodies)
 	{
-		if (!Mapping.RootComp || !Mapping.Actor) continue;
+		if (!Body) continue;
+		PostSyncBodyFromPhysics(static_cast<PxRigidActor*>(Body->ActorHandle.Internal), Body->OwnerComponent);
+	}
 
-		PxRigidDynamic* Dynamic = Mapping.Actor->is<PxRigidDynamic>();
-		if (!Dynamic) continue;
-		if (Dynamic->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC) continue;
-		if (Dynamic->isSleeping()) continue;
-
-		PxTransform Pose = Dynamic->getGlobalPose();
-		FVector NewPos = ToFVector(Pose.p);
-		FQuat NewRot = ToFQuat(Pose.q);
-
-		Mapping.RootComp->SetWorldLocation(NewPos);
-		Mapping.RootComp->SetRelativeRotation(NewRot);
+	// ── 등록된 sync 핸들러 Post (랙돌 등): 시뮬 결과 → 본 포즈. fetchResults 이후 ──
+	for (IPhysicsBodySync* Sync : BodySyncs)
+	{
+		if (Sync) Sync->PostPhysicsSimulate(DeltaTime);
 	}
 
 	// ── Dispatch deferred contact/trigger events ──
@@ -1497,295 +1664,84 @@ void FPhysXPhysicsScene::Tick(float DeltaTime)
 	}
 }
 
-// ============================================================
-// Internal helpers
-// ============================================================
-
-PxShape* FPhysXPhysicsScene::AddShapeForComponent(FBodyMapping& Mapping, UPrimitiveComponent* Comp)
+void FPhysXPhysicsScene::RegisterBodySync(IPhysicsBodySync* Sync)
 {
-	if (!Mapping.Actor || !DefaultMaterial || !Comp) return nullptr;
-
-	// Shape Component 타입에 따라 PxGeometry 결정
-	PxGeometryHolder Geom;
-	bool bHasGeom = false;
-
-	// Capsule은 PhysX에서 X축 기준이므로 로컬 회전 보정 필요
-	PxQuat ShapeAxisRot = PxQuat(PxIdentity);
-
-	if (auto* Box = Cast<UBoxComponent>(Comp))
-	{
-		FVector Ext = Box->GetScaledBoxExtent();
-		Geom = PxBoxGeometry(Ext.X, Ext.Y, Ext.Z);
-		bHasGeom = true;
-	}
-	else if (auto* Sphere = Cast<USphereComponent>(Comp))
-	{
-		Geom = PxSphereGeometry(Sphere->GetScaledSphereRadius());
-		bHasGeom = true;
-	}
-	else if (auto* Capsule = Cast<UCapsuleComponent>(Comp))
-	{
-		float Radius = Capsule->GetScaledCapsuleRadius();
-		float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
-		Geom = PxCapsuleGeometry(Radius, HalfHeight - Radius);
-		ShapeAxisRot = PxQuat(PxHalfPi, PxVec3(0.0f, 0.0f, 1.0f));
-		bHasGeom = true;
-	}
-	else if (auto* StaticMeshComp = Cast<UStaticMeshComponent>(Comp))
-	{
-		UStaticMesh* StaticMesh = StaticMeshComp->GetStaticMesh();
-		const UBodySetup* BodySetup = StaticMesh ? StaticMesh->GetBodySetup() : nullptr;
-		if (!BodySetup)
-		{
-			return nullptr;
-		}
-
-		if (BodySetup->HasTriMeshCollision()
-			&& StaticMeshComp->GetCollisionEnabled() == ECollisionEnabled::QueryAndPhysics
-			&& Mapping.Actor->is<PxRigidStatic>())
-		{
-			TArray<uint8> CookedData = BodySetup->TriMesh.CookedData;
-			PxDefaultMemoryInputData InputData(CookedData.data(), static_cast<PxU32>(CookedData.size()));
-			PxTriangleMesh* TriangleMesh = Physics->createTriangleMesh(InputData);
-			if (!TriangleMesh)
-			{
-				UE_LOG("[PhysX] Failed to create PxTriangleMesh from StaticMesh BodySetup cooked data");
-				return nullptr;
-			}
-
-			const FVector Scale = StaticMeshComp->GetWorldScale();
-			const PxVec3 MeshScale(
-				std::abs(Scale.X) > PX_MESH_SCALE_MIN ? Scale.X : (Scale.X < 0.0f ? -PX_MESH_SCALE_MIN : PX_MESH_SCALE_MIN),
-				std::abs(Scale.Y) > PX_MESH_SCALE_MIN ? Scale.Y : (Scale.Y < 0.0f ? -PX_MESH_SCALE_MIN : PX_MESH_SCALE_MIN),
-				std::abs(Scale.Z) > PX_MESH_SCALE_MIN ? Scale.Z : (Scale.Z < 0.0f ? -PX_MESH_SCALE_MIN : PX_MESH_SCALE_MIN));
-			PxTriangleMeshGeometry TriGeom(TriangleMesh, PxMeshScale(MeshScale));
-			PxShape* Shape = PxRigidActorExt::createExclusiveShape(*Mapping.Actor, TriGeom, *DefaultMaterial);
-			TriangleMesh->release();
-			if (!Shape)
-			{
-				return nullptr;
-			}
-
-			Shape->setLocalPose(GetComponentLocalPoseRelativeToRoot(Comp, Mapping.RootComp));
-			SetupComponentShape(Shape, Comp);
-			return Shape;
-		}
-
-		if (BodySetup->AggGeom.GetElementCount() <= 0)
-		{
-			return nullptr;
-		}
-
-		return AddAggregateGeometryShapes(
-			Mapping.Actor,
-			DefaultMaterial,
-			BodySetup->AggGeom,
-			StaticMeshComp->GetWorldScale(),
-			GetComponentLocalPoseRelativeToRoot(Comp, Mapping.RootComp),
-			[&](PxShape* Shape)
-			{
-				SetupComponentShape(Shape, Comp);
-			});
-	}
-
-	if (!bHasGeom) return nullptr;
-
-	PxShape* Shape = PxRigidActorExt::createExclusiveShape(*Mapping.Actor, Geom.any(), *DefaultMaterial);
-	if (!Shape) return nullptr;
-
-	// Local pose: Comp의 RootComp 대비 상대 transform.
-	// Compound shape에서 자식 컴포넌트가 부모(=PxActor 기준)에 정확히 박혀있도록.
-	PxTransform LocalPose = GetComponentLocalPoseRelativeToRoot(Comp, Mapping.RootComp);
-
-	// Capsule 등 축 보정을 LocalPose의 회전 부분에 합성
-	LocalPose.q = LocalPose.q * ShapeAxisRot;
-	Shape->setLocalPose(LocalPose);
-
-	SetupComponentShape(Shape, Comp);
-
-	return Shape;
+	if (!Sync) return;
+	if (std::find(BodySyncs.begin(), BodySyncs.end(), Sync) != BodySyncs.end()) return;
+	BodySyncs.push_back(Sync);
 }
 
-void FPhysXPhysicsScene::DetachShapeForComponent(FBodyMapping& Mapping, UPrimitiveComponent* Comp)
+void FPhysXPhysicsScene::UnregisterBodySync(IPhysicsBodySync* Sync)
 {
-	if (!Mapping.Actor || !Comp) return;
-
-	const PxU32 NumShapes = Mapping.Actor->getNbShapes();
-	if (NumShapes == 0) return;
-
-	std::vector<PxShape*> Shapes(NumShapes);
-	Mapping.Actor->getShapes(Shapes.data(), NumShapes);
-
-	for (PxShape* Shape : Shapes)
-	{
-		if (Shape && Shape->userData == Comp)
-		{
-			Mapping.Actor->detachShape(*Shape);
-		}
-	}
-}
-
-FPhysXPhysicsScene::FBodyMapping* FPhysXPhysicsScene::FindMappingByActor(AActor* OwnerActor)
-{
-	for (auto& M : BodyMappings)
-	{
-		if (M.OwnerActor == OwnerActor) return &M;
-	}
-	return nullptr;
-}
-
-const FPhysXPhysicsScene::FBodyMapping* FPhysXPhysicsScene::FindMappingByActor(AActor* OwnerActor) const
-{
-	for (const auto& M : BodyMappings)
-	{
-		if (M.OwnerActor == OwnerActor) return &M;
-	}
-	return nullptr;
-}
-
-// "이 컴포넌트가 shape로 추가된 mapping" 검색 — 등록 가드 + Force/Velocity API 라우팅용.
-// owner 기반 lookup과 다름: 같은 owner라도 컴포넌트가 아직 Components에 push되지 않았으면
-// 다른 컴포넌트의 shape를 통해 force가 잘못 적용되지 않도록 nullptr 반환.
-FPhysXPhysicsScene::FBodyMapping* FPhysXPhysicsScene::FindMappingByComponent(UPrimitiveComponent* Comp)
-{
-	if (!Comp) return nullptr;
-	for (auto& M : BodyMappings)
-	{
-		for (UPrimitiveComponent* C : M.Components)
-		{
-			if (C == Comp) return &M;
-		}
-	}
-	return nullptr;
-}
-
-const FPhysXPhysicsScene::FBodyMapping* FPhysXPhysicsScene::FindMappingByComponent(UPrimitiveComponent* Comp) const
-{
-	if (!Comp) return nullptr;
-	for (const auto& M : BodyMappings)
-	{
-		for (UPrimitiveComponent* C : M.Components)
-		{
-			if (C == Comp) return &M;
-		}
-	}
-	return nullptr;
+	BodySyncs.erase(std::remove(BodySyncs.begin(), BodySyncs.end(), Sync), BodySyncs.end());
 }
 
 // ============================================================
-// Force / Torque
+// Force / Velocity / Mass — handle 경로 (컴포넌트 바디 + 랙돌 본 공용)
 // ============================================================
 
-void FPhysXPhysicsScene::AddForce(UPrimitiveComponent* Comp, const FVector& Force)
+// handle 에서 PxRigidDynamic 추출(static/kinematic-static 이면 nullptr). 모든 handle force/velocity
+// API 가 이 게이트를 통과한다 — dynamic 이 아니면 조용히 무시한다(정적 바디에 힘 적용은 무의미).
+static PxRigidDynamic* AsRigidDynamic(FPhysicsActorHandle Actor)
 {
-	FBodyMapping* M = FindMappingByComponent(Comp);
-	if (!M || !M->Actor) return;
-	PxRigidDynamic* Dyn = M->Actor->is<PxRigidDynamic>();
-	if (!Dyn) return;
-	Dyn->addForce(ToPxVec3(Force));
+	PxRigidActor* RigidActor = static_cast<PxRigidActor*>(Actor.Internal);
+	return RigidActor ? RigidActor->is<PxRigidDynamic>() : nullptr;
 }
 
-void FPhysXPhysicsScene::AddForceAtLocation(UPrimitiveComponent* Comp, const FVector& Force, const FVector& WorldLocation)
+void FPhysXPhysicsScene::AddForce(FPhysicsActorHandle Actor, const FVector& Force)
 {
-	FBodyMapping* M = FindMappingByComponent(Comp);
-	if (!M || !M->Actor) return;
-	PxRigidDynamic* Dyn = M->Actor->is<PxRigidDynamic>();
-	if (!Dyn) return;
-	PxRigidBodyExt::addForceAtPos(*Dyn, ToPxVec3(Force), ToPxVec3(WorldLocation));
+	if (PxRigidDynamic* Dyn = AsRigidDynamic(Actor)) Dyn->addForce(ToPxVec3(Force));
 }
 
-void FPhysXPhysicsScene::AddTorque(UPrimitiveComponent* Comp, const FVector& Torque)
+void FPhysXPhysicsScene::AddForceAtLocation(FPhysicsActorHandle Actor, const FVector& Force, const FVector& WorldLocation)
 {
-	FBodyMapping* M = FindMappingByComponent(Comp);
-	if (!M || !M->Actor) return;
-	PxRigidDynamic* Dyn = M->Actor->is<PxRigidDynamic>();
-	if (!Dyn) return;
-	Dyn->addTorque(ToPxVec3(Torque));
+	if (PxRigidDynamic* Dyn = AsRigidDynamic(Actor))
+		PxRigidBodyExt::addForceAtPos(*Dyn, ToPxVec3(Force), ToPxVec3(WorldLocation));
 }
 
-// ============================================================
-// Velocity
-// ============================================================
-
-FVector FPhysXPhysicsScene::GetLinearVelocity(UPrimitiveComponent* Comp) const
+void FPhysXPhysicsScene::AddTorque(FPhysicsActorHandle Actor, const FVector& Torque)
 {
-	const FBodyMapping* M = FindMappingByComponent(Comp);
-	if (!M || !M->Actor) return { 0, 0, 0 };
-	PxRigidDynamic* Dyn = M->Actor->is<PxRigidDynamic>();
-	if (!Dyn) return { 0, 0, 0 };
-	return ToFVector(Dyn->getLinearVelocity());
+	if (PxRigidDynamic* Dyn = AsRigidDynamic(Actor)) Dyn->addTorque(ToPxVec3(Torque));
 }
 
-void FPhysXPhysicsScene::SetLinearVelocity(UPrimitiveComponent* Comp, const FVector& Vel)
+FVector FPhysXPhysicsScene::GetLinearVelocity(FPhysicsActorHandle Actor) const
 {
-	FBodyMapping* M = FindMappingByComponent(Comp);
-	if (!M || !M->Actor) return;
-	PxRigidDynamic* Dyn = M->Actor->is<PxRigidDynamic>();
-	if (!Dyn) return;
-	Dyn->setLinearVelocity(ToPxVec3(Vel));
+	PxRigidDynamic* Dyn = AsRigidDynamic(Actor);
+	return Dyn ? ToFVector(Dyn->getLinearVelocity()) : FVector(0, 0, 0);
 }
 
-FVector FPhysXPhysicsScene::GetAngularVelocity(UPrimitiveComponent* Comp) const
+void FPhysXPhysicsScene::SetLinearVelocity(FPhysicsActorHandle Actor, const FVector& Vel)
 {
-	const FBodyMapping* M = FindMappingByComponent(Comp);
-	if (!M || !M->Actor) return { 0, 0, 0 };
-	PxRigidDynamic* Dyn = M->Actor->is<PxRigidDynamic>();
-	if (!Dyn) return { 0, 0, 0 };
-	return ToFVector(Dyn->getAngularVelocity());
+	if (PxRigidDynamic* Dyn = AsRigidDynamic(Actor)) Dyn->setLinearVelocity(ToPxVec3(Vel));
 }
 
-void FPhysXPhysicsScene::SetAngularVelocity(UPrimitiveComponent* Comp, const FVector& Vel)
+FVector FPhysXPhysicsScene::GetAngularVelocity(FPhysicsActorHandle Actor) const
 {
-	FBodyMapping* M = FindMappingByComponent(Comp);
-	if (!M || !M->Actor) return;
-	PxRigidDynamic* Dyn = M->Actor->is<PxRigidDynamic>();
-	if (!Dyn) return;
-	Dyn->setAngularVelocity(ToPxVec3(Vel));
+	PxRigidDynamic* Dyn = AsRigidDynamic(Actor);
+	return Dyn ? ToFVector(Dyn->getAngularVelocity()) : FVector(0, 0, 0);
 }
 
-// ============================================================
-// Mass
-// ============================================================
-
-void FPhysXPhysicsScene::SetMass(UPrimitiveComponent* Comp, float NewMass)
+void FPhysXPhysicsScene::SetAngularVelocity(FPhysicsActorHandle Actor, const FVector& Vel)
 {
-	FBodyMapping* M = FindMappingByComponent(Comp);
-	if (!M || !M->Actor) return;
-	PxRigidDynamic* Dyn = M->Actor->is<PxRigidDynamic>();
-	if (!Dyn) return;
-
-	// setMassAndUpdateInertia(rigid, mass, com=NULL)는 COM을 shape 분포로
-	// 자동 재계산하면서 이전 setCMassLocalPose를 덮어쓴다. RootComp의
-	// CenterOfMassOffset을 명시 전달해 보존.
-	PxVec3 LocalCOM = M->RootComp ? ToPxVec3(M->RootComp->GetCenterOfMass()) : PxVec3(0);
-	PxRigidBodyExt::setMassAndUpdateInertia(*Dyn, NewMass, &LocalCOM);
+	if (PxRigidDynamic* Dyn = AsRigidDynamic(Actor)) Dyn->setAngularVelocity(ToPxVec3(Vel));
 }
 
-float FPhysXPhysicsScene::GetMass(UPrimitiveComponent* Comp) const
+float FPhysXPhysicsScene::GetMass(FPhysicsActorHandle Actor) const
 {
-	const FBodyMapping* M = FindMappingByComponent(Comp);
-	if (!M || !M->Actor) return 1.0f;
-	PxRigidDynamic* Dyn = M->Actor->is<PxRigidDynamic>();
-	if (!Dyn) return 1.0f;
-	return Dyn->getMass();
+	PxRigidDynamic* Dyn = AsRigidDynamic(Actor);
+	return Dyn ? Dyn->getMass() : 1.0f;
 }
 
-void FPhysXPhysicsScene::SetCenterOfMass(UPrimitiveComponent* Comp, const FVector& LocalOffset)
+void FPhysXPhysicsScene::SetCenterOfMass(FPhysicsActorHandle Actor, const FVector& LocalOffset)
 {
-	FBodyMapping* M = FindMappingByComponent(Comp);
-	if (!M || !M->Actor) return;
-	PxRigidDynamic* Dyn = M->Actor->is<PxRigidDynamic>();
-	if (!Dyn) return;
-	Dyn->setCMassLocalPose(PxTransform(ToPxVec3(LocalOffset)));
+	if (PxRigidDynamic* Dyn = AsRigidDynamic(Actor))
+		Dyn->setCMassLocalPose(PxTransform(ToPxVec3(LocalOffset)));
 }
 
-FVector FPhysXPhysicsScene::GetCenterOfMass(UPrimitiveComponent* Comp) const
+FVector FPhysXPhysicsScene::GetCenterOfMass(FPhysicsActorHandle Actor) const
 {
-	const FBodyMapping* M = FindMappingByComponent(Comp);
-	if (!M || !M->Actor) return { 0, 0, 0 };
-	PxRigidDynamic* Dyn = M->Actor->is<PxRigidDynamic>();
-	if (!Dyn) return { 0, 0, 0 };
-	return ToFVector(Dyn->getCMassLocalPose().p);
+	PxRigidDynamic* Dyn = AsRigidDynamic(Actor);
+	return Dyn ? ToFVector(Dyn->getCMassLocalPose().p) : FVector(0, 0, 0);
 }
 
 // ============================================================
@@ -1921,6 +1877,112 @@ bool FPhysXPhysicsScene::RaycastByObjectTypes(const FVector& Start, const FVecto
 	const PxRaycastHit& Block = Hit.block;
 	OutHit.bHit = true;
 	OutHit.Distance = Block.distance;
+	OutHit.WorldHitLocation = ToFVector(Block.position);
+	OutHit.ImpactNormal = ToFVector(Block.normal);
+	OutHit.WorldNormal = OutHit.ImpactNormal;
+
+	if (Block.shape && Block.shape->userData)
+	{
+		OutHit.HitComponent = static_cast<UPrimitiveComponent*>(Block.shape->userData);
+		OutHit.HitActor = OutHit.HitComponent->GetOwner();
+	}
+	else if (Block.actor && Block.actor->userData)
+	{
+		OutHit.HitActor = static_cast<AActor*>(Block.actor->userData);
+	}
+
+	return true;
+}
+
+// ============================================================
+// Sweep
+// ============================================================
+
+bool FPhysXPhysicsScene::SweepCapsuleByObjectTypes(const FVector& Start, const FQuat& Rot,
+	float Radius, float HalfHeight, const FVector& Dir, float MaxDist, FHitResult& OutHit,
+	uint32 ObjectTypeMask, const AActor* IgnoreActor) const
+{
+	if (!Scene || ObjectTypeMask == 0) return false;
+
+	// PhysX sweep 은 unit direction 을 요구. 길이 0 이면 sweep 의미 없음.
+	const float DirLen = Dir.Length();
+	if (DirLen <= 1e-6f) return false;
+	const FVector UnitDir = Dir * (1.0f / DirLen);
+
+	// 캡슐 지오메트리 — PhysX 캡슐 halfHeight 는 원통부 반길이(반구 제외)다.
+	// 컴포넌트 HalfHeight(반구 포함)에서 Radius 를 빼서 환산 — AddAggregateGeometryShapes
+	// (FKSphylElem Length = 2*(HalfHeight-Radius)) 와 동일 규약으로 맞춘다.
+	const float SafeRadius = std::max(Radius, 0.001f);
+	const float CylHalfHeight = std::max(HalfHeight - SafeRadius, 0.001f);
+	const PxCapsuleGeometry Capsule(SafeRadius, CylHalfHeight);
+
+	// PhysX 캡슐 장축은 로컬 X. 엔진 캡슐 장축(컴포넌트 로컬 +Z, 중력 -Z 기준 up)에 맞추려면
+	// X→Z 정렬 회전을 먼저 적용하고 그 위에 컴포넌트 월드 회전을 곱한다 (장축 = Rot * +Z).
+	static const PxQuat AlignXToZ(-PxHalfPi, PxVec3(0.0f, 1.0f, 0.0f));
+	const PxTransform Pose(ToPxVec3(Start), ToPxQuat(Rot) * AlignXToZ);
+
+	// RaycastByObjectTypes 와 동일한 ObjectType 마스크 필터. shape 의 word0(ObjectType) 비트가
+	// 마스크에 없으면 제외, IgnoreActor 의 shape 제외. Trigger flag shape 는 PhysX 가 자동 제외.
+	struct FObjectTypeSweepFilter : PxQueryFilterCallback
+	{
+		const AActor* IgnoreActor = nullptr;
+		PxU32 ObjectTypeMask = 0;
+
+		FObjectTypeSweepFilter(const AActor* InIgnoreActor, PxU32 InMask)
+			: IgnoreActor(InIgnoreActor)
+			, ObjectTypeMask(InMask)
+		{
+		}
+
+		PxQueryHitType::Enum preFilter(const PxFilterData&, const PxShape* Shape, const PxRigidActor* Actor, PxHitFlags&) override
+		{
+			if (IgnoreActor && Actor && Actor->userData == IgnoreActor)
+			{
+				return PxQueryHitType::eNONE;
+			}
+			if (Shape)
+			{
+				const PxFilterData ShapeData = Shape->getQueryFilterData();
+				const PxU32 ShapeObjectBit = 1u << ShapeData.word0;
+				if ((ShapeObjectBit & ObjectTypeMask) == 0)
+				{
+					return PxQueryHitType::eNONE;
+				}
+			}
+			return PxQueryHitType::eBLOCK;
+		}
+
+		PxQueryHitType::Enum postFilter(const PxFilterData&, const PxQueryHit&) override
+		{
+			return PxQueryHitType::eBLOCK;
+		}
+	};
+
+	PxSweepBuffer Hit;
+	PxQueryFilterData FilterData;
+	FilterData.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER;
+	FObjectTypeSweepFilter FilterCallback(IgnoreActor, ObjectTypeMask);
+
+	// eMTD: 시작 위치에서 이미 겹쳐 있을 때(초기 침투)에도 depenetration 방향/깊이를 얻는다.
+	// 없으면 초기 침투 시 normal/position 이 미정의로 반환되어 슬라이드 해소에 쓸 수 없다.
+	const PxHitFlags HitFlags = PxHitFlag::eDEFAULT | PxHitFlag::eMTD;
+	const bool bStatus = Scene->sweep(Capsule, Pose, ToPxVec3(UnitDir), MaxDist, Hit, HitFlags, FilterData, &FilterCallback);
+	if (!bStatus || !Hit.hasBlock) return false;
+
+	const PxSweepHit& Block = Hit.block;
+	OutHit.bHit = true;
+
+	// 초기 침투면 distance 가 음수(= 침투 깊이)로 온다 — Distance 0, PenetrationDepth 에 깊이.
+	if (Block.distance < 0.0f)
+	{
+		OutHit.Distance = 0.0f;
+		OutHit.PenetrationDepth = -Block.distance;
+	}
+	else
+	{
+		OutHit.Distance = Block.distance;
+		OutHit.PenetrationDepth = 0.0f;
+	}
 	OutHit.WorldHitLocation = ToFVector(Block.position);
 	OutHit.ImpactNormal = ToFVector(Block.normal);
 	OutHit.WorldNormal = OutHit.ImpactNormal;

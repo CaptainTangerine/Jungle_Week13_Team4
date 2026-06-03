@@ -33,6 +33,7 @@ void FShaderManager::Initialize(ID3D11Device* InDevice)
 
 	GetOrCreate(EShaderPath::Primitive, StartupError);
 	GetOrCreate(EShaderPath::Gizmo, StartupError);
+	GetOrCreate(EShaderPath::PhysicsBody, StartupError);
 	GetOrCreate(EShaderPath::Editor, StartupError);
 	GetOrCreate(EShaderPath::Decal, StartupError);
 	GetOrCreate(EShaderPath::Outline, StartupError);

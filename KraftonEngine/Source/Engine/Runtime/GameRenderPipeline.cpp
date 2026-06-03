@@ -1,4 +1,4 @@
-#include "Engine/Runtime/GameRenderPipeline.h"
+﻿#include "Engine/Runtime/GameRenderPipeline.h"
 
 #include "Engine/Runtime/GameEngine.h"
 #include "GameFramework/GameMode/PlayerController.h"
@@ -153,6 +153,10 @@ void FGameRenderPipeline::BuildFrame(FViewport* VP, const FMinimalViewInfo& POV,
 		Frame.CursorViewportX = UINT32_MAX;
 		Frame.CursorViewportY = UINT32_MAX;
 	}
+
+	Frame.RenderOptions.OverridePostProcess(ActiveCamera);
+	Frame.RenderOptions.ShowFlags.bDOF =
+		ActiveCamera && ActiveCamera->GetPostProcessSettings().Aperture > 0.0f;
 }
 
 void FGameRenderPipeline::CollectCommands(FScene* Scene, FRenderer& Renderer, FCollectOutput& Output)

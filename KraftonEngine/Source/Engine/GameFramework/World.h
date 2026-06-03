@@ -152,6 +152,12 @@ public:
 		uint32 ObjectTypeMask,
 		const AActor* IgnoreActor = nullptr) const;
 
+	// Capsule sweep convenience — delegates to IPhysicsScene::SweepCapsuleByObjectTypes.
+	// 캐릭터 이동(sweep-and-slide) 처럼 캡슐 반경을 고려한 충돌 해소가 필요할 때 사용.
+	bool PhysicsSweepCapsuleByObjectTypes(const FVector& Start, const FQuat& Rot,
+		float Radius, float HalfHeight, const FVector& Dir, float MaxDist, FHitResult& OutHit,
+		uint32 ObjectTypeMask, const AActor* IgnoreActor = nullptr) const;
+
 	// --- Game flow ---
 	// BeginPlay 이전에 호출. WorldType이 Editor면 무시된다.
 	void SetGameModeClass(UClass* InClass) { GameModeClass = InClass; }

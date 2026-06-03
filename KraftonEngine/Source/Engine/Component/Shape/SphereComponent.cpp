@@ -4,6 +4,7 @@
 #include "Serialization/Archive.h"
 #include "Render/Scene/FScene.h"
 #include "Math/MathUtils.h"
+#include "Physics/Asset/BodySetup.h"
 
 #include <cstring>
 #include <cmath>
@@ -21,6 +22,13 @@ float USphereComponent::GetScaledSphereRadius() const
 {
 	FVector Scale = GetWorldScale();
 	return SphereRadius * std::min({ Scale.X, Scale.Y, Scale.Z });
+}
+
+void USphereComponent::BuildShapeBodySetup(UBodySetup& Setup) const
+{
+	FKSphereElem Elem;
+	Elem.Radius = GetScaledSphereRadius();
+	Setup.AggGeom.SphereElems.push_back(Elem);
 }
 
 namespace

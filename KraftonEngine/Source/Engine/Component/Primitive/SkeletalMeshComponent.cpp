@@ -9,6 +9,7 @@
 #include "Animation/PoseContext.h"
 #include "Asset/AssetRegistry.h"
 #include "Core/Logging/Log.h"
+#include "Core/ProjectSettings.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
 #include "Math/Quat.h"
@@ -203,6 +204,36 @@ FBodyInstance* USkeletalMeshComponent::GetBodyInstance(int32 BoneIndex) const
     }
 
     return nullptr;
+}
+
+void USkeletalMeshComponent::AddForceToBone(FName BoneName, const FVector& Force)
+{
+    UWorld* World = GetWorld();
+    IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+    if (!PhysicsScene) return;
+
+    if (FBodyInstance* Body = GetBodyInstance(BoneName))
+    {
+        if (Body->IsValidBodyInstance())
+        {
+            PhysicsScene->AddForce(Body->GetPhysicsActorHandle(), Force);
+        }
+    }
+}
+
+void USkeletalMeshComponent::AddForceToAllBodies(const FVector& Force)
+{
+    UWorld* World = GetWorld();
+    IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+    if (!PhysicsScene) return;
+
+    for (FBodyInstance* Body : Bodies)
+    {
+        if (Body && Body->IsValidBodyInstance())
+        {
+            PhysicsScene->AddForce(Body->GetPhysicsActorHandle(), Force);
+        }
+    }
 }
 
 FConstraintInstance* USkeletalMeshComponent::GetConstraintInstance(FName ChildBoneName) const
@@ -507,11 +538,21 @@ bool USkeletalMeshComponent::InstantiatePhysicsAsset_Internal(
         return false;
     }
 
-    // 랙돌 바디들이 서로(및 자기 캐릭터 캡슐과) 충돌하지 않도록 같은 self-collision 그룹
-    // (owner UUID)으로 묶는다. 조인트로 연결된 인접 쌍만 막던 기존 방식으론 비인접 바디끼리
-    // (특히 WorldScale 로 부푼 캡슐들이) 겹쳐 다이내믹 전환 시 폭발한다.
+    // 랙돌 self-collision 차단은 두 메커니즘을 병용한다:
+    //  1) aggregate(selfCollision=false): 이 랙돌의 본 바디들끼리는 broad-phase 에서 충돌 제외.
+    //     비인접 바디(WorldScale 로 부푼 캡슐들)가 겹쳐 다이내믹 전환 시 폭발하던 문제를 차단.
+    //  2) self-collision 그룹(owner UUID, filter word3): aggregate 밖에 있는 자기 캐릭터 캡슐
+    //     (컴포넌트 경로 바디)과의 충돌까지 막는다. 캡슐은 다른 생성 경로라 aggregate 에 못 넣는다.
     AActor* OwnerActor = GetOwner();
     const uint32 SelfCollisionGroup = OwnerActor ? OwnerActor->GetUUID() : GetUUID();
+
+    // 본 바디 전체를 한 aggregate 로 묶는다(상한은 BodySetups 수). 프로젝트 세팅으로 토글 —
+    // 끄면 바디를 씬에 직접 추가(성능 A/B 비교용). 어느 경우든 self-collision 은 아래
+    // SetActorSelfCollisionGroup(filter word3)로 차단되므로 끄더라도 폭발하지 않는다.
+    const bool bUseAggregate = FProjectSettings::Get().Physics.bUseRagdollAggregate;
+    RagdollAggregate = bUseAggregate
+        ? PhysicsScene->CreateAggregate(static_cast<uint32>(InPhysicsAsset->BodySetups.size()), /*bSelfCollision=*/false)
+        : FPhysicsAggregateHandle{};
 
     const FVector WorldScale = GetWorldScale();
     for (UBodySetup* BodySetup : InPhysicsAsset->BodySetups)
@@ -533,7 +574,7 @@ bool USkeletalMeshComponent::InstantiatePhysicsAsset_Internal(
         FBodyInstance* BodyInstance = new FBodyInstance();
         BodyInstance->Scale3D = WorldScale;
 
-        if (BodyInstance->InitBody(BodySetup, BoneWorldTransforms[BoneIndex], PhysicsScene, BoneIndex))
+        if (BodyInstance->InitBody(BodySetup, BoneWorldTransforms[BoneIndex], PhysicsScene, BoneIndex, RagdollAggregate))
         {
             PhysicsScene->SetActorSelfCollisionGroup(BodyInstance->GetPhysicsActorHandle(), SelfCollisionGroup);
             Bodies.push_back(BodyInstance);
@@ -575,6 +616,12 @@ bool USkeletalMeshComponent::InstantiatePhysicsAsset_Internal(
         }
     }
 
+    // 씬 주도 sync 핸들러로 등록 — 이후 Start/FinishSimulation 이 Pre/PostPhysicsSimulate 호출.
+    if (!Bodies.empty())
+    {
+        PhysicsScene->RegisterBodySync(this);
+    }
+
     return !Bodies.empty();
 }
 
@@ -582,6 +629,12 @@ void USkeletalMeshComponent::TermArticulated()
 {
     UWorld* World = GetWorld();
     IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+
+    // 바디를 해제하기 전에 sync 핸들러부터 해제 — 반쯤 해체된 상태로 호출되지 않게.
+    if (PhysicsScene)
+    {
+        PhysicsScene->UnregisterBodySync(this);
+    }
 
     for (FConstraintInstance* Constraint : Constraints)
     {
@@ -602,6 +655,13 @@ void USkeletalMeshComponent::TermArticulated()
         }
     }
     Bodies.clear();
+
+    // 바디를 모두 해제(aggregate 에서 자동 분리)한 뒤 빈 aggregate 를 해제한다.
+    if (PhysicsScene && RagdollAggregate.IsValid())
+    {
+        PhysicsScene->ReleaseAggregate(RagdollAggregate);
+    }
+    RagdollAggregate = {};
 }
 
 void USkeletalMeshComponent::SetSimulatePhysics(bool bSimulate)
@@ -835,9 +895,11 @@ void USkeletalMeshComponent::SyncKinematicBodiesToAnim(const TArray<FMatrix>& An
         {
             continue;
         }
-        // dynamic(weight>0) 바디는 제외 — SetKinematicTarget 이 강제로 키네마틱 전환시켜
-        // 시뮬레이션을 깨뜨린다. 키네마틱 바디만 anim 을 추종시킨다.
-        if (Body->PhysicsBlendWeight > 0.0f)
+        // 다이내믹 바디는 제외 — SetKinematicTarget 이 강제로 키네마틱 전환시켜 시뮬레이션을
+        // 깨뜨린다. 판정 기준은 UpdateBodySimulationState 와 동일한 bSimulatePhysics 를 쓴다.
+        // (weight>0 만으로 판단하면, 전환 시작 프레임처럼 weight==0 이지만 target>0 이라
+        //  이미 다이내믹으로 전환된 바디를 다시 키네마틱으로 강제해 영구 고정된다.)
+        if (Body->bSimulatePhysics)
         {
             continue;
         }
@@ -857,6 +919,11 @@ void USkeletalMeshComponent::SyncKinematicBodiesToAnim(const TArray<FMatrix>& An
 
 void USkeletalMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
 {
+    // 이 tick 은 TG_PrePhysics — 물리 simulate 이전(World::Tick)에 돈다. 여기서는 simulate 의
+    // "준비"만 한다: 블렌드 가중치 보간 + 바디 시뮬 상태 + anim 평가 + 기준 포즈 캐시.
+    // 실제 키네마틱 타깃 쓰기(Pre)와 시뮬 결과 반영(Post)은 씬이 simulate 전후로
+    // PrePhysicsSimulate / PostPhysicsSimulate 핸들러를 통해 구동한다(한 프레임 지연 제거).
+
     // 1) 바디별 블렌드 가중치를 목표로 보간(부드러운 전환) 후 바디 시뮬 상태 갱신.
     RampBodyBlendWeights(DeltaTime);
     UpdateBodySimulationState();
@@ -864,27 +931,19 @@ void USkeletalMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     // 2) anim 평가 — 블렌드의 기준 포즈. 평가 결과는 BoneEditLocalMatrices 에 반영된다.
     const bool bAnim = EvaluateAnimInstance(DeltaTime);
 
-    // anim 기준 컴포넌트-글로벌. anim 이 없으면 ref 포즈(블렌드 출력 피드백 방지).
-    const bool bWantBlend = AnyBodyPhysicsActive() && !Bodies.empty();
-    TArray<FMatrix> AnimGlobals;
-    if (bWantBlend || !Bodies.empty())
+    // 3) anim 기준 컴포넌트-글로벌을 캐시(핸들러가 simulate 전후로 소비). anim 이 없으면 ref 포즈.
+    bCachedWantBlend = AnyBodyPhysicsActive() && !Bodies.empty();
+    CachedAnimGlobals.clear();
+    if (bCachedWantBlend || !Bodies.empty())
     {
-        if (bAnim) BuildBoneEditGlobalMatrices(AnimGlobals);
-        else       BuildReferencePoseGlobals(AnimGlobals);
+        if (bAnim) BuildBoneEditGlobalMatrices(CachedAnimGlobals);
+        else       BuildReferencePoseGlobals(CachedAnimGlobals);
     }
 
-    // 3) 활성 바디(부분/전체 랙돌)가 있으면: 키네마틱 바디는 anim 추종(자식 조인트 앵커),
-    //    그 위에 anim↔시뮬을 바디별 weight 로 블렌드해 푸시.
-    if (bWantBlend)
-    {
-        SyncKinematicBodiesToAnim(AnimGlobals);
-        ApplyPhysicsBlendedPose(AnimGlobals);
-        UMeshComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
-        return;
-    }
-
-    // 4) 활성 바디 없음: 순수 anim. 모든 바디는 키네마틱으로 anim 을 추종해 다음 전환에 대비.
-    if (bAnim)
+    // 4) 베이스 tick (transform/bounds, no-anim 폴백 시 CPU 스키닝). 기존 분기 보존:
+    //    blend/anim 경로는 UMeshComponent(스키닝 생략 — GPU 경로 + Post 에서 본 포즈 갱신),
+    //    no-anim·no-blend 폴백만 Super(USkinnedMeshComponent, CPU 스키닝 포함).
+    if (bAnim || bCachedWantBlend)
     {
         UMeshComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
     }
@@ -892,28 +951,40 @@ void USkeletalMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     {
         Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
     }
-
-    if (!Bodies.empty())
-    {
-        SyncKinematicBodiesToAnim(AnimGlobals);
-    }
 }
 
-void USkeletalMeshComponent::SimulatePhysicsPreview(float DeltaTime)
+void USkeletalMeshComponent::PreparePhysicsPreview(float DeltaTime)
 {
-    // 에디터 프리뷰: anim 인스턴스가 없으므로 ref 포즈를 기준 포즈로 사용한다.
+    // 에디터 프리뷰: 게임의 TickComponent 가 안 돌므로 Scene->Tick 직전에 직접 캐시한다.
+    // anim 인스턴스가 없어 ref 포즈를 기준으로 한다. 이후 Scene->Tick 이 Pre/PostPhysicsSimulate
+    // 핸들러를 통해 키네마틱 추종 + 시뮬 결과 반영을 수행한다.
     RampBodyBlendWeights(DeltaTime);
     UpdateBodySimulationState();
 
-    if (!AnyBodyPhysicsActive() || Bodies.empty())
+    bCachedWantBlend = AnyBodyPhysicsActive() && !Bodies.empty();
+    CachedAnimGlobals.clear();
+    if (bCachedWantBlend || !Bodies.empty())
     {
-        return;
+        BuildReferencePoseGlobals(CachedAnimGlobals);
     }
+}
 
-    TArray<FMatrix> AnimGlobals;
-    BuildReferencePoseGlobals(AnimGlobals);
-    SyncKinematicBodiesToAnim(AnimGlobals);   // 핀 고정된(weight 0) 바디는 ref 포즈에 머무름
-    ApplyPhysicsBlendedPose(AnimGlobals);     // 시뮬 바디는 물리 결과를 본에 반영
+void USkeletalMeshComponent::PrePhysicsSimulate(float DeltaTime)
+{
+    // simulate 직전: 키네마틱(weight 0) 바디를 캐시된 anim 포즈로 추종시킨다(자식 조인트 앵커).
+    if (!Bodies.empty())
+    {
+        SyncKinematicBodiesToAnim(CachedAnimGlobals);
+    }
+}
+
+void USkeletalMeshComponent::PostPhysicsSimulate(float DeltaTime)
+{
+    // fetchResults 직후: 활성 바디가 있으면 시뮬 결과를 본 포즈에 블렌드 반영.
+    if (bCachedWantBlend)
+    {
+        ApplyPhysicsBlendedPose(CachedAnimGlobals);
+    }
 }
 
 // ──────────────────────────────────────────────

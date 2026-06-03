@@ -9,12 +9,14 @@
 #include "Core/Delegate.h"
 #include "Render/Types/VertexTypes.h"
 #include "Render/Proxy/DirtyFlag.h"
+#include "Physics/BodyInstance.h"
 
 #include "Source/Engine/Component/PrimitiveComponent.generated.h"
 class FPrimitiveSceneProxy;
 class FScene;
 class FMeshBuffer;
 class FOctree;
+class UBodySetup;
 
 // Overlap/Hit 델리게이트 시그니처
 // OnComponentBeginOverlap(OverlappedComp, OtherActor, OtherComp, OtherBodyIndex, bFromSweep, SweepResult)
@@ -152,6 +154,13 @@ public:
 	virtual void SetSimulatePhysics(bool bInSimulate);
 	bool GetSimulatePhysics() const { return bSimulatePhysics; }
 
+	// Kinematic — 코드가 트랜스폼을 구동(비시뮬)하지만 물리 씬엔 "움직이는 강체"로 존재.
+	// static 과 달리 다이내믹(랙돌 등)을 정상적으로 밀어내고, sweep/raycast 가 최신 위치를 본다.
+	// 캐릭터 캡슐처럼 SetWorldLocation 으로 움직이는 콜라이더에 사용. SimulatePhysics 가 켜져 있으면
+	// 그쪽이 우선(full 시뮬) — 이 플래그는 무시된다. (QueryCollision 이 켜져 등록될 때만 효과.)
+	void SetKinematic(bool bInKinematic);
+	bool IsKinematic() const { return bKinematic; }
+
 	// --- Physics Force/Velocity API ---
 	void AddForce(const FVector& Force);
 	void AddForceAtLocation(const FVector& Force, const FVector& Location);
@@ -168,6 +177,15 @@ public:
 	float GetMass() const;
 	void SetCenterOfMass(const FVector& LocalOffset);
 	FVector GetCenterOfMass() const;
+
+	// 이 컴포넌트의 콜리전 지오메트리를 담은 UBodySetup. 물리 바디 생성(InitBody) 시 사용한다.
+	// 기본 nullptr(콜라이더 없음). ShapeComponent 는 extent 로 절차적 생성, StaticMeshComponent 는
+	// 메시의 BodySetup 을 반환한다.
+	virtual UBodySetup* GetBodySetup() { return nullptr; }
+
+	// 바디 생성 시 AggGeom 에 적용할 스케일. StaticMesh 는 메시-로컬 지오메트리라 월드 스케일을
+	// 적용하지만, ShapeComponent 는 GetBodySetup 이 이미 scaled extent 로 만들므로 (1,1,1)을 쓴다.
+	virtual FVector GetBodySetupScale() const { return GetWorldScale(); }
 
 	void SetGenerateOverlapEvents(bool bInGenerateOverlapEvents);
 	bool GetGenerateOverlapEvents() const { return bGenerateOverlapEvents; }
@@ -212,6 +230,11 @@ protected:
 	// 컴포넌트가 BeginPlay 후에만 PhysicsScene::RebuildBody 호출. 이전이면 skip.
 	void NotifyPhysicsBodyDirty();
 
+	// 신 경로(GUsePerComponentBodyInstance) 바디 생성/해제 — OnCreate/OnDestroyPhysicsState 와
+	// NotifyPhysicsBodyDirty(재생성)가 공유한다. 콜라이더(GetBodySetup())가 없으면 생성은 no-op.
+	void InitBodyInstanceInScene(IPhysicsScene* PS);
+	void TermBodyInstanceInScene(IPhysicsScene* PS);
+
 	FVector LocalExtents = { 0.5f, 0.5f, 0.5f };
 	mutable FVector WorldAABBMinLocation;
 	mutable FVector WorldAABBMaxLocation;
@@ -230,6 +253,8 @@ protected:
 	bool bCastShadowAsTwoSided = false;
 	UPROPERTY(Edit, Save, Category="Collision", DisplayName="Simulate Physics")
 	bool bSimulatePhysics = false;
+	UPROPERTY(Edit, Save, Category="Collision", DisplayName="Kinematic")
+	bool bKinematic = false;
 	UPROPERTY(Edit, Save, Category="Collision", DisplayName="Generate Overlap Events")
 	bool bGenerateOverlapEvents = false;
 
@@ -248,4 +273,8 @@ protected:
 
 	FOctree* OctreeNode = nullptr;
 	bool bInOctreeOverflow = false;
+
+	// 이 컴포넌트의 물리 바디(신 경로). OnCreatePhysicsState 에서 InitBody, OnDestroyPhysicsState
+	// 에서 TermBody. 콜라이더가 없으면(GetBodySetup()==nullptr) 미초기화 상태로 남는다.
+	FBodyInstance BodyInstance;
 };

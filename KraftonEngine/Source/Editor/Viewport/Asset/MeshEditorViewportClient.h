@@ -36,6 +36,11 @@ public:
 	// 바디(콜리전) 시각화 토글. off = Constraint 만 보기.
 	void SetDrawBodies(bool bEnabled);
 	bool IsDrawBodies() const;
+	// 바디 표시 방식(솔리드 반투명 / 와이어프레임). 독립 토글.
+	void SetDrawBodySolid(bool bEnabled);
+	bool IsDrawBodySolid() const;
+	void SetDrawBodyWireframe(bool bEnabled);
+	bool IsDrawBodyWireframe() const;
 	void ResetCameraToPreviousBounds();
 
 	void SetPreviewWorld(UWorld* InWorld) { PreviewWorld = InWorld; }

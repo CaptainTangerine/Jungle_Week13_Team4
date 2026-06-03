@@ -3,6 +3,12 @@
 
 #include <d3d11.h>
 
+namespace EDOF
+{
+	// CoC/Blur run at 1/Downscale resolution; Composite stays full-res.
+	constexpr uint32 Downscale = 2;
+}
+
 struct FDOFResources
 {
 	ID3D11Texture2D* Texture = nullptr;

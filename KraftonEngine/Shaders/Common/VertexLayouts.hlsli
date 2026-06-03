@@ -58,6 +58,15 @@ struct VS_Input_PNCTTBB
     float4 boneWeights : BONEWEIGHT;
 };
 
+// FTriangleVertex (Position + Normal + Color)
+// 사용: PhysicsBody (솔리드 디버그 바디)
+struct VS_Input_PNC
+{
+    float3 position : POSITION;
+    float3 normal   : NORMAL;
+    float4 color    : COLOR;
+};
+
 // FTextureVertex (Position + TexCoord)
 // 사용: Font, SubUV, OverlayFont
 struct VS_Input_PT
@@ -118,6 +127,14 @@ struct PS_Input_ColorWorld
     float4 position : SV_POSITION;
     float4 color    : COLOR;
     float3 worldPos : TEXCOORD0;
+};
+
+// SV_POSITION + 월드 법선 + Color (PhysicsBody 솔리드 라이팅)
+struct PS_Input_LitColor
+{
+    float4 position : SV_POSITION;
+    float3 normal   : NORMAL;
+    float4 color    : COLOR;
 };
 
 struct PS_Input_Decal

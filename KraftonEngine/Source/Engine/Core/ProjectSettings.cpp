@@ -24,6 +24,7 @@ namespace PSKey
 	constexpr const char* bEnableCCD = "bEnableCCD";
 	constexpr const char* bEnablePCM = "bEnablePCM";
 	constexpr const char* bEnableActiveActors = "bEnableActiveActors";
+	constexpr const char* bUseRagdollAggregate = "bUseRagdollAggregate";
 	constexpr const char* bEnablePVD = "bEnablePVD";
 	constexpr const char* PvdHost = "PvdHost";
 	constexpr const char* PvdPort = "PvdPort";
@@ -58,6 +59,7 @@ void FProjectSettings::SaveToFile(const FString& Path) const
 	PhysicsObj[PSKey::bEnableCCD] = Physics.bEnableCCD;
 	PhysicsObj[PSKey::bEnablePCM] = Physics.bEnablePCM;
 	PhysicsObj[PSKey::bEnableActiveActors] = Physics.bEnableActiveActors;
+	PhysicsObj[PSKey::bUseRagdollAggregate] = Physics.bUseRagdollAggregate;
 	PhysicsObj[PSKey::bEnablePVD] = Physics.bEnablePVD;
 	PhysicsObj[PSKey::PvdHost] = Physics.PvdHost;
 	PhysicsObj[PSKey::PvdPort] = static_cast<int>(Physics.PvdPort);
@@ -136,7 +138,7 @@ void FProjectSettings::LoadFromFile(const FString& Path)
 		if (P.hasKey(PSKey::WorkerThreadCount))
 		{
 			int v = P[PSKey::WorkerThreadCount].ToInt();
-			Physics.WorkerThreadCount = static_cast<uint32>((std::max)(1, (std::min)(v, 32)));
+			Physics.WorkerThreadCount = static_cast<uint32>((std::max)(0, (std::min)(v, 32)));  // 0 = auto
 		}
 		if (P.hasKey(PSKey::bEnableCCD))
 			Physics.bEnableCCD = P[PSKey::bEnableCCD].ToBool();
@@ -144,6 +146,8 @@ void FProjectSettings::LoadFromFile(const FString& Path)
 			Physics.bEnablePCM = P[PSKey::bEnablePCM].ToBool();
 		if (P.hasKey(PSKey::bEnableActiveActors))
 			Physics.bEnableActiveActors = P[PSKey::bEnableActiveActors].ToBool();
+		if (P.hasKey(PSKey::bUseRagdollAggregate))
+			Physics.bUseRagdollAggregate = P[PSKey::bUseRagdollAggregate].ToBool();
 		if (P.hasKey(PSKey::bEnablePVD))
 			Physics.bEnablePVD = P[PSKey::bEnablePVD].ToBool();
 		if (P.hasKey(PSKey::PvdHost))

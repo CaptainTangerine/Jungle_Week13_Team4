@@ -106,6 +106,32 @@ bool FMeshEditorViewportClient::IsDrawBodies() const
 	return PhysicsDebugComponent ? PhysicsDebugComponent->IsDrawBodies() : true;
 }
 
+void FMeshEditorViewportClient::SetDrawBodySolid(bool bEnabled)
+{
+	if (PhysicsDebugComponent)
+	{
+		PhysicsDebugComponent->SetDrawBodySolid(bEnabled);
+	}
+}
+
+bool FMeshEditorViewportClient::IsDrawBodySolid() const
+{
+	return PhysicsDebugComponent ? PhysicsDebugComponent->IsDrawBodySolid() : true;
+}
+
+void FMeshEditorViewportClient::SetDrawBodyWireframe(bool bEnabled)
+{
+	if (PhysicsDebugComponent)
+	{
+		PhysicsDebugComponent->SetDrawBodyWireframe(bEnabled);
+	}
+}
+
+bool FMeshEditorViewportClient::IsDrawBodyWireframe() const
+{
+	return PhysicsDebugComponent ? PhysicsDebugComponent->IsDrawBodyWireframe() : true;
+}
+
 void FMeshEditorViewportClient::ResetCameraToPreviousBounds()
 {
 	if (!PreviewActor)

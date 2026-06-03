@@ -8,12 +8,18 @@
 
 class IPhysicsScene;
 class UBodySetup;
+class UPrimitiveComponent;
 
 struct FBodyInstance : public FBodyInstanceCore
 {
 	FPhysicsActorHandle ActorHandle;
 	int32 InstanceBoneIndex = -1;
 	FVector Scale3D = FVector(1.0f, 1.0f, 1.0f);
+
+	// 이 바디를 소유한 프리미티브 컴포넌트(컴포넌트 경로). 씬이 매 프레임 트랜스폼을
+	// 이 컴포넌트로 write-back 하고, 필터/owner-UUID 도 여기서 끌어온다. 랙돌 본 바디는
+	// nullptr 로 두며, 동기화는 USkeletalMeshComponent 의 IPhysicsBodySync 가 담당한다.
+	UPrimitiveComponent* OwnerComponent = nullptr;
 
 	float MassInKgOverride = 0.0f;
 
@@ -22,7 +28,10 @@ struct FBodyInstance : public FBodyInstanceCore
 	float PhysicsBlendWeight = 0.0f;
 	float PhysicsBlendWeightTarget = 0.0f;
 
-	bool InitBody(UBodySetup* Setup, const FTransform& Transform, IPhysicsScene* InRBScene, int32 BoneIndex = -1);
+	// bStatic=true 면 PxRigidStatic 으로 생성한다(월드 정적 지오메트리). false 면 dynamic 으로
+	// 만들고 ShouldInstanceSimulatingPhysics() 에 따라 kinematic 여부를 결정한다(랙돌·시뮬 바디).
+	bool InitBody(UBodySetup* Setup, const FTransform& Transform, IPhysicsScene* InRBScene, int32 BoneIndex = -1,
+		FPhysicsAggregateHandle Aggregate = {}, bool bStatic = false);
 	void TermBody(IPhysicsScene* InRBScene);
 
 	bool IsValidBodyInstance() const { return ActorHandle.IsValid(); }

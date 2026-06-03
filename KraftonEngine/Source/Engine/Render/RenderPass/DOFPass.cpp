@@ -58,6 +58,18 @@ namespace
 		DC->Draw(3, 0);
 	}
 
+	void SetViewport(ID3D11DeviceContext* DC, uint32 Width, uint32 Height)
+	{
+		D3D11_VIEWPORT Viewport = {};
+		Viewport.TopLeftX = 0.0f;
+		Viewport.TopLeftY = 0.0f;
+		Viewport.Width = static_cast<float>(Width);
+		Viewport.Height = static_cast<float>(Height);
+		Viewport.MinDepth = 0.0f;
+		Viewport.MaxDepth = 1.0f;
+		DC->RSSetViewports(1, &Viewport);
+	}
+
 } // anonymous namespace
 
 FDOFPass::FDOFPass()
@@ -71,7 +83,7 @@ bool FDOFPass::BeginPass(const FPassContext& Ctx)
 {
 	const FFrameContext& FrameContext = Ctx.Frame;
 	const FViewportRenderOptions& RenderOptions = FrameContext.RenderOptions;
-	if (RenderOptions.ShowFlags.bDOF == false || RenderOptions.Aperture <= 0.001f)		return false;
+	if (RenderOptions.ShowFlags.bDOF == false || RenderOptions.PostProcessSettings.Aperture <= 0.001f)		return false;
 	if (!FrameContext.SceneColorCopyTexture || !FrameContext.SceneColorCopySRV ||
 		!FrameContext.ViewportRenderTexture || !FrameContext.ViewportRTV)			return false;
 	if (FrameContext.ViewportWidth <= 0.0f || FrameContext.ViewportHeight <= 0.0f)	return false;
@@ -120,17 +132,24 @@ void FDOFPass::Execute(const FPassContext& Ctx)
 	const FViewportRenderOptions& RenderOptions = FrameContext.RenderOptions;
 
 	FDOFCB DOFCBData = {};
-	DOFCBData.Aperture	= RenderOptions.Aperture;
-	DOFCBData.FocusDist = RenderOptions.FocusDistance;
-	DOFCBData.FocalLength = RenderOptions.FocalLength;
-	DOFCBData.DOFSample = RenderOptions.DOFSample;
+	DOFCBData.Aperture	= RenderOptions.PostProcessSettings.Aperture;
+	DOFCBData.FocusDist = RenderOptions.PostProcessSettings.FocusDistance;
+	DOFCBData.FocalLength = RenderOptions.PostProcessSettings.FocalLength;
+	DOFCBData.DOFSample = RenderOptions.PostProcessSettings.DOFSample;
 	DOFCBData.CameraNear = FrameContext.NearClip;
 	DOFCBData.CameraFar = FrameContext.FarClip;
+	// SourceTexelSize stays full-res: the CoC pass gathers full-res depth and the
+	// blur's radius is expressed in full-res pixels, so sampling the half-res CoC
+	// texture at these UVs preserves the on-screen blur extent.
 	DOFCBData.SourceTexelSize[0] = 1.0f / FrameContext.ViewportWidth;
 	DOFCBData.SourceTexelSize[1] = 1.0f / FrameContext.ViewportHeight;
 
-	// CoC Pass
-	DC->OMSetRenderTargets(1, &FrameContext.DOFResources->CoCResources.RTV, nullptr);
+	const FDOFResources& CoCResources = FrameContext.DOFResources->CoCResources;
+	const FDOFResources& BlurResources = FrameContext.DOFResources->BlurResources;
+
+	// CoC Pass (half-res)
+	DC->OMSetRenderTargets(1, &CoCResources.RTV, nullptr);
+	SetViewport(DC, CoCResources.Width, CoCResources.Height);
 	DOFCB.Update(DC, &DOFCBData, sizeof(DOFCBData));
 	BindDOFCB(DC, DOFCB);
 	ID3D11ShaderResourceView* CoCSRVs[2] = { FrameContext.SceneColorCopySRV, FrameContext.DepthCopySRV };
@@ -138,14 +157,15 @@ void FDOFPass::Execute(const FPassContext& Ctx)
 	DrawFullscreen(DC, CoCShader);
 	UnBindSRVDouble(DC);
 
-	// Blur Pass
-	DC->OMSetRenderTargets(1, &FrameContext.DOFResources->BlurResources.RTV, nullptr);
-	DC->PSSetShaderResources(0, 1, &FrameContext.DOFResources->CoCResources.SRV);
+	// Blur Pass (half-res, same viewport as CoC)
+	DC->OMSetRenderTargets(1, &BlurResources.RTV, nullptr);
+	DC->PSSetShaderResources(0, 1, &CoCResources.SRV);
 	DrawFullscreen(DC, BlurShader);
 	UnBindSRVSingle(DC);
 
-	// Composite Pass
-	DC->OMSetRenderTargets(1, &FrameContext.ViewportRTV, nullptr); 
+	// Composite Pass (full-res, upscales the blurred layer)
+	DC->OMSetRenderTargets(1, &FrameContext.ViewportRTV, nullptr);
+	SetViewport(DC, static_cast<uint32>(FrameContext.ViewportWidth), static_cast<uint32>(FrameContext.ViewportHeight));
 	ID3D11ShaderResourceView* CompositeSRVs[2] = {
 		FrameContext.SceneColorCopySRV,                  // sharp
 		FrameContext.DOFResources->BlurResources.SRV,    // blurred
@@ -159,8 +179,9 @@ void FDOFPass::EndPass(const FPassContext& Ctx)
 {
 	ID3D11DeviceContext* DC = Ctx.Device.GetDeviceContext();
 
-	// Restore the main render target
+	// Restore the main render target and full-res viewport
 	ID3D11RenderTargetView* ViewportRTV = Ctx.Frame.ViewportRTV;
 	DC->OMSetRenderTargets(1, &ViewportRTV, Ctx.Frame.ViewportDSV);
+	SetViewport(DC, static_cast<uint32>(Ctx.Frame.ViewportWidth), static_cast<uint32>(Ctx.Frame.ViewportHeight));
 	Ctx.Cache.bForceAll = true;
 }

@@ -41,26 +41,61 @@ void FSkeletalMeshSceneProxy::UpdateMesh()
 	bDynamicBufferNeedsCreate = true;
 	ReleaseSkinMatrixBuffer();
 
+	// 동적 스냅샷 무효화 — 다음 UpdateRenderSnapshot 에서 새 메시 기준으로 재계산.
+	CachedSkinMatrices.clear();
+	CachedSkinnedVertices.clear();
+	RenderSnapshotRevision = 0;
+
+	// 정적 렌더 버퍼(불변 GPU 리소스) 포인터 캐시 — 렌더 제출이 Asset 체인을 안 타게.
+	CachedStaticVertexBuffer = nullptr;
+	CachedStaticVertexStride = 0;
+	CachedStaticIndexBuffer = nullptr;
+
 	USkeletalMeshComponent* SMC = GetSkeletalMeshComponent();
 	USkeletalMesh* Mesh = SMC ? SMC->GetSkeletalMesh() : nullptr;
 	FSkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
 	if (Asset)
 	{
 		CachedDynamicVertexCount = static_cast<uint32>(Asset->Vertices.size());
+		if (Asset->RenderBuffer && Asset->RenderBuffer->IsValid())
+		{
+			CachedStaticVertexBuffer = Asset->RenderBuffer->GetVertexBuffer().GetBuffer();
+			CachedStaticVertexStride = Asset->RenderBuffer->GetVertexBuffer().GetStride();
+			CachedStaticIndexBuffer  = Asset->RenderBuffer->GetIndexBuffer().GetBuffer();
+		}
 	}
+}
+
+void FSkeletalMeshSceneProxy::UpdateRenderSnapshot()
+{
+	// 게임 스레드 — World::Tick 이후 본 포즈가 확정된 시점에 호출(FScene::UpdateDirtyProxies).
+	// 컴포넌트의 스킨 행렬을 프록시 캐시로 복사해, 렌더 제출이 live 컴포넌트를 읽지 않게 한다.
+	USkeletalMeshComponent* SMC = GetSkeletalMeshComponent();
+	if (!SMC)
+	{
+		return;
+	}
+
+	// SkinnedRevision 이 바뀐 경우(또는 최초)만 재계산 — 정지 포즈는 매 프레임 재빌드 안 함.
+	const uint64 Revision = SMC->GetSkinnedRevision();
+	if (Revision == RenderSnapshotRevision && !CachedSkinMatrices.empty())
+	{
+		return;
+	}
+
+	// GPU 스키닝 경로(본 행렬)와 CPU 스키닝 경로(스킨된 버텍스)를 둘 다 스냅샷한다.
+	// 활성 경로가 아닌 쪽은 비어있어(예: GPU 메시는 SkinnedVertices 가 비어있음) 복사 비용 0.
+	SMC->BuildSkinMatrices(CachedSkinMatrices);
+	CachedSkinnedVertices = SMC->GetSkinnedVertices();
+	RenderSnapshotRevision = Revision;
 }
 
 bool FSkeletalMeshSceneProxy::PrepareDrawBuffer(ID3D11Device* Device, ID3D11DeviceContext* Context, FDrawCommandBuffer& OutBuffer) const
 {
-	USkeletalMeshComponent* SMC = GetSkeletalMeshComponent();
-	if (!SMC) return false;
+	// 렌더 제출 — 컴포넌트 미접근. 게임 스레드 스냅샷(CachedSkinnedVertices) + 캐시된 정적 IB 만 사용.
+	if (!Device || !Context || !CachedStaticIndexBuffer) return false;
 
-	USkeletalMesh* Mesh = SMC->GetSkeletalMesh();
-	FSkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
-	if (!Asset || !Asset->RenderBuffer || !Asset->RenderBuffer->IsValid()) return false;
-
-	const TArray<FVertexPNCTT>& SkinnedVertices = SMC->GetSkinnedVertices();
-	const uint32 VertexCount = static_cast<uint32>(SkinnedVertices.size());
+	const uint32 VertexCount = static_cast<uint32>(CachedSkinnedVertices.size());
 	if (VertexCount == 0) return false;
 
 	if (bDynamicBufferNeedsCreate || !DynamicVertexBuffer.GetBuffer())
@@ -71,36 +106,33 @@ bool FSkeletalMeshSceneProxy::PrepareDrawBuffer(ID3D11Device* Device, ID3D11Devi
 
 	DynamicVertexBuffer.EnsureCapacity(Device, VertexCount);
 
-	const uint64 CurrentRevision = SMC->GetSkinnedRevision();
-	if (UploadedSkinnedRevision != CurrentRevision)
+	if (UploadedSkinnedRevision != RenderSnapshotRevision)
 	{
-		if (!DynamicVertexBuffer.Update(Context, SkinnedVertices.data(), VertexCount))
+		if (!DynamicVertexBuffer.Update(Context, CachedSkinnedVertices.data(), VertexCount))
 		{
 			return false;
 		}
-		UploadedSkinnedRevision = CurrentRevision;
+		UploadedSkinnedRevision = RenderSnapshotRevision;
 	}
 
 	OutBuffer = {};
 	OutBuffer.VB = DynamicVertexBuffer.GetBuffer();
 	OutBuffer.VBStride = DynamicVertexBuffer.GetStride();
-	OutBuffer.IB = Asset->RenderBuffer->GetIndexBuffer().GetBuffer();
+	OutBuffer.IB = CachedStaticIndexBuffer;
 	return OutBuffer.VB != nullptr && OutBuffer.IB != nullptr;
 }
 
 bool FSkeletalMeshSceneProxy::PrepareGpuSkinningDrawBuffer(ID3D11Device* Device, ID3D11DeviceContext* Context, FDrawCommandBuffer& OutBuffer) const
 {
-	USkeletalMeshComponent* SMC = GetSkeletalMeshComponent();
-	USkeletalMesh* Mesh = SMC ? SMC->GetSkeletalMesh() : nullptr;
-	FSkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
-	if (!Asset || !Asset->RenderBuffer || !Asset->RenderBuffer->IsValid()) return false;
+	// 렌더 제출 — 컴포넌트 미접근. 캐시된 정적 VB/IB + 스냅샷 기반 스킨 행렬 버퍼만 사용.
+	if (!CachedStaticVertexBuffer || !CachedStaticIndexBuffer) return false;
 
 	if (!UpdateSkinMatrixBuffer(Device, Context)) return false;
 
 	OutBuffer = {};
-	OutBuffer.VB = Asset->RenderBuffer->GetVertexBuffer().GetBuffer();
-	OutBuffer.VBStride = Asset->RenderBuffer->GetVertexBuffer().GetStride();
-	OutBuffer.IB = Asset->RenderBuffer->GetIndexBuffer().GetBuffer();
+	OutBuffer.VB = CachedStaticVertexBuffer;
+	OutBuffer.VBStride = CachedStaticVertexStride;
+	OutBuffer.IB = CachedStaticIndexBuffer;
 	return OutBuffer.VB != nullptr && OutBuffer.IB != nullptr;
 }
 
@@ -129,13 +161,12 @@ void FSkeletalMeshSceneProxy::ReleaseSkinMatrixBuffer() const
 
 bool FSkeletalMeshSceneProxy::UpdateSkinMatrixBuffer(ID3D11Device* Device, ID3D11DeviceContext* Context) const
 {
-	USkeletalMeshComponent* SMC = GetSkeletalMeshComponent();
-	USkeletalMesh* Mesh = SMC ? SMC->GetSkeletalMesh() : nullptr;
-	FSkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
-	if (!Device || !Context || !SMC || !Asset || Asset->Bones.empty()) return false;
+	// 렌더 제출 단계 — 컴포넌트를 일절 읽지 않는다. 게임 스레드가 UpdateRenderSnapshot 에서 채운
+	// CachedSkinMatrices 스냅샷만 GPU 로 업로드한다(렌더 스레드 분리 전제).
+	if (!Device || !Context || CachedSkinMatrices.empty()) return false;
 
-	const uint32 MatrixCount = static_cast<uint32>(Asset->Bones.size());
-	const uint64 CurrentRevision = SMC->GetSkinnedRevision();
+	const uint32 MatrixCount = static_cast<uint32>(CachedSkinMatrices.size());
+	const uint64 CurrentRevision = RenderSnapshotRevision;
 
 	if (!SkinMatrixBuffer || !SkinMatrixSRV || SkinMatrixCapacity < MatrixCount)
 	{
@@ -179,10 +210,6 @@ bool FSkeletalMeshSceneProxy::UpdateSkinMatrixBuffer(ID3D11Device* Device, ID3D1
 		return true;
 	}
 
-	TArray<FMatrix> SkinMatrices;
-	SMC->BuildSkinMatrices(SkinMatrices);
-	if (SkinMatrices.size() != MatrixCount) return false;
-
 	{
 		SCOPE_STAT_CAT("GPUSkinning_MatrixUpload", "Skinning");
 
@@ -192,7 +219,7 @@ bool FSkeletalMeshSceneProxy::UpdateSkinMatrixBuffer(ID3D11Device* Device, ID3D1
 			return false;
 		}
 
-		std::memcpy(Mapped.pData, SkinMatrices.data(), sizeof(FMatrix) * MatrixCount);
+		std::memcpy(Mapped.pData, CachedSkinMatrices.data(), sizeof(FMatrix) * MatrixCount);
 		Context->Unmap(SkinMatrixBuffer, 0);
 	}
 

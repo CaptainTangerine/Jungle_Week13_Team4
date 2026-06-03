@@ -112,7 +112,14 @@ public:
 class FTickManager
 {
 public:
+	// 한 프레임의 모든 그룹을 순서대로 실행(gather 포함). 물리 인터리브가 필요 없는 경로용.
 	void Tick(UWorld* World, float DeltaTime, ELevelTick TickType);
+
+	// 물리 시뮬레이션을 tick group 사이에 끼워넣기 위해 gather 와 그룹 실행을 분리한다.
+	// World::Tick 이 Gather → RunTickGroups(PrePhysics) → 물리 → RunTickGroups(나머지) 로 구동.
+	void Gather(UWorld* World, ELevelTick TickType);
+	void RunTickGroups(float DeltaTime, ELevelTick TickType, ETickingGroup First, ETickingGroup Last);
+
 	void Reset();
 
 private:

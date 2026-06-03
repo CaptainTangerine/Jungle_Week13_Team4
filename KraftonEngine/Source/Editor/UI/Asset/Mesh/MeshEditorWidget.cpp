@@ -438,6 +438,9 @@ void FMeshEditorWidget::Tick(float DeltaTime)
 		USkeletalMeshComponent* Comp = ViewportClient.GetPreviewMeshComponent();
 		if (Comp)
 		{
+			// 기준 포즈 캐시(simulate 이전) → Scene->Tick 이 등록된 핸들러(Pre/PostPhysicsSimulate)로
+			// 키네마틱 추종 + 시뮬 결과 반영까지 구동한다(게임 경로와 동일).
+			Comp->PreparePhysicsPreview(DeltaTime);
 			if (UWorld* World = Comp->GetWorld())
 			{
 				if (IPhysicsScene* Scene = World->GetPhysicsScene())
@@ -445,7 +448,6 @@ void FMeshEditorWidget::Tick(float DeltaTime)
 					Scene->Tick(DeltaTime);
 				}
 			}
-			Comp->SimulatePhysicsPreview(DeltaTime);
 		}
 	}
 }
@@ -1772,6 +1774,22 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 	{
 		ViewportClient.SetDrawConstraints(bShowConstraints);
 	}
+
+	// 바디 표시 방식 — 솔리드(반투명)/와이어프레임 독립 토글. 둘 다 켜면 UE PhAT 기본 모양.
+	// "Show Bodies" 가 꺼져 있으면 비활성.
+	ImGui::BeginDisabled(!bShowBodies);
+	bool bBodySolid = ViewportClient.IsDrawBodySolid();
+	if (ImGui::Checkbox("Solid", &bBodySolid))
+	{
+		ViewportClient.SetDrawBodySolid(bBodySolid);
+	}
+	ImGui::SameLine();
+	bool bBodyWire = ViewportClient.IsDrawBodyWireframe();
+	if (ImGui::Checkbox("Wireframe", &bBodyWire))
+	{
+		ViewportClient.SetDrawBodyWireframe(bBodyWire);
+	}
+	ImGui::EndDisabled();
 	if (ImGui::SmallButton("Constraints Only"))
 	{
 		ViewportClient.SetDrawBodies(false);
@@ -1793,6 +1811,21 @@ void FMeshEditorWidget::RenderPhysicsDetails()
 			MarkDirty();
 		}
 	}
+
+	// 전체 바디/조인트 제거 — 본 필터(손가락/치맛자락 스킵) 적용 등으로 처음부터 다시 생성할 때.
+	// Generate All 은 기존 바디를 안 지우므로, 필터를 반영하려면 Clear → Generate All → Save.
+	if (ImGui::Button("Clear All (Bodies + Constraints)", ImVec2(-1.0f, 0.0f)) && CurrentPhysicsAsset)
+	{
+		for (UBodySetup* Body : CurrentPhysicsAsset->BodySetups)
+		{
+			if (Body) { UObjectManager::Get().DestroyObject(Body); }
+		}
+		CurrentPhysicsAsset->BodySetups.clear();
+		CurrentPhysicsAsset->ConstraintSetups.clear();
+		SelectedBoneIndex = -1;
+		MarkDirty();
+	}
+
 	ImGui::Separator();
 
 	// 다중선택 시 일괄 편집 패널(이후 primary 단일 디테일도 함께 표시).
