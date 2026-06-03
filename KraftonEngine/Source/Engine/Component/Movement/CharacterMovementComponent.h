@@ -26,6 +26,20 @@ enum class EMovementMode : uint8
 
 #include "Source/Engine/Component/Movement/CharacterMovementComponent.generated.h"
 
+// 바닥 탐색 결과 — 캡슐 하향 sweep 으로 채운다(중심 점 레이캐스트 대신).
+//   bBlockingHit : 캡슐 footprint 아래에서 면을 찾음(모서리에서도 잡힘).
+//   bWalkable    : 면 법선의 Z 가 WalkableFloorZ 이상(= 경사각 ≤ WalkableFloorAngle).
+//   FloorDist    : 캡슐 표면에서 면까지의 거리. >0 = 떠 있는 간격, 0 = 접촉, <0 = 박힌 깊이(음수).
+//   Normal       : 면 법선(월드). Location : 접촉 위치(월드).
+struct FFloorResult
+{
+	bool    bBlockingHit = false;
+	bool    bWalkable    = false;
+	float   FloorDist    = 0.0f;
+	FVector Normal       = FVector(0.0f, 0.0f, 1.0f);
+	FVector Location     = FVector(0.0f, 0.0f, 0.0f);
+};
+
 UCLASS()
 class UCharacterMovementComponent : public UMovementComponent
 {
@@ -77,7 +91,9 @@ public:
 	UPROPERTY(Edit, Save, Category="CharacterMovement", DisplayName="Gravity", Min=0.0f, Max=100.0f, Speed=0.1f)
 	float Gravity            = 9.8f;     // m/s^2 (positive — 적용 시 Velocity.Z -= Gravity*dt)
 	UPROPERTY(Edit, Save, Category="CharacterMovement", DisplayName="Floor Probe Distance", Min=0.0f, Max=5.0f, Speed=0.01f)
-	float FloorProbeDistance = 0.1f;     // capsule HalfHeight 아래 추가 probe 거리
+	float FloorProbeDistance = 0.1f;     // capsule 바닥 아래로 floor sweep 하는 거리(접지 유지/내리막 허용 폭)
+	UPROPERTY(Edit, Save, Category="CharacterMovement", DisplayName="Walkable Floor Angle", Min=0.0f, Max=90.0f, Speed=0.5f)
+	float WalkableFloorAngle = 45.0f;    // deg — 이 각도 이하 경사만 걷기 가능(floor). 초과 면은 못 서고 미끄러진다.
 	UPROPERTY(Edit, Save, Category="CharacterMovement", DisplayName="Jump Z Velocity", Min=0.0f, Max=50.0f, Speed=0.1f)
 	float JumpZVelocity      = 6.0f;     // m/s — Jump 시 Velocity.Z 에 박는 값
 
@@ -105,8 +121,13 @@ protected:
 	void  TickWalking(float DeltaTime, const FVector& RootMotionWorldXY);
 	void  TickFalling(float DeltaTime, const FVector& RootMotionWorldXY);
 
-	// capsule 중심에서 down raycast — bHit + WorldHitLocation 사용.
-	bool  TraceFloor(FHitResult& OutHit) const;
+	// 캡슐을 살짝 아래로 sweep 해 footprint 전체 아래의 바닥을 찾는다(중심 점 레이캐스트 대신).
+	// 모서리에서도 캡슐 일부가 바닥 위면 잡히고, 면 법선으로 walkable 여부를 판정한다.
+	bool  FindFloor(const FVector& CapsuleCenter, FFloorResult& OutFloor) const;
+	// FindFloor 결과로 캡슐 Z 를 면에 맞춘다(간격이면 내려 붙이고, 박혔으면 밀어올림). XY 보존.
+	void  SnapToFloor(const FFloorResult& Floor);
+	// cos(WalkableFloorAngle) — 면 법선 Z 가 이 값 이상이면 walkable.
+	float GetWalkableFloorZ() const;
 	float GetCapsuleHalfHeight() const;
 	float GetCapsuleRadius() const;
 
