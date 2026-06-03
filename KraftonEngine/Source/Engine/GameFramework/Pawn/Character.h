@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GameFramework/Pawn/Pawn.h"
+#include "Object/FName.h"
 
 class UCapsuleComponent;
 class USkeletalMeshComponent;
@@ -56,6 +57,11 @@ public:
 protected:
 	// InputComponent 가 부착된 후 호출 — WASD axis mapping + AddMovementInput binding 등록.
 	void SetupInputComponent() override;
+
+	// [1회용 데모] Tag 를 가진 첫 액터를 찾아 래그돌 + 본에 force.
+	//   PartialBone 유효 → 그 본 서브트리만 부분 래그돌(나머지 anim 유지), 아니면 전신 래그돌.
+	//   ForceBone 에 (나→타깃 방향 + 약간 위)*Strength 의 force 를 가한다.
+	void HitTaggedTarget(const FName& Tag, const FName& PartialBone, const FName& ForceBone, float Strength);
 
 	// 자동 mouse look + 향후 다른 per-frame 입력 처리.
 	void Tick(float DeltaTime) override;
