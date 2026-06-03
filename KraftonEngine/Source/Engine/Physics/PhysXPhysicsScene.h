@@ -126,12 +126,17 @@ private:
 	// RemoveBody 로 빠진다.
 	std::vector<FBodyInstance*> ComponentBodies;
 
-	// Raw actor 경로(컴포넌트 바디 + PhysicsAsset/랙돌)로 만든 actor·aggregate·constraint 를 씬이
-	// 멤버로 추적한다. 씬이 소유권/가시성을 갖게 해 일관성을 맞춘다(생성/해제 짝, Shutdown 일괄
-	// 정리, 디버그 열거, 향후 멀티스레드 전후처리 순회).
-	std::vector<physx::PxRigidActor*> RawActors;
-	std::vector<physx::PxAggregate*> Aggregates;
-	std::vector<physx::PxD6Joint*> RawConstraints;
+	// 씬이 소유권/수명을 추적하는 PhysX 리소스 — CreateActor/CreateAggregate/CreateConstraint 로
+	// 만든 것들. 씬이 소유권/가시성을 갖게 해 일관성을 맞춘다(생성/해제 짝, Shutdown 일괄 정리,
+	// 디버그 열거, 향후 멀티스레드 전후처리 순회). 타입·해제순서가 달라 한 컨테이너로 합치지 않고
+	// 묶음(struct)으로만 정리한다.
+	struct FSceneOwnedResources
+	{
+		std::vector<physx::PxRigidActor*> Actors;       // CreateActor 로 만든 actor (컴포넌트 바디 + 랙돌 본)
+		std::vector<physx::PxAggregate*>  Aggregates;   // 래그돌 그룹
+		std::vector<physx::PxD6Joint*>    Constraints;  // 래그돌 조인트(D6)
+	};
+	FSceneOwnedResources Owned;
 
 	// 씬 주도 sync 핸들러(랙돌 등). Start/FinishSimulation 에서 Pre/PostPhysicsSimulate 호출.
 	std::vector<IPhysicsBodySync*> BodySyncs;

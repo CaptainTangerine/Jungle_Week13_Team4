@@ -990,37 +990,37 @@ void FPhysXPhysicsScene::Initialize(UWorld* InWorld)
 
 void FPhysXPhysicsScene::Shutdown()
 {
-	for (PxD6Joint* Joint : RawConstraints)
+	for (PxD6Joint* Joint : Owned.Constraints)
 	{
 		if (Joint)
 		{
 			Joint->release();
 		}
 	}
-	RawConstraints.clear();
+	Owned.Constraints.clear();
 
 	// Raw actor 경로 정리 — 정상 흐름에선 소유자(SkeletalMeshComponent)가 먼저 TermArticulated
 	// 로 비우지만, 누수 없이 일괄 정리한다. actor release 가 aggregate/scene 에서 자동 분리한다.
-	for (PxRigidActor* Actor : RawActors)
+	for (PxRigidActor* Actor : Owned.Actors)
 	{
 		if (Actor)
 		{
 			Actor->release();
 		}
 	}
-	RawActors.clear();
+	Owned.Actors.clear();
 
-	for (PxAggregate* Aggregate : Aggregates)
+	for (PxAggregate* Aggregate : Owned.Aggregates)
 	{
 		if (Aggregate)
 		{
 			Aggregate->release();
 		}
 	}
-	Aggregates.clear();
+	Owned.Aggregates.clear();
 	BodySyncs.clear();
-	// 컴포넌트 바디의 PxActor 는 위 RawActors 루프가 이미 해제했다(InitBody→CreateActor 가
-	// RawActors 에 등록). 소유 FBodyInstance 의 핸들을 무효화해, 이후 컴포넌트 파괴 시 TermBody 가
+	// 컴포넌트 바디의 PxActor 는 위 Owned.Actors 루프가 이미 해제했다(InitBody→CreateActor 가
+	// Owned.Actors 에 등록). 소유 FBodyInstance 의 핸들을 무효화해, 이후 컴포넌트 파괴 시 TermBody 가
 	// 이미 해제된 actor 를 재해제(double free)하지 않도록 한다.
 	for (FBodyInstance* Body : ComponentBodies)
 	{
@@ -1126,7 +1126,7 @@ FPhysicsActorHandle FPhysXPhysicsScene::CreateActor(const FActorCreationParams& 
 	{
 		Scene->addActor(*NewActor);
 	}
-	RawActors.push_back(NewActor);   // 씬 멤버로 추적 (해제는 ReleaseActor)
+	Owned.Actors.push_back(NewActor);   // 씬 멤버로 추적 (해제는 ReleaseActor)
 
 	if (PxRigidDynamic* Dynamic = NewActor->is<PxRigidDynamic>())
 	{
@@ -1152,7 +1152,7 @@ void FPhysXPhysicsScene::ReleaseActor(FPhysicsActorHandle Actor)
 	}
 
 	// 멤버 추적에서 제거
-	RawActors.erase(std::remove(RawActors.begin(), RawActors.end(), RigidActor), RawActors.end());
+	Owned.Actors.erase(std::remove(Owned.Actors.begin(), Owned.Actors.end(), RigidActor), Owned.Actors.end());
 
 	// aggregate 소속 actor 는 scene->removeActor 가 아니라 release() 가 aggregate/scene 양쪽에서
 	// 자동 분리한다. 비소속 actor 만 명시적으로 씬에서 제거한다.
@@ -1187,7 +1187,7 @@ FPhysicsAggregateHandle FPhysXPhysicsScene::CreateAggregate(uint32 MaxActors, bo
 
 	// 빈 상태로 씬에 추가해 두면, 이후 CreateActor 의 addActor 가 씬에도 자동 반영된다.
 	Scene->addAggregate(*Aggregate);
-	Aggregates.push_back(Aggregate);
+	Owned.Aggregates.push_back(Aggregate);
 	return FPhysicsAggregateHandle{ Aggregate };
 }
 
@@ -1199,7 +1199,7 @@ void FPhysXPhysicsScene::ReleaseAggregate(FPhysicsAggregateHandle Handle)
 		return;
 	}
 
-	Aggregates.erase(std::remove(Aggregates.begin(), Aggregates.end(), Aggregate), Aggregates.end());
+	Owned.Aggregates.erase(std::remove(Owned.Aggregates.begin(), Owned.Aggregates.end(), Aggregate), Owned.Aggregates.end());
 
 	// 호출 시점엔 소속 actor 들이 이미 ReleaseActor 로 빠져나가 빈 aggregate 다.
 	// 씬에서 떼고 release. (release 는 actor 를 파괴하지 않으므로 순서 의존성 없음.)
@@ -1483,7 +1483,7 @@ FPhysicsConstraintHandle FPhysXPhysicsScene::CreateConstraint(const FConstraintC
 	Joint->setConstraintFlag(PxConstraintFlag::ePROJECTION, true);
 
 	Joint->userData = Params.UserData;
-	RawConstraints.push_back(Joint);
+	Owned.Constraints.push_back(Joint);
 
 	return FPhysicsConstraintHandle{ Joint };
 }
@@ -1496,9 +1496,9 @@ void FPhysXPhysicsScene::ReleaseConstraint(FPhysicsConstraintHandle Constraint)
 		return;
 	}
 
-	RawConstraints.erase(
-		std::remove(RawConstraints.begin(), RawConstraints.end(), Joint),
-		RawConstraints.end());
+	Owned.Constraints.erase(
+		std::remove(Owned.Constraints.begin(), Owned.Constraints.end(), Joint),
+		Owned.Constraints.end());
 	Joint->release();
 }
 
