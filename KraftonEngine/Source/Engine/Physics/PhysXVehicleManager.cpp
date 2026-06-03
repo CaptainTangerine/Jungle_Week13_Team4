@@ -15,19 +15,22 @@ namespace
 	// 아날로그([0,1] / [-1,1])로 보관하므로 digital 이 아니라 analog smoothing 을 쓴다.
 	static const PxVehiclePadSmoothingData gPadSmoothingData =
 	{	// ACCEL, BRAKE, HANDBRAKE, STEER_LEFT, STEER_RIGHT
-		{  6.f,   6.f,   12.f,      2.5f,       2.5f },     // Rise rates
-		{ 10.f,   10.f,  12.f,      5.f,        5.f },      // Fall rates
+		{  6.f,   6.f,   12.f,      3.0f,       3.0f },     // Rise rates — 조향은 천천히 인가해 고속 횡력 스파이크 완화
+		{ 10.f,   10.f,  12.f,      7.5f,       7.5f },      // Fall rates
 	};
 
-	// Scales down the maximum allowable steering angle as the vehicle's forward velocity increases
+	// 전진 속도가 오를수록 허용 최대 조향각을 줄인다(steer scale ×MaxSteerAngle). 고속에서 조향
+	// 권한을 크게 낮춰 타이어 횡력 포화(고속+풀스티어 → 접지 상실/드리프트)를 방지하고, 저속 기동성은 유지.
 	static const PxF32 gSteerVsForwardSpeedData[] =
 	{
-		0.0f,        0.75f,
-		5.0f,        0.75f,
-		30.0f,       0.225f,
-		120.0f,      0.2f,
+		0.0f,        0.75f,    //   0 km/h → 22.5°
+		6.0f,        0.55f,    // ~22 km/h → 16.5°
+		14.0f,       0.38f,    // ~50 km/h → 11.4°
+		25.0f,       0.24f,    // ~90 km/h → 7.2°
+		45.0f,       0.16f,    // ~160 km/h → 4.8°
+		120.0f,      0.1f,    //          → 3.0°
 	};
-	static const PxFixedSizeLookupTable<8> gSteerVsForwardSpeedTable(gSteerVsForwardSpeedData, 4);
+	static const PxFixedSizeLookupTable<8> gSteerVsForwardSpeedTable(gSteerVsForwardSpeedData, 6);
 
 	// 서스펜션 raycast prefilter. PhysXPhysicsScene 의 filterData 레이아웃을 따른다
 	// (word0=ObjectType, word3=owner UUID).
