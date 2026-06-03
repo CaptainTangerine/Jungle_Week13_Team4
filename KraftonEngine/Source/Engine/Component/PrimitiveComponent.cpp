@@ -533,81 +533,113 @@ ECollisionResponse UPrimitiveComponent::GetMinResponse(const UPrimitiveComponent
 // --- Overlap / Hit ---
 
 // --- Physics Force/Velocity API ---
+// 신 경로(GUsePerComponentBodyInstance): 이 컴포넌트의 FBodyInstance 핸들로 직접 적용 —
+//   컴포넌트 바디와 랙돌 본이 공유하는 단일 force 경로. 구 경로: 컴포넌트 기반 scene API.
 
 void UPrimitiveComponent::AddForce(const FVector& Force)
 {
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				PS->AddForce(this, Force);
+	if (!Owner) return;
+	UWorld* W = Owner->GetWorld();
+	if (!W) return;
+	IPhysicsScene* PS = W->GetPhysicsScene();
+	if (!PS) return;
+	if (GUsePerComponentBodyInstance) PS->AddForce(BodyInstance.GetPhysicsActorHandle(), Force);
+	else PS->AddForce(this, Force);
 }
 
 void UPrimitiveComponent::AddForceAtLocation(const FVector& Force, const FVector& Location)
 {
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				PS->AddForceAtLocation(this, Force, Location);
+	if (!Owner) return;
+	UWorld* W = Owner->GetWorld();
+	if (!W) return;
+	IPhysicsScene* PS = W->GetPhysicsScene();
+	if (!PS) return;
+	if (GUsePerComponentBodyInstance) PS->AddForceAtLocation(BodyInstance.GetPhysicsActorHandle(), Force, Location);
+	else PS->AddForceAtLocation(this, Force, Location);
 }
 
 void UPrimitiveComponent::AddTorque(const FVector& Torque)
 {
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				PS->AddTorque(this, Torque);
+	if (!Owner) return;
+	UWorld* W = Owner->GetWorld();
+	if (!W) return;
+	IPhysicsScene* PS = W->GetPhysicsScene();
+	if (!PS) return;
+	if (GUsePerComponentBodyInstance) PS->AddTorque(BodyInstance.GetPhysicsActorHandle(), Torque);
+	else PS->AddTorque(this, Torque);
 }
 
 FVector UPrimitiveComponent::GetLinearVelocity() const
 {
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				return PS->GetLinearVelocity(const_cast<UPrimitiveComponent*>(this));
-	return { 0, 0, 0 };
+	if (!Owner) return { 0, 0, 0 };
+	UWorld* W = Owner->GetWorld();
+	if (!W) return { 0, 0, 0 };
+	IPhysicsScene* PS = W->GetPhysicsScene();
+	if (!PS) return { 0, 0, 0 };
+	if (GUsePerComponentBodyInstance) return PS->GetLinearVelocity(BodyInstance.GetPhysicsActorHandle());
+	return PS->GetLinearVelocity(const_cast<UPrimitiveComponent*>(this));
 }
 
 void UPrimitiveComponent::SetLinearVelocity(const FVector& Vel)
 {
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				PS->SetLinearVelocity(this, Vel);
+	if (!Owner) return;
+	UWorld* W = Owner->GetWorld();
+	if (!W) return;
+	IPhysicsScene* PS = W->GetPhysicsScene();
+	if (!PS) return;
+	if (GUsePerComponentBodyInstance) PS->SetLinearVelocity(BodyInstance.GetPhysicsActorHandle(), Vel);
+	else PS->SetLinearVelocity(this, Vel);
 }
 
 FVector UPrimitiveComponent::GetAngularVelocity() const
 {
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				return PS->GetAngularVelocity(const_cast<UPrimitiveComponent*>(this));
-	return { 0, 0, 0 };
+	if (!Owner) return { 0, 0, 0 };
+	UWorld* W = Owner->GetWorld();
+	if (!W) return { 0, 0, 0 };
+	IPhysicsScene* PS = W->GetPhysicsScene();
+	if (!PS) return { 0, 0, 0 };
+	if (GUsePerComponentBodyInstance) return PS->GetAngularVelocity(BodyInstance.GetPhysicsActorHandle());
+	return PS->GetAngularVelocity(const_cast<UPrimitiveComponent*>(this));
 }
 
 void UPrimitiveComponent::SetAngularVelocity(const FVector& Vel)
 {
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				PS->SetAngularVelocity(this, Vel);
+	if (!Owner) return;
+	UWorld* W = Owner->GetWorld();
+	if (!W) return;
+	IPhysicsScene* PS = W->GetPhysicsScene();
+	if (!PS) return;
+	if (GUsePerComponentBodyInstance) PS->SetAngularVelocity(BodyInstance.GetPhysicsActorHandle(), Vel);
+	else PS->SetAngularVelocity(this, Vel);
 }
 
 void UPrimitiveComponent::SetMass(float NewMass)
 {
 	Mass = NewMass;
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				PS->SetMass(this, NewMass);
+	if (!Owner) return;
+	UWorld* W = Owner->GetWorld();
+	if (!W) return;
+	IPhysicsScene* PS = W->GetPhysicsScene();
+	if (!PS) return;
+	if (GUsePerComponentBodyInstance)
+	{
+		// SetActorMass(setMassAndUpdateInertia)는 COM 을 shape 분포로 재계산하므로 COM 오프셋 재적용.
+		PS->SetActorMass(BodyInstance.GetPhysicsActorHandle(), NewMass);
+		PS->SetCenterOfMass(BodyInstance.GetPhysicsActorHandle(), CenterOfMassOffset);
+	}
+	else PS->SetMass(this, NewMass);
 }
 
 void UPrimitiveComponent::SetCenterOfMass(const FVector& LocalOffset)
 {
 	CenterOfMassOffset = LocalOffset;
-	if (Owner)
-		if (UWorld* W = Owner->GetWorld())
-			if (IPhysicsScene* PS = W->GetPhysicsScene())
-				PS->SetCenterOfMass(this, LocalOffset);
+	if (!Owner) return;
+	UWorld* W = Owner->GetWorld();
+	if (!W) return;
+	IPhysicsScene* PS = W->GetPhysicsScene();
+	if (!PS) return;
+	if (GUsePerComponentBodyInstance) PS->SetCenterOfMass(BodyInstance.GetPhysicsActorHandle(), LocalOffset);
+	else PS->SetCenterOfMass(this, LocalOffset);
 }
 
 FVector UPrimitiveComponent::GetCenterOfMass() const

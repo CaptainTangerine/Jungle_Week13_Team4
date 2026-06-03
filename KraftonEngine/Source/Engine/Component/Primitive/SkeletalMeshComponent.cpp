@@ -206,6 +206,36 @@ FBodyInstance* USkeletalMeshComponent::GetBodyInstance(int32 BoneIndex) const
     return nullptr;
 }
 
+void USkeletalMeshComponent::AddForceToBone(FName BoneName, const FVector& Force)
+{
+    UWorld* World = GetWorld();
+    IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+    if (!PhysicsScene) return;
+
+    if (FBodyInstance* Body = GetBodyInstance(BoneName))
+    {
+        if (Body->IsValidBodyInstance())
+        {
+            PhysicsScene->AddForce(Body->GetPhysicsActorHandle(), Force);
+        }
+    }
+}
+
+void USkeletalMeshComponent::AddForceToAllBodies(const FVector& Force)
+{
+    UWorld* World = GetWorld();
+    IPhysicsScene* PhysicsScene = World ? World->GetPhysicsScene() : nullptr;
+    if (!PhysicsScene) return;
+
+    for (FBodyInstance* Body : Bodies)
+    {
+        if (Body && Body->IsValidBodyInstance())
+        {
+            PhysicsScene->AddForce(Body->GetPhysicsActorHandle(), Force);
+        }
+    }
+}
+
 FConstraintInstance* USkeletalMeshComponent::GetConstraintInstance(FName ChildBoneName) const
 {
     for (FConstraintInstance* Constraint : Constraints)
