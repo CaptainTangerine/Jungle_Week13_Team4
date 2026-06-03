@@ -2089,6 +2089,74 @@ FVector FPhysXPhysicsScene::GetCenterOfMass(UPrimitiveComponent* Comp) const
 }
 
 // ============================================================
+// Force / Velocity / Mass — handle 경로 (컴포넌트 바디 + 랙돌 본 공용)
+// ============================================================
+
+// handle 에서 PxRigidDynamic 추출(static/kinematic-static 이면 nullptr). 모든 handle force/velocity
+// API 가 이 게이트를 통과한다 — dynamic 이 아니면 조용히 무시한다(정적 바디에 힘 적용은 무의미).
+static PxRigidDynamic* AsRigidDynamic(FPhysicsActorHandle Actor)
+{
+	PxRigidActor* RigidActor = static_cast<PxRigidActor*>(Actor.Internal);
+	return RigidActor ? RigidActor->is<PxRigidDynamic>() : nullptr;
+}
+
+void FPhysXPhysicsScene::AddForce(FPhysicsActorHandle Actor, const FVector& Force)
+{
+	if (PxRigidDynamic* Dyn = AsRigidDynamic(Actor)) Dyn->addForce(ToPxVec3(Force));
+}
+
+void FPhysXPhysicsScene::AddForceAtLocation(FPhysicsActorHandle Actor, const FVector& Force, const FVector& WorldLocation)
+{
+	if (PxRigidDynamic* Dyn = AsRigidDynamic(Actor))
+		PxRigidBodyExt::addForceAtPos(*Dyn, ToPxVec3(Force), ToPxVec3(WorldLocation));
+}
+
+void FPhysXPhysicsScene::AddTorque(FPhysicsActorHandle Actor, const FVector& Torque)
+{
+	if (PxRigidDynamic* Dyn = AsRigidDynamic(Actor)) Dyn->addTorque(ToPxVec3(Torque));
+}
+
+FVector FPhysXPhysicsScene::GetLinearVelocity(FPhysicsActorHandle Actor) const
+{
+	PxRigidDynamic* Dyn = AsRigidDynamic(Actor);
+	return Dyn ? ToFVector(Dyn->getLinearVelocity()) : FVector(0, 0, 0);
+}
+
+void FPhysXPhysicsScene::SetLinearVelocity(FPhysicsActorHandle Actor, const FVector& Vel)
+{
+	if (PxRigidDynamic* Dyn = AsRigidDynamic(Actor)) Dyn->setLinearVelocity(ToPxVec3(Vel));
+}
+
+FVector FPhysXPhysicsScene::GetAngularVelocity(FPhysicsActorHandle Actor) const
+{
+	PxRigidDynamic* Dyn = AsRigidDynamic(Actor);
+	return Dyn ? ToFVector(Dyn->getAngularVelocity()) : FVector(0, 0, 0);
+}
+
+void FPhysXPhysicsScene::SetAngularVelocity(FPhysicsActorHandle Actor, const FVector& Vel)
+{
+	if (PxRigidDynamic* Dyn = AsRigidDynamic(Actor)) Dyn->setAngularVelocity(ToPxVec3(Vel));
+}
+
+float FPhysXPhysicsScene::GetMass(FPhysicsActorHandle Actor) const
+{
+	PxRigidDynamic* Dyn = AsRigidDynamic(Actor);
+	return Dyn ? Dyn->getMass() : 1.0f;
+}
+
+void FPhysXPhysicsScene::SetCenterOfMass(FPhysicsActorHandle Actor, const FVector& LocalOffset)
+{
+	if (PxRigidDynamic* Dyn = AsRigidDynamic(Actor))
+		Dyn->setCMassLocalPose(PxTransform(ToPxVec3(LocalOffset)));
+}
+
+FVector FPhysXPhysicsScene::GetCenterOfMass(FPhysicsActorHandle Actor) const
+{
+	PxRigidDynamic* Dyn = AsRigidDynamic(Actor);
+	return Dyn ? ToFVector(Dyn->getCMassLocalPose().p) : FVector(0, 0, 0);
+}
+
+// ============================================================
 // Raycast
 // ============================================================
 

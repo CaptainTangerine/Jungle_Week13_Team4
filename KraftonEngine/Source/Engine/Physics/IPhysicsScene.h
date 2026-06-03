@@ -78,24 +78,38 @@ public:
 	virtual void RegisterBodySync(IPhysicsBodySync* Sync) = 0;
 	virtual void UnregisterBodySync(IPhysicsBodySync* Sync) = 0;
 
-	// --- 힘/토크 ---
+	// --- 힘/토크 (컴포넌트 경로) ---
 	virtual void AddForce(UPrimitiveComponent* Comp, const FVector& Force) = 0;
 	virtual void AddForceAtLocation(UPrimitiveComponent* Comp, const FVector& Force, const FVector& WorldLocation) = 0;
 	virtual void AddTorque(UPrimitiveComponent* Comp, const FVector& Torque) = 0;
 
-	// --- 속도 읽기/쓰기 ---
+	// --- 속도 읽기/쓰기 (컴포넌트 경로) ---
 	virtual FVector GetLinearVelocity(UPrimitiveComponent* Comp) const = 0;
 	virtual void SetLinearVelocity(UPrimitiveComponent* Comp, const FVector& Vel) = 0;
 	virtual FVector GetAngularVelocity(UPrimitiveComponent* Comp) const = 0;
 	virtual void SetAngularVelocity(UPrimitiveComponent* Comp, const FVector& Vel) = 0;
 
-	// --- Mass / Center of Mass ---
+	// --- Mass / Center of Mass (컴포넌트 경로) ---
 	virtual void SetMass(UPrimitiveComponent* Comp, float Mass) = 0;
 	virtual float GetMass(UPrimitiveComponent* Comp) const = 0;
 	// CenterOfMass는 RootComponent의 local 좌표계 기준 offset.
 	// 차량처럼 mass center를 차체 아래로 내리면 회전 안정성↑.
 	virtual void SetCenterOfMass(UPrimitiveComponent* Comp, const FVector& LocalOffset) = 0;
 	virtual FVector GetCenterOfMass(UPrimitiveComponent* Comp) const = 0;
+
+	// --- 힘/토크/속도/질량 (handle 경로) ---
+	// 컴포넌트 바디와 랙돌 본(FBodyInstance)이 공유하는 단일 force 경로. handle 이 가리키는
+	// PxRigidDynamic 에 직접 적용한다(static/kinematic 이면 no-op). SetActorMass 는 위쪽 raw 섹션 참조.
+	virtual void AddForce(FPhysicsActorHandle Actor, const FVector& Force) = 0;
+	virtual void AddForceAtLocation(FPhysicsActorHandle Actor, const FVector& Force, const FVector& WorldLocation) = 0;
+	virtual void AddTorque(FPhysicsActorHandle Actor, const FVector& Torque) = 0;
+	virtual FVector GetLinearVelocity(FPhysicsActorHandle Actor) const = 0;
+	virtual void SetLinearVelocity(FPhysicsActorHandle Actor, const FVector& Vel) = 0;
+	virtual FVector GetAngularVelocity(FPhysicsActorHandle Actor) const = 0;
+	virtual void SetAngularVelocity(FPhysicsActorHandle Actor, const FVector& Vel) = 0;
+	virtual float GetMass(FPhysicsActorHandle Actor) const = 0;
+	virtual void SetCenterOfMass(FPhysicsActorHandle Actor, const FVector& LocalOffset) = 0;
+	virtual FVector GetCenterOfMass(FPhysicsActorHandle Actor) const = 0;
 
 	// --- Raycast ---
 	// TraceChannel: shape의 응답이 이 채널에 대해 Block일 때만 hit으로 인정 (UE 패턴).

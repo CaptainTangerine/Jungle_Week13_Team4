@@ -95,6 +95,18 @@ public:
 	void SetCenterOfMass(UPrimitiveComponent* Comp, const FVector& LocalOffset) override;
 	FVector GetCenterOfMass(UPrimitiveComponent* Comp) const override;
 
+	// handle 경로 (컴포넌트 바디 + 랙돌 본 공용)
+	void AddForce(FPhysicsActorHandle Actor, const FVector& Force) override;
+	void AddForceAtLocation(FPhysicsActorHandle Actor, const FVector& Force, const FVector& WorldLocation) override;
+	void AddTorque(FPhysicsActorHandle Actor, const FVector& Torque) override;
+	FVector GetLinearVelocity(FPhysicsActorHandle Actor) const override;
+	void SetLinearVelocity(FPhysicsActorHandle Actor, const FVector& Vel) override;
+	FVector GetAngularVelocity(FPhysicsActorHandle Actor) const override;
+	void SetAngularVelocity(FPhysicsActorHandle Actor, const FVector& Vel) override;
+	float GetMass(FPhysicsActorHandle Actor) const override;
+	void SetCenterOfMass(FPhysicsActorHandle Actor, const FVector& LocalOffset) override;
+	FVector GetCenterOfMass(FPhysicsActorHandle Actor) const override;
+
 	bool Raycast(const FVector& Start, const FVector& Dir, float MaxDist, FHitResult& OutHit,
 		ECollisionChannel TraceChannel = ECollisionChannel::WorldStatic,
 		const AActor* IgnoreActor = nullptr) const override;
