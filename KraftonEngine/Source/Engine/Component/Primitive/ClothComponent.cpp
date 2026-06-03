@@ -634,6 +634,13 @@ namespace
 #endif
 }
 
+UClothComponent::UClothComponent()
+{
+	// Cloth input reads final skeletal/ragdoll bones, then FNvClothSystem ticks after all groups.
+	PrimaryComponentTick.SetTickGroup(TG_PostUpdateWork);
+	PrimaryComponentTick.SetEndTickGroup(TG_PostUpdateWork);
+}
+
 UClothComponent::~UClothComponent()
 {
 	ReleaseSimulation();

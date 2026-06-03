@@ -33,7 +33,7 @@ class UClothComponent : public UPrimitiveComponent
 {
 public:
 	GENERATED_BODY()
-	UClothComponent() = default;
+	UClothComponent();
 	~UClothComponent() override;
 
 	FPrimitiveSceneProxy* CreateSceneProxy() override;

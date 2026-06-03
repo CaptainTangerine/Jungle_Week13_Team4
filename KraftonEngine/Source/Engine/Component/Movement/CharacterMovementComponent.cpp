@@ -268,19 +268,19 @@ void UCharacterMovementComponent::TickWalking(float DeltaTime, const FVector& Ro
 		0.0f);
 	SweepCapsuleMove(XYOffset, /*bLiftOffGround=*/true);
 
-	// Floor 잡혔는지 — 이동 직후 위치에서 다시 trace.
-	FHitResult Floor;
-	if (!TraceFloor(Floor))
+	// 이동 직후 위치에서 캡슐 footprint 아래 바닥을 sweep 으로 찾는다.
+	//  - 모서리: 캡슐 일부라도 바닥 위면 잡혀 Falling 으로 안 빠진다(중심 점 레이캐스트의 빗나감 해소).
+	//  - 경사: 면 법선으로 walkable 판정 — 너무 가파르면 못 서고 Falling 으로 미끄러진다.
+	FFloorResult Floor;
+	if (!FindFloor(Updated->GetWorldLocation(), Floor) || !Floor.bWalkable)
 	{
-		// 발 아래 floor 없음 (예: 절벽 끝) → falling 전환.
+		// 발 아래 walkable floor 없음 (절벽 끝 / 너무 가파른 면) → falling.
 		SetMovementMode(EMovementMode::Falling);
 		return;
 	}
 
-	// Floor stick — capsule 중심 = floor.Z + HalfHeight.
-	FVector NewLoc = Updated->GetWorldLocation();
-	NewLoc.Z = Floor.WorldHitLocation.Z + GetCapsuleHalfHeight();
-	Updated->SetWorldLocation(NewLoc);
+	// Floor stick — sweep 으로 잰 실제 간격만큼만 보정(경사에서 파묻거나 띄우지 않음).
+	SnapToFloor(Floor);
 }
 
 void UCharacterMovementComponent::TickFalling(float DeltaTime, const FVector& RootMotionWorldXY)
@@ -304,43 +304,85 @@ void UCharacterMovementComponent::TickFalling(float DeltaTime, const FVector& Ro
 	// UE 도 동일 — Velocity.Z > 0 이면 ground 안 잡음.
 	if (Velocity.Z > 0.0f) return;
 
-	// 떨어지는 중에만 floor 체크.
-	FHitResult Floor;
-	if (!TraceFloor(Floor)) return;
+	// 떨어지는 중에만 floor 체크. walkable 면일 때만 착지 — 가파른 면은 착지하지 않고 계속
+	// 미끄러진다(위 sweep 이 면을 따라 downhill 로 흘려보냄).
+	FFloorResult Floor;
+	if (!FindFloor(Updated->GetWorldLocation(), Floor) || !Floor.bWalkable) return;
 
-	// 착지 — capsule Z 보정 + Walking 전환 + Velocity.Z = 0.
-	// raycast 가 hit 했다는 건 capsule bottom 이 floor 위 (또는 약간 안) 에 있다는 뜻.
-	// hit 위치를 floor 표면으로 보고 그 위에 stick.
-	FVector LandLoc = Updated->GetWorldLocation();
-	LandLoc.Z = Floor.WorldHitLocation.Z + GetCapsuleHalfHeight();
-	Updated->SetWorldLocation(LandLoc);
+	// 착지 — sweep 으로 잰 간격만큼 캡슐을 면에 붙이고 Walking 전환 + Velocity.Z = 0.
+	SnapToFloor(Floor);
 	Velocity.Z = 0.0f;
 	SetMovementMode(EMovementMode::Walking);
 }
 
-bool UCharacterMovementComponent::TraceFloor(FHitResult& OutHit) const
+float UCharacterMovementComponent::GetWalkableFloorZ() const
 {
+	// 경사각 → 법선 Z 임계값. 0°=1.0(평지만), 90°=0.0(벽까지). 안전 클램프.
+	const float Deg = std::clamp(WalkableFloorAngle, 0.0f, 90.0f);
+	return std::cos(Deg * (3.14159265f / 180.0f));
+}
+
+bool UCharacterMovementComponent::FindFloor(const FVector& CapsuleCenter, FFloorResult& OutFloor) const
+{
+	OutFloor = FFloorResult();
+
 	USceneComponent* Updated = GetUpdatedComponent();
 	if (!Updated) return false;
 	AActor* Owner = GetOwner();
-	if (!Owner) return false;
-	UWorld* World = Owner->GetWorld();
-	if (!World) return false;
+	UWorld* World = Owner ? Owner->GetWorld() : nullptr;
+	if (!World || !World->GetPhysicsScene()) return false;
 
+	const float Radius     = GetCapsuleRadius();
 	const float HalfHeight = GetCapsuleHalfHeight();
-	if (HalfHeight <= 0.0f) return false;   // capsule 아니면 floor 의미 없음
+	if (Radius <= 0.0f || HalfHeight <= 0.0f) return false;   // capsule 아니면 floor 의미 없음
 
-	// capsule 중심에서 down — bottom 까지 HalfHeight + 약간의 probe.
-	const FVector  Start = Updated->GetWorldLocation();
-	const FVector  Dir(0.0f, 0.0f, -1.0f);
-	const float    MaxDist = HalfHeight + FloorProbeDistance;
+	// 캡슐을 그대로 아래로 sweep — footprint 전체 아래에서 면을 찾는다(모서리에서도 일부가 바닥
+	// 위면 잡힘). 하향 sweep 이라 옆의 수직 벽은 닿지 않고(거리 유지), 면 법선으로 walkable 판정.
+	// 바닥 후보는 WorldStatic ObjectType 만 — 동적/폰을 바닥으로 오인하지 않도록.
+	constexpr float Skin = 0.01f;
+	const float     SweepDist = std::max(FloorProbeDistance, 0.0f) + Skin;
+	const FVector   Down(0.0f, 0.0f, -1.0f);
+	const FQuat     Rot = Updated->GetWorldRotation().ToQuaternion();
+	constexpr uint32 FloorMask = ObjectTypeBit(ECollisionChannel::WorldStatic);
 
-	// 바닥은 WorldStatic ObjectType 만 후보로 본다. 채널 raycast (응답=Block) 시맨틱으로 가면
-	// 다이내믹/폰도 기본 응답이 Block 이라 바닥으로 잘못 잡힌다. ObjectType 마스크는
-	// shape의 ObjectType 자체를 검사하므로 다이내믹 박스 위 / 다른 폰 머리 위에서도 바닥으로
-	// 인식되지 않는다.
-	return World->PhysicsRaycastByObjectTypes(Start, Dir, MaxDist, OutHit,
-		ObjectTypeBit(ECollisionChannel::WorldStatic), Owner);
+	FHitResult Hit;
+	if (!World->PhysicsSweepCapsuleByObjectTypes(CapsuleCenter, Rot, Radius, HalfHeight, Down, SweepDist, Hit, FloorMask, Owner))
+	{
+		return false;   // 캡슐 아래 SweepDist 안에 면 없음 → 바닥 없음(절벽/공중).
+	}
+
+	OutFloor.bBlockingHit = true;
+	OutFloor.Normal       = Hit.ImpactNormal;
+	OutFloor.Location     = Hit.WorldHitLocation;
+	OutFloor.bWalkable    = (Hit.ImpactNormal.Z >= GetWalkableFloorZ());
+	// 초기 침투(박힘)면 음수 거리로 표기 → SnapToFloor 가 위로 밀어낸다.
+	OutFloor.FloorDist    = (Hit.PenetrationDepth > 0.0f) ? -Hit.PenetrationDepth : Hit.Distance;
+	return true;
+}
+
+void UCharacterMovementComponent::SnapToFloor(const FFloorResult& Floor)
+{
+	USceneComponent* Updated = GetUpdatedComponent();
+	if (!Updated || !Floor.bBlockingHit) return;
+
+	constexpr float Skin = 0.01f;
+	FVector Loc = Updated->GetWorldLocation();
+
+	if (Floor.FloorDist > Skin)
+	{
+		// 면에서 떠 있음 — Skin 만 남기고 내려 붙인다(경사에선 sweep 이 잰 실제 간격이라 파묻지 않음).
+		Loc.Z -= (Floor.FloorDist - Skin);
+	}
+	else if (Floor.FloorDist < 0.0f)
+	{
+		// 박힘 — 법선 Z 성분을 고려해 수직으로 밀어올린다. 한 번에 과하게 튀지 않게 반경으로 클램프.
+		const float NormalZ = std::max(Floor.Normal.Z, 0.5f);
+		const float PushZ   = (-Floor.FloorDist) / NormalZ + Skin;
+		Loc.Z += std::min(PushZ, GetCapsuleRadius());
+	}
+	// |FloorDist| ≤ Skin 이면 접촉 상태 — 보정 안 함(미세 진동 방지).
+
+	Updated->SetWorldLocation(Loc);
 }
 
 float UCharacterMovementComponent::GetCapsuleHalfHeight() const
@@ -407,7 +449,7 @@ bool UCharacterMovementComponent::SweepCapsuleMove(const FVector& Delta, bool bL
 	const FQuat Rot = Updated->GetWorldRotation().ToQuaternion();
 
 	// 한 프레임 변위(슬라이드 + 침투 해소)를 "이번 이동량 + 침투 해소 한 스텝 + 약간" 으로
-	// 제한한다. 이보다 크게 튀면(박힘 깊을 때) floor probe 밖으로 나가 TraceFloor 가 바닥을
+	// 제한한다. 이보다 크게 튀면(박힘 깊을 때) floor probe 밖으로 나가 FindFloor 가 바닥을
 	// 놓치고 Falling 에 갇혀 폭주한다. 침투 해소를 작게 두므로 이 상한도 작게 유지된다.
 	const float MoveCap = TotalDist + MaxDepenStep + 2.0f * ContactOffset;
 
@@ -492,4 +534,6 @@ void UCharacterMovementComponent::Serialize(FArchive& Ar)
 	Ar << JumpZVelocity;
 	Ar << bOrientRotationToMovement;
 	Ar << RotationYawRate;
+	// 뒤에 추가된 필드는 맨 끝에 append (수동 직렬화 — 기존 저장 데이터의 정렬 보존).
+	Ar << WalkableFloorAngle;
 }
