@@ -9,10 +9,12 @@
 #include "Core/Types/CollisionTypes.h"   // ECollisionChannel, ObjectTypeBit
 #include "Core/Logging/Log.h"
 #include "Math/Quat.h"
+#include "Audio/AudioManager.h"
 
 // PhysX 헤더는 .cpp 에서만 — 엔진 표면을 PhysX-free 로 유지 (PhysXPhysicsScene.cpp 와 동일).
 #include <PxPhysicsAPI.h>
 #include <algorithm>
+#include <cmath>
 
 using namespace physx;
 
@@ -127,14 +129,24 @@ void UWheeledVehicleMovementComponent::BeginPlay()
 	if (CreateVehicle())
 	{
 		RegisterWithManager();
+
+		EngineLoopName = "VehicleEngine_" + std::to_string(GetOwner()->GetUUID());
+
+		FAudioManager::Get().PlayAudio(EngineStartKey, 1.0f);
+		FAudioManager::Get().PlayLoop(EngineLoopKey, EngineLoopName,
+			/*Volume=*/0.0f, /*Pitch=*/IdlePitch);
 	}
 }
 
 void UWheeledVehicleMovementComponent::EndPlay()
 {
+	if (!EngineLoopName.empty())
+	{
+		FAudioManager::Get().StopLoop(EngineLoopName);
+		EngineLoopName.clear();
+	}
 	UnregisterFromManager();
 	DestroyVehicle();
-
 	UPawnMovementComponent::EndPlay();
 }
 
@@ -144,6 +156,13 @@ void UWheeledVehicleMovementComponent::TickComponent(float DeltaTime, ELevelTick
 
 	// 차량은 입력 phase(manager PreTick, pre-sim)와 출력 phase(actor Tick, post-fetch)가
 	// 컴포넌트 Tick 바깥에서 돈다. 컴포넌트 단독 per-frame 로직이 생기면 여기 둔다.
+
+	const float Ratio = GetEngineRotationRatio();                 // [0,1] vs EngineMaxOmega
+	const float Pitch = std::lerp(IdlePitch, MaxPitch, Ratio);
+	const float Volume = std::lerp(0.0f, 1.0f, Ratio);
+
+	FAudioManager::Get().SetLoopPitch(EngineLoopName, Pitch);
+	FAudioManager::Get().SetLoopVolume(EngineLoopName, Volume);
 }
 
 // ============================================================
