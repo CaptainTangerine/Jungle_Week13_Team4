@@ -4,10 +4,12 @@
 #include "Component/Input/InputComponent.h"
 #include "Component/Movement/CharacterMovementComponent.h"
 #include "Component/Primitive/SkeletalMeshComponent.h"
+#include "GameFramework/World.h"
 #include "Input/InputSystem.h"
 #include "Math/Rotator.h"
 #include "Mesh/MeshManager.h"
 #include "Runtime/Engine.h"
+#include "Core/Logging/Log.h"
 
 #include <algorithm>
 void ACharacter::InitDefaultComponents(const FString& SkeletalMeshFileName)
@@ -69,6 +71,31 @@ void ACharacter::SetupInputComponent()
 {
 	Super::SetupInputComponent();
 
+	// [1회용 데모] F/G/H = 태그별 타깃에 부위별 래그돌 히트. bAutoInputWASD 와 무관하게 등록.
+	//   F → Target1 : 전신 래그돌, Head 에 force
+	//   G → Target2 : 전신 래그돌, R Thigh 에 force
+	//   H → Target3 : R Clavicle 서브트리만 부분 래그돌(팔만), R Hand 에 force
+	if (InputComponent)
+	{
+		InputComponent->AddActionMapping("HitTarget1", 'F');
+		InputComponent->BindAction("HitTarget1", EInputEvent::Pressed, [this]()
+		{
+			HitTaggedTarget(FName("Target1"), FName(), FName("Bip001 Head"), 7000.0f);
+		});
+
+		InputComponent->AddActionMapping("HitTarget2", 'G');
+		InputComponent->BindAction("HitTarget2", EInputEvent::Pressed, [this]()
+		{
+			HitTaggedTarget(FName("Target2"), FName(), FName("Bip001 R Thigh"), 7000.0f);
+		});
+
+		InputComponent->AddActionMapping("HitTarget3", 'H');
+		InputComponent->BindAction("HitTarget3", EInputEvent::Pressed, [this]()
+		{
+			HitTaggedTarget(FName("Target3"), FName("Bip001 R Clavicle"), FName("Bip001 R Hand"), 7000.0f);
+		});
+	}
+
 	if (!bAutoInputWASD || !InputComponent) return;
 
 	// Capsule (RootComponent) 기준 — yaw 회전이 곧 캐릭터 facing. mouse look 이 yaw 만
@@ -99,6 +126,45 @@ void ACharacter::SetupInputComponent()
 	{
 		Jump();
 	});
+}
+
+void ACharacter::HitTaggedTarget(const FName& Tag, const FName& PartialBone, const FName& ForceBone, float Strength)
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	for (AActor* Actor : World->GetActors())
+	{
+		if (!Actor || Actor == this) continue;
+		if (!Actor->HasTag(Tag)) continue;
+
+		USkeletalMeshComponent* Mesh = Actor->GetComponentByClass<USkeletalMeshComponent>();
+		if (!Mesh) continue;
+
+		// 1) 래그돌 on. PartialBone 유효 → 그 본 서브트리만 부분 래그돌, 아니면 전신.
+		//    (둘 다 UpdateBodySimulationState 로 대상 바디를 즉시 dynamic 화 → 같은 프레임 force 적용.)
+		if (PartialBone.IsValid())
+		{
+			Mesh->SetBodyPhysicsBlendWeight(PartialBone, 1.0f, /*bIncludeChildren=*/true, /*bInterpolate=*/false);
+		}
+		else
+		{
+			Mesh->SetSimulatePhysics(true);
+		}
+
+		// 2) 밀어낼 방향: 나 → 타깃(수평) + 약간 위. 거리 0 이면 내 forward.
+		FVector Dir = Actor->GetActorLocation() - GetActorLocation();
+		Dir.Z = 0.0f;
+		const float Len = Dir.Length();
+		Dir = (Len > 1e-4f) ? (Dir * (1.0f / Len)) : GetActorRotation().GetForwardVector();
+		const FVector Force = (Dir + FVector(0.0f, 0.0f, 0.35f)) * Strength;
+
+		// 3) 지정 본에 force.
+		Mesh->AddForceToBone(ForceBone, Force);
+
+		UE_LOG("[Hit] '%s' bone=%s force=%.0f", Actor->GetName().c_str(), ForceBone.ToString().c_str(), Strength);
+		return;   // 첫 타깃만 처리
+	}
 }
 
 void ACharacter::Tick(float DeltaTime)
