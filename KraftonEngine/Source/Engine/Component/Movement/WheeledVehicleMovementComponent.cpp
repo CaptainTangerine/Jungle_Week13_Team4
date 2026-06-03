@@ -85,6 +85,16 @@ void UWheeledVehicleMovementComponent::SetHandbrakeInput(bool bHandbrake)
 	bHandbrakeInput = bHandbrake;
 }
 
+float UWheeledVehicleMovementComponent::GetEngineRotationSpeed() const
+{
+	return PVehicle ? PVehicle->mDriveDynData.getEngineRotationSpeed() : 0.0f;
+}
+float UWheeledVehicleMovementComponent::GetEngineRotationRatio() const
+{
+	return EngineMaxOmega > 0.0f
+		? std::clamp(GetEngineRotationSpeed() / EngineMaxOmega, 0.0f, 1.0f) : 0.0f;
+}
+
 float UWheeledVehicleMovementComponent::GetForwardSpeed() const
 {
 	return PVehicle ? PVehicle->computeForwardSpeed() : 0.0f;

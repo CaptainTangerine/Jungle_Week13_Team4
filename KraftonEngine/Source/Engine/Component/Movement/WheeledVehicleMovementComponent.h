@@ -68,6 +68,9 @@ public:
 	float GetSteeringInput()  const { return SteeringInput; }
 	bool  GetHandbrakeInput() const { return bHandbrakeInput; }
 
+	float GetEngineRotationSpeed() const;   // rad/s, 0 if no vehicle
+	float GetEngineRotationRatio() const;   // omega / EngineMaxOmega, [0,1]
+
 	// 현재 전진 속도 (m/s, 차체 forward 축 투영). UI/기어 로직용. 미생성 시 0.
 	float GetForwardSpeed() const;
 
