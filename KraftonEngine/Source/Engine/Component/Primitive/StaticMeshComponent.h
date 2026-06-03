@@ -50,6 +50,15 @@ public:
 
 	const FString& GetStaticMeshPath() const { return StaticMeshPath.ToString(); }
 
+	// 로컬(메시-에셋) 바운드 — center 와 half-extent. 컴포넌트 스케일은 미적용이므로
+	// 월드 치수가 필요하면 호출측에서 GetWorldScale() 을 곱해야 한다. 유효 바운드가 있을 때만 true.
+	bool GetLocalBounds(FVector& OutCenter, FVector& OutExtent) const
+	{
+		OutCenter = CachedLocalCenter;
+		OutExtent = CachedLocalExtent;
+		return bHasValidBounds;
+	}
+
 private:
 	void CacheLocalBounds();
 
