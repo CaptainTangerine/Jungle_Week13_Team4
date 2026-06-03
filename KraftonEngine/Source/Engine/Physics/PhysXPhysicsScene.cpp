@@ -1853,15 +1853,30 @@ PxShape* FPhysXPhysicsScene::AddShapeForComponent(FBodyMapping& Mapping, UPrimit
 	else if (auto* StaticMeshComp = Cast<UStaticMeshComponent>(Comp))
 	{
 		UStaticMesh* StaticMesh = StaticMeshComp->GetStaticMesh();
-		const UBodySetup* BodySetup = StaticMesh ? StaticMesh->GetBodySetup() : nullptr;
+		UBodySetup* BodySetup = StaticMesh ? StaticMesh->GetBodySetup() : nullptr;
 		if (!BodySetup)
 		{
 			return nullptr;
 		}
 
-		if (BodySetup->HasTriMeshCollision()
-			&& StaticMeshComp->GetCollisionEnabled() == ECollisionEnabled::QueryAndPhysics
-			&& Mapping.Actor->is<PxRigidStatic>())
+		// 정적(non-sim) 월드 지오메트리 + QueryAndPhysics 면 실제 표면을 따르는 트라이메시 콜라이더를 쓴다.
+		// 에셋에 굽힌 트라이메시가 없으면 등록 시점에 즉석에서 굽는다(임포트 후 에디터 베이크 스텝 불필요).
+		// 트랙/지형처럼 복잡한 메시는 BuildDefaultBodySetup 의 bounds-box AggGeom 으론 표면을 못 살리므로 필수.
+		const bool bStaticTriMesh =
+			StaticMeshComp->GetCollisionEnabled() == ECollisionEnabled::QueryAndPhysics
+			&& Mapping.Actor->is<PxRigidStatic>();
+
+		if (bStaticTriMesh && !BodySetup->HasTriMeshCollision())
+		{
+			FString TriMeshError;
+			if (!StaticMesh->BuildTriMeshBodySetup(&TriMeshError))
+			{
+				UE_LOG("[PhysX] AddShapeForComponent: tri-mesh cook failed (%s) — falling back to AggGeom box.",
+					TriMeshError.empty() ? "unknown" : TriMeshError.c_str());
+			}
+		}
+
+		if (bStaticTriMesh && BodySetup->HasTriMeshCollision())
 		{
 			return AttachTriangleMeshShape(
 				Physics, Mapping.Actor, DefaultMaterial,
