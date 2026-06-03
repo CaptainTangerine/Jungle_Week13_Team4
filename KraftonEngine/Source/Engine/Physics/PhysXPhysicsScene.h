@@ -46,18 +46,13 @@ public:
 	void Shutdown() override;
 	bool IsInitialized() const override { return Scene != nullptr && Physics != nullptr && DefaultMaterial != nullptr; }
 
-	void RegisterComponent(UPrimitiveComponent* Comp) override;
-	void UnregisterComponent(UPrimitiveComponent* Comp) override;
-	void RebuildBody(UPrimitiveComponent* Comp) override;
-
 	void AddBody(FBodyInstance* Body) override;
 	void RemoveBody(FBodyInstance* Body) override;
 
-	// --- Raw physics actor path (PhysicsAsset / ragdoll) ---
-	// 기존 RegisterComponent 경로는 AActor/Component 단위 compound body를 만든다.
-	// 이 API는 그 경로를 거치지 않고, PhysicsAsset의 BodySetup 하나당 별도 PxRigidActor를
-	// 생성/제어하기 위한 저수준 경로다. 랙돌에서는 본 하나가 FBodyInstance 하나를 갖고,
-	// 그 FBodyInstance가 여기서 반환된 FPhysicsActorHandle을 보관한다.
+	// --- Raw physics actor path ---
+	// PhysicsAsset의 BodySetup 하나당 별도 PxRigidActor를 생성/제어하기 위한 저수준 경로.
+	// 컴포넌트 바디(UPrimitiveComponent::BodyInstance)와 랙돌 본(FBodyInstance)이 모두 이 경로로
+	// actor 를 만든다 — 한 바디가 여기서 반환된 FPhysicsActorHandle 을 보관한다.
 	FPhysicsActorHandle CreateActor(const FActorCreationParams& Params) override;
 	void ReleaseActor(FPhysicsActorHandle Actor) override;
 	bool IsActorValid(FPhysicsActorHandle Actor) const override;
@@ -85,21 +80,7 @@ public:
 	void RegisterBodySync(IPhysicsBodySync* Sync) override;
 	void UnregisterBodySync(IPhysicsBodySync* Sync) override;
 
-	void AddForce(UPrimitiveComponent* Comp, const FVector& Force) override;
-	void AddForceAtLocation(UPrimitiveComponent* Comp, const FVector& Force, const FVector& WorldLocation) override;
-	void AddTorque(UPrimitiveComponent* Comp, const FVector& Torque) override;
-
-	FVector GetLinearVelocity(UPrimitiveComponent* Comp) const override;
-	void SetLinearVelocity(UPrimitiveComponent* Comp, const FVector& Vel) override;
-	FVector GetAngularVelocity(UPrimitiveComponent* Comp) const override;
-	void SetAngularVelocity(UPrimitiveComponent* Comp, const FVector& Vel) override;
-
-	void SetMass(UPrimitiveComponent* Comp, float Mass) override;
-	float GetMass(UPrimitiveComponent* Comp) const override;
-	void SetCenterOfMass(UPrimitiveComponent* Comp, const FVector& LocalOffset) override;
-	FVector GetCenterOfMass(UPrimitiveComponent* Comp) const override;
-
-	// handle 경로 (컴포넌트 바디 + 랙돌 본 공용)
+	// 힘/토크/속도/질량 — handle 경로 (컴포넌트 바디 + 랙돌 본 공용)
 	void AddForce(FPhysicsActorHandle Actor, const FVector& Force) override;
 	void AddForceAtLocation(FPhysicsActorHandle Actor, const FVector& Force, const FVector& WorldLocation) override;
 	void AddTorque(FPhysicsActorHandle Actor, const FVector& Torque) override;
@@ -140,24 +121,14 @@ private:
 	FPhysXSimulationCallback* EventCallback = nullptr;
 	FPhysXVehicleManager* VehicleManager = nullptr;
 
-	// Actor 단위 매핑 — 한 액터의 여러 컴포넌트가 같은 PxRigidActor에 shape로 합쳐진다.
-	struct FBodyMapping
-	{
-		AActor* OwnerActor = nullptr;            // 키
-		physx::PxRigidActor* Actor = nullptr;    // PhysX rigid (Dynamic/Static)
-		UPrimitiveComponent* RootComp = nullptr; // 트랜스폼 동기화 기준 (Actor->RootComponent)
-		TArray<UPrimitiveComponent*> Components; // 등록된 컴포넌트들 (shape 1:1 매칭)
-	};
-	std::vector<FBodyMapping> BodyMappings;
-
-	// 신 경로: UPrimitiveComponent 가 소유한 FBodyInstance 들. Start/FinishSimulation 이
-	// 순회하며 OwnerComponent ↔ PhysX 트랜스폼을 동기화한다(구 BodyMappings 동기화 대체).
-	// 씬은 소유권이 없다 — 컴포넌트가 TermBody 후 RemoveBody 로 빠진다.
+	// UPrimitiveComponent 가 소유한 FBodyInstance 들. Start/FinishSimulation 이 순회하며
+	// OwnerComponent ↔ PhysX 트랜스폼을 동기화한다. 씬은 소유권이 없다 — 컴포넌트가 TermBody 후
+	// RemoveBody 로 빠진다.
 	std::vector<FBodyInstance*> ComponentBodies;
 
-	// Raw actor 경로(PhysicsAsset/랙돌)로 만든 actor·aggregate·constraint 를 씬이 멤버로
-	// 추적한다. 컴포넌트 경로(BodyMappings)와 동일하게 씬이 소유권/가시성을 갖게 해 일관성을
-	// 맞춘다(생성/해제 짝, Shutdown 일괄 정리, 디버그 열거, 향후 멀티스레드 전후처리 순회).
+	// Raw actor 경로(컴포넌트 바디 + PhysicsAsset/랙돌)로 만든 actor·aggregate·constraint 를 씬이
+	// 멤버로 추적한다. 씬이 소유권/가시성을 갖게 해 일관성을 맞춘다(생성/해제 짝, Shutdown 일괄
+	// 정리, 디버그 열거, 향후 멀티스레드 전후처리 순회).
 	std::vector<physx::PxRigidActor*> RawActors;
 	std::vector<physx::PxAggregate*> Aggregates;
 	std::vector<physx::PxD6Joint*> RawConstraints;
@@ -167,15 +138,4 @@ private:
 	// StartSimulation 이 simulate 한 dt 를 FinishSimulation/PostSync 로 전달. 0 = 이번 프레임
 	// 시뮬 안 함(FinishSimulation 이 fetchResults 를 건너뛰는 가드).
 	float CurrentSimDeltaTime = 0.0f;
-
-	// 내부 헬퍼
-	FBodyMapping* FindMappingByActor(AActor* OwnerActor);
-	const FBodyMapping* FindMappingByActor(AActor* OwnerActor) const;
-	FBodyMapping* FindMappingByComponent(UPrimitiveComponent* Comp);
-	const FBodyMapping* FindMappingByComponent(UPrimitiveComponent* Comp) const;
-
-	// Comp의 geometry를 Mapping의 PxRigidActor에 shape로 추가. 실패 시 nullptr.
-	physx::PxShape* AddShapeForComponent(FBodyMapping& Mapping, UPrimitiveComponent* Comp);
-	// Mapping의 actor에서 Comp에 매칭된 shape를 detach.
-	void DetachShapeForComponent(FBodyMapping& Mapping, UPrimitiveComponent* Comp);
 };
