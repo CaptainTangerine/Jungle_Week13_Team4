@@ -1,4 +1,4 @@
-#include "GameFramework/Pawn/Character.h"
+﻿#include "GameFramework/Pawn/Character.h"
 
 #include "Component/Shape/CapsuleComponent.h"
 #include "Component/Input/InputComponent.h"
@@ -80,19 +80,19 @@ void ACharacter::SetupInputComponent()
 		InputComponent->AddActionMapping("HitTarget1", 'F');
 		InputComponent->BindAction("HitTarget1", EInputEvent::Pressed, [this]()
 		{
-			HitTaggedTarget(FName("Target1"), FName(), FName("Bip001 Head"), 7000.0f);
+			HitTaggedTarget(FName("Target1"), FName(), FName("Bip001 Head"), 20000.0f);
 		});
 
 		InputComponent->AddActionMapping("HitTarget2", 'G');
 		InputComponent->BindAction("HitTarget2", EInputEvent::Pressed, [this]()
 		{
-			HitTaggedTarget(FName("Target2"), FName(), FName("Bip001 R Thigh"), 7000.0f);
+			HitTaggedTarget(FName("Target2"), FName(), FName("Bip001 R Thigh"), 20000.0f);
 		});
 
 		InputComponent->AddActionMapping("HitTarget3", 'H');
 		InputComponent->BindAction("HitTarget3", EInputEvent::Pressed, [this]()
 		{
-			HitTaggedTarget(FName("Target3"), FName("Bip001 R Clavicle"), FName("Bip001 R Hand"), 7000.0f);
+			HitTaggedTarget(FName("Target3"), FName("Bip001 R Clavicle"), FName("Bip001 R Hand"), 20000.0f);
 		});
 	}
 
