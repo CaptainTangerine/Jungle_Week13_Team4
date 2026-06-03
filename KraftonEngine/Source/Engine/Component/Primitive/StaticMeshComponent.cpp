@@ -84,6 +84,17 @@ UBodySetup* UStaticMeshComponent::GetBodySetup()
 	if (!StaticMesh) return nullptr;
 
 	UBodySetup* Setup = StaticMesh->GetBodySetup();
+	if (!Setup)
+	{
+		StaticMesh->BuildDefaultBodySetup();
+		Setup = StaticMesh->GetBodySetup();
+	}
+
+	if (GetSimulatePhysics() && Setup && Setup->AggGeom.GetElementCount() <= 0)
+	{
+		StaticMesh->BuildDefaultBodySetup();
+		Setup = StaticMesh->GetBodySetup();
+	}
 
 	// 정적(non-sim) 월드 지오메트리 + QueryAndPhysics 면 실제 표면을 따르는 트라이메시 콜라이더가
 	// 필요하다. 기본 BodySetup(BuildDefaultBodySetup)은 bounds-box AggGeom 만 만들므로, 굽힌 트라이메시가

@@ -111,9 +111,6 @@ bool UBodySetup::BuildTriMeshFromStaticMesh(const FStaticMesh& Mesh, FString* Ou
 	NewTriMesh.SourceTriangleCount = ValidTriangleCount;
 
 	TriMesh = std::move(NewTriMesh);
-	AggGeom.SphereElems.clear();
-	AggGeom.BoxElems.clear();
-	AggGeom.SphylElems.clear();
 	SetError("");
 	return true;
 }
