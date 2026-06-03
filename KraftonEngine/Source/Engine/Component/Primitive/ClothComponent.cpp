@@ -18,6 +18,7 @@
 #include "Render/Proxy/ClothSceneProxy.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <utility>
@@ -155,6 +156,61 @@ namespace
 		return BodySetup && BodySetup->AggGeom.GetElementCount() > 0;
 	}
 
+	FString ToLowerString(FString Value)
+	{
+		std::transform(Value.begin(), Value.end(), Value.begin(),
+			[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+		return Value;
+	}
+
+	bool ContainsAny(const FString& Value, const TArray<const char*>& Keys)
+	{
+		for (const char* Key : Keys)
+		{
+			if (Value.find(Key) != FString::npos)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	int32 GetNvClothSkeletalBodyPriority(const FName& BoneName)
+	{
+		const FString LowerName = ToLowerString(BoneName.ToString());
+		static const TArray<const char*> FineDetailKeys = { "finger", "toe", "skirt", "hair", "twist", "ik" };
+		if (ContainsAny(LowerName, FineDetailKeys))
+		{
+			return -1;
+		}
+
+		static const TArray<const char*> TorsoKeys = { "pelvis", "hip", "spine", "chest" };
+		if (ContainsAny(LowerName, TorsoKeys))
+		{
+			return 0;
+		}
+
+		static const TArray<const char*> ArmKeys = { "clavicle", "shoulder", "upperarm", "forearm", "lowerarm" };
+		if (ContainsAny(LowerName, ArmKeys))
+		{
+			return 1;
+		}
+
+		static const TArray<const char*> LegKeys = { "thigh", "calf", "shin", "upperleg", "lowerleg" };
+		if (ContainsAny(LowerName, LegKeys))
+		{
+			return 2;
+		}
+
+		static const TArray<const char*> DistalKeys = { "neck", "head", "hand", "foot" };
+		if (ContainsAny(LowerName, DistalKeys))
+		{
+			return 3;
+		}
+
+		return 4;
+	}
+
 	FMatrix MakeRigidPoseMatrix(const FMatrix& Mat)
 	{
 		const FVector Scale = Mat.GetScale();
@@ -206,6 +262,10 @@ namespace
 			|| std::strcmp(PropertyName, "Continuous Collision") == 0
 			|| std::strcmp(PropertyName, "CollisionThickness") == 0
 			|| std::strcmp(PropertyName, "Collision Thickness") == 0
+			|| std::strcmp(PropertyName, "CollisionMassScale") == 0
+			|| std::strcmp(PropertyName, "Collision Mass Scale") == 0
+			|| std::strcmp(PropertyName, "CollisionFriction") == 0
+			|| std::strcmp(PropertyName, "Collision Friction") == 0
 			|| std::strcmp(PropertyName, "bIgnoreCollisionAtPinnedParticles") == 0
 			|| std::strcmp(PropertyName, "Ignore Pin Overlap Collision") == 0
 			|| std::strcmp(PropertyName, "PinCollisionIgnoreRadius") == 0
@@ -1011,10 +1071,10 @@ bool UClothComponent::InitializeSimulation()
 	Cloth->setPhaseConfig(MakeNvConstRange(PhaseConfigs));
 	Cloth->setSolverFrequency(GetNvClothSolverFrequency(SolverFrequency, SolverIterationCount));
 	Cloth->setGravity(ToPxVec3(Gravity));
-	Cloth->setDamping(ToPxVec3(GetUnitClothVectorParameter(Damping, FVector(0.95f, 0.95f, 0.95f))));
+	Cloth->setDamping(ToPxVec3(GetUnitClothVectorParameter(Damping, FVector(0.65f, 0.65f, 0.65f))));
 	Cloth->enableContinuousCollision(bEnableContinuousCollision);
-	Cloth->setCollisionMassScale(1.0f);
-	Cloth->setFriction(0.5f);
+	Cloth->setCollisionMassScale(GetNonNegativeClothParameter(CollisionMassScale, 0.5f));
+	Cloth->setFriction(GetUnitClothParameter(CollisionFriction, 0.25f));
 	Cloth->setTetherConstraintScale(GetNonNegativeClothParameter(TetherScale, 1.0f));
 	Cloth->setTetherConstraintStiffness(GetUnitClothParameter(TetherStiffness, 1.0f));
 	ApplyMotionConstraints();
@@ -1404,8 +1464,29 @@ bool UClothComponent::BuildNvClothCollisionFromPhysicsBodies()
 		const FMatrix ComponentWorld = SkeletalMeshComponent->GetWorldMatrix();
 		const FVector ComponentScale = SkeletalMeshComponent->GetWorldScale();
 		uint32 ComponentBodyCount = 0;
+
+		struct FQueuedSkeletalCollisionBody
+		{
+			const UBodySetup* BodySetup = nullptr;
+			FMatrix BodyWorld;
+			FVector ShapeScale = FVector::OneVector;
+			int32 Priority = 0;
+			int32 SourceOrder = 0;
+		};
+
+		TArray<FQueuedSkeletalCollisionBody> QueuedBodies;
+		QueuedBodies.reserve(PhysicsAsset->BodySetups.size());
+		int32 SourceOrder = 0;
+
 		for (UBodySetup* BodySetup : PhysicsAsset->BodySetups)
 		{
+			const int32 Priority = BodySetup ? GetNvClothSkeletalBodyPriority(BodySetup->BoneName) : -1;
+			++SourceOrder;
+			if (Priority < 0)
+			{
+				continue;
+			}
+
 			if (!HasNvClothCollisionSource(BodySetup))
 			{
 				continue;
@@ -1429,10 +1510,45 @@ bool UClothComponent::BuildNvClothCollisionFromPhysicsBodies()
 				}
 			}
 
+			FQueuedSkeletalCollisionBody& QueuedBody = QueuedBodies.emplace_back();
+			QueuedBody.BodySetup = BodySetup;
+			QueuedBody.BodyWorld = BodyWorld;
+			QueuedBody.ShapeScale = ShapeScale;
+			QueuedBody.Priority = Priority;
+			QueuedBody.SourceOrder = SourceOrder;
+		}
+
+		auto ShouldSortBefore = [](const FQueuedSkeletalCollisionBody& A, const FQueuedSkeletalCollisionBody& B)
+		{
+			if (A.Priority != B.Priority)
+			{
+				return A.Priority < B.Priority;
+			}
+			return A.SourceOrder < B.SourceOrder;
+		};
+
+		for (size_t SortIndex = 0; SortIndex < QueuedBodies.size(); ++SortIndex)
+		{
+			size_t BestIndex = SortIndex;
+			for (size_t CandidateIndex = SortIndex + 1; CandidateIndex < QueuedBodies.size(); ++CandidateIndex)
+			{
+				if (ShouldSortBefore(QueuedBodies[CandidateIndex], QueuedBodies[BestIndex]))
+				{
+					BestIndex = CandidateIndex;
+				}
+			}
+			if (BestIndex != SortIndex)
+			{
+				std::swap(QueuedBodies[SortIndex], QueuedBodies[BestIndex]);
+			}
+		}
+
+		for (const FQueuedSkeletalCollisionBody& QueuedBody : QueuedBodies)
+		{
 			AppendBodySetupNvClothCollision(
-				*BodySetup,
-				BodyWorld,
-				ShapeScale,
+				*QueuedBody.BodySetup,
+				QueuedBody.BodyWorld,
+				QueuedBody.ShapeScale,
 				ClothWorldInv,
 				CollisionThickness,
 				CollisionSpheres,

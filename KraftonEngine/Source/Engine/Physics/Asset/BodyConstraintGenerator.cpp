@@ -1,4 +1,4 @@
-#include "Physics/Asset/BodyConstraintGenerator.h"
+﻿#include "Physics/Asset/BodyConstraintGenerator.h"
 
 #include "Physics/Asset/PhysicsAsset.h"
 #include "Mesh/Skeletal/SkeletalMeshAsset.h"
@@ -65,12 +65,141 @@ namespace
 		return (L > 1e-6f) ? FVector(V.X / L, V.Y / L, V.Z / L) : FVector(1.0f, 0.0f, 0.0f);
 	}
 
+	FString ToLowerName(FString Name)
+	{
+		std::transform(Name.begin(), Name.end(), Name.begin(),
+			[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+		return Name;
+	}
+
+	bool NameContainsAny(const FString& LowerName, const TArray<const char*>& Keys)
+	{
+		for (const char* Key : Keys)
+		{
+			if (LowerName.find(Key) != FString::npos)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool IsTorsoFitBoneName(const FString& Name)
+	{
+		static const TArray<const char*> Keys = { "pelvis", "hip", "spine", "chest" };
+		return NameContainsAny(ToLowerName(Name), Keys);
+	}
+
+	bool IsFineAutoBodyBoneName(const FString& Name)
+	{
+		static const TArray<const char*> Keys = { "finger", "toe", "skirt", "hair", "twist", "ik" };
+		return NameContainsAny(ToLowerName(Name), Keys);
+	}
+
+	float GetBoneWeight(const FVertexPNCTBW& V, int32 BoneIndex)
+	{
+		float Weight = 0.0f;
+		for (int32 i = 0; i < 4; ++i)
+		{
+			if (V.BoneIndices[i] == BoneIndex)
+			{
+				Weight += V.BoneWeights[i];
+			}
+		}
+		return Weight;
+	}
+
+	int32 GetDominantBoneIndex(const FVertexPNCTBW& V)
+	{
+		int32 BestBone = -1;
+		float BestWeight = 0.0f;
+		for (int32 i = 0; i < 4; ++i)
+		{
+			if (V.BoneIndices[i] >= 0 && V.BoneWeights[i] > BestWeight)
+			{
+				BestBone = V.BoneIndices[i];
+				BestWeight = V.BoneWeights[i];
+			}
+		}
+		return BestBone;
+	}
+
+	void CollectBoneLocalSamples(
+		const FSkeletalMesh* Mesh,
+		int32 BoneIndex,
+		const FMatrix& InvRef,
+		bool bDominantOnly,
+		TArray<FVector>& OutSamples)
+	{
+		OutSamples.clear();
+		for (const FVertexPNCTBW& V : Mesh->Vertices)
+		{
+			const float Weight = GetBoneWeight(V, BoneIndex);
+			if (Weight < 0.2f)
+			{
+				continue;
+			}
+			if (bDominantOnly && GetDominantBoneIndex(V) != BoneIndex)
+			{
+				continue;
+			}
+			OutSamples.push_back(InvRef.TransformPositionWithW(V.Position));
+		}
+	}
+
+	float SelectQuantile(TArray<float> Values, float Alpha)
+	{
+		if (Values.empty())
+		{
+			return 0.0f;
+		}
+
+		const size_t LastIndex = Values.size() - 1;
+		const size_t QuantileIndex = static_cast<size_t>(std::round(std::clamp(Alpha, 0.0f, 1.0f) * static_cast<float>(LastIndex)));
+		std::nth_element(Values.begin(), Values.begin() + QuantileIndex, Values.end());
+		return Values[QuantileIndex];
+	}
+
+	void GetSampleBounds(const TArray<FVector>& Samples, bool bTrimOutliers, FVector& OutMin, FVector& OutMax)
+	{
+		OutMin = FVector(1e30f, 1e30f, 1e30f);
+		OutMax = FVector(-1e30f, -1e30f, -1e30f);
+
+		if (bTrimOutliers && Samples.size() >= 16)
+		{
+			TArray<float> Xs;
+			TArray<float> Ys;
+			TArray<float> Zs;
+			Xs.reserve(Samples.size());
+			Ys.reserve(Samples.size());
+			Zs.reserve(Samples.size());
+			for (const FVector& L : Samples)
+			{
+				Xs.push_back(L.X);
+				Ys.push_back(L.Y);
+				Zs.push_back(L.Z);
+			}
+
+			OutMin.X = SelectQuantile(Xs, 0.05f);
+			OutMax.X = SelectQuantile(Xs, 0.95f);
+			OutMin.Y = SelectQuantile(Ys, 0.05f);
+			OutMax.Y = SelectQuantile(Ys, 0.95f);
+			OutMin.Z = SelectQuantile(Zs, 0.05f);
+			OutMax.Z = SelectQuantile(Zs, 0.95f);
+			return;
+		}
+
+		for (const FVector& L : Samples)
+		{
+			OutMin.X = std::min(OutMin.X, L.X); OutMin.Y = std::min(OutMin.Y, L.Y); OutMin.Z = std::min(OutMin.Z, L.Z);
+			OutMax.X = std::max(OutMax.X, L.X); OutMax.Y = std::max(OutMax.Y, L.Y); OutMax.Z = std::max(OutMax.Z, L.Z);
+		}
+	}
+
 	// 경첩(1축) 관절로 다룰 본 이름인지 — 무릎/팔꿈치류. 이름 기반 휴리스틱(스켈레톤 의존).
 	bool IsHingeBoneName(const FString& Name)
 	{
-		FString L = Name;
-		std::transform(L.begin(), L.end(), L.begin(),
-			[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+		FString L = ToLowerName(Name);
 		static const char* Keys[] = { "calf", "shin", "lowerleg", "knee", "forearm", "lowerarm", "elbow" };
 		for (const char* K : Keys)
 		{
@@ -163,6 +292,55 @@ namespace
 		Out.Length   = 1.0f;
 	}
 
+	void FitBodyCapsuleRobust(const FSkeletalMesh* Mesh, int32 BoneIndex, FKSphylElem& Out)
+	{
+		const FMatrix InvRef = Mesh->Bones[BoneIndex].GetInverseBindPose();
+		const bool bTorsoFit = IsTorsoFitBoneName(Mesh->Bones[BoneIndex].Name);
+
+		TArray<FVector> Samples;
+		if (bTorsoFit)
+		{
+			CollectBoneLocalSamples(Mesh, BoneIndex, InvRef, true, Samples);
+		}
+		if (Samples.size() < 8)
+		{
+			CollectBoneLocalSamples(Mesh, BoneIndex, InvRef, false, Samples);
+		}
+
+		if (!Samples.empty())
+		{
+			FVector Min;
+			FVector Max;
+			GetSampleBounds(Samples, bTorsoFit, Min, Max);
+
+			Out.Center = FVector((Min.X + Max.X) * 0.5f, (Min.Y + Max.Y) * 0.5f, (Min.Z + Max.Z) * 0.5f);
+			const float HX = std::max((Max.X - Min.X) * 0.5f, 1e-4f);
+			const float HY = std::max((Max.Y - Min.Y) * 0.5f, 1e-4f);
+			const float HZ = std::max((Max.Z - Min.Z) * 0.5f, 1e-4f);
+
+			float HalfLongest, CrossA, CrossB;
+			FVector AxisDir;
+			if (HX >= HY && HX >= HZ)      { HalfLongest = HX; CrossA = HY; CrossB = HZ; AxisDir = FVector(1, 0, 0); }
+			else if (HY >= HX && HY >= HZ) { HalfLongest = HY; CrossA = HX; CrossB = HZ; AxisDir = FVector(0, 1, 0); }
+			else                           { HalfLongest = HZ; CrossA = HX; CrossB = HY; AxisDir = FVector(0, 0, 1); }
+
+			Out.Radius = std::max(std::max(CrossA, CrossB), 0.01f);
+			Out.Length = std::max(2.0f * HalfLongest - 2.0f * Out.Radius, 0.0f);
+			Out.Rotation = RotationYToDir(AxisDir).ToRotator();
+			return;
+		}
+
+		if (FitCapsuleFromChildSegment(Mesh, BoneIndex, Out))
+		{
+			return;
+		}
+
+		Out.Center = FVector(0.0f, 0.0f, 0.0f);
+		Out.Rotation = FRotator(0.0f, 0.0f, 0.0f);
+		Out.Radius = 0.5f;
+		Out.Length = 1.0f;
+	}
+
 }
 
 UBodySetup* FBodyConstraintGenerator::GenerateBody(UPhysicsAsset* Asset, const FSkeletalMesh* Mesh, int32 BoneIndex)
@@ -186,7 +364,7 @@ UBodySetup* FBodyConstraintGenerator::GenerateBody(UPhysicsAsset* Asset, const F
 	Body->BoneName = BoneName;
 
 	FKSphylElem Capsule;
-	FitBodyCapsule(Mesh, BoneIndex, Capsule);
+	FitBodyCapsuleRobust(Mesh, BoneIndex, Capsule);
 	Body->AggGeom.SphylElems.push_back(Capsule);
 
 	Asset->BodySetups.push_back(Body);
@@ -294,6 +472,10 @@ void FBodyConstraintGenerator::GenerateAll(UPhysicsAsset* Asset, const FSkeletal
 	for (int32 i = 0; i < BoneCount; ++i)
 	{
 		if (!Mesh->IsBoneSkinned(i))
+		{
+			continue;
+		}
+		if (Mesh->Bones[i].ParentIndex < 0 || IsFineAutoBodyBoneName(Mesh->Bones[i].Name))
 		{
 			continue;
 		}
