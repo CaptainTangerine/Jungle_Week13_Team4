@@ -5,7 +5,7 @@
 #include "Physics/PhysicsInterfaceTypes.h"
 
 bool FBodyInstance::InitBody(UBodySetup* Setup, const FTransform& Transform, IPhysicsScene* InRBScene, int32 BoneIndex,
-	FPhysicsAggregateHandle Aggregate)
+	FPhysicsAggregateHandle Aggregate, bool bStatic)
 {
 	if (!Setup || !InRBScene || Setup->AggGeom.GetElementCount() <= 0)
 	{
@@ -35,7 +35,7 @@ bool FBodyInstance::InitBody(UBodySetup* Setup, const FTransform& Transform, IPh
 
 	FActorCreationParams ActorParams;
 	ActorParams.InitialTM = Transform;
-	ActorParams.bStatic = false;
+	ActorParams.bStatic = bStatic;
 	ActorParams.bSimulatePhysics = ShouldInstanceSimulatingPhysics();
 	ActorParams.bStartAwake = bStartAwake;
 	ActorParams.bEnableGravity = bEnableGravity;

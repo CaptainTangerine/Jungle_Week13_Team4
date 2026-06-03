@@ -1368,8 +1368,17 @@ bool FPhysXPhysicsScene::AddGeometry(FPhysicsActorHandle Actor, const FGeometryA
 		BaseLocalPose,
 		[&](PxShape* Shape)
 		{
-			Shape->userData = Params.UserData;
-			SetupDefaultRawBodyFilterData(Shape);
+			// Component 모드: 채널/응답/트리거/owner-UUID 필터 + shape userData = 컴포넌트.
+			// RawBody 모드(기본, 랙돌): block-all 필터 + userData = Params.UserData.
+			if (Params.ShapeSetupMode == EShapeSetupMode::Component && Params.FilterSourceComponent)
+			{
+				SetupComponentShape(Shape, Params.FilterSourceComponent);
+			}
+			else
+			{
+				Shape->userData = Params.UserData;
+				SetupDefaultRawBodyFilterData(Shape);
+			}
 		});
 
 	if (FirstShape)

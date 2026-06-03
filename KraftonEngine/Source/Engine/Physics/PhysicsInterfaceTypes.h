@@ -7,6 +7,17 @@
 #include "Physics/PhysicsHandles.h"
 
 struct FConstraintSetup;
+class UPrimitiveComponent;
+
+// shape 의 필터/트리거/userData 셋업 정책.
+//   RawBody   : PhysicsAsset/랙돌 경로. block-all 필터 + userData = FGeometryAddParams::UserData.
+//   Component : UPrimitiveComponent 경로. 채널/응답/트리거/owner-UUID 필터 + shape userData = 컴포넌트.
+// 두 경로가 같은 지오메트리 빌더(AddGeometry)를 공유하되 이 정책으로만 차이를 표현한다.
+enum class EShapeSetupMode
+{
+	RawBody,
+	Component
+};
 
 struct FActorCreationParams
 {
@@ -30,6 +41,10 @@ struct FGeometryAddParams
 	FTransform WorldTransform;
 	const FKAggregateGeom* Geometry = nullptr;
 	void* UserData = nullptr;
+	// shape 셋업 정책. 기본 RawBody = 기존 랙돌 거동 그대로.
+	EShapeSetupMode ShapeSetupMode = EShapeSetupMode::RawBody;
+	// Component 모드일 때 필터/트리거 응답을 끌어올 소스 컴포넌트(shape userData 도 이 컴포넌트로 설정).
+	UPrimitiveComponent* FilterSourceComponent = nullptr;
 };
 
 struct FConstraintCreationParams
