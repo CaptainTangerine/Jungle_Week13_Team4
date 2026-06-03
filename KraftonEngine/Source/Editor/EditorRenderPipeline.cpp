@@ -291,6 +291,13 @@ void FEditorRenderPipeline::BuildFrame(FLevelEditorViewportClient* VC, const FMi
 	Frame.WorldType = World->GetWorldType();
 	Frame.SetRenderOptions(VC->GetRenderOptions());
 	Frame.RenderOptions.OverridePostProcess(ActiveCamera);
+	// 활성 게임 카메라(PIE possessed)가 있으면 DOF on/off 를 카메라 Aperture 로 결정 —
+	// GameRenderPipeline 과 동일. (PostProcessVolume 등 카메라 설정 변경이 PIE 에디터 뷰에도
+	// 반영되도록.) 활성 카메라가 없는 순수 에디터 편집 뷰는 위 툴바 RenderOptions 의 bDOF 유지.
+	if (ActiveCamera)
+	{
+		Frame.RenderOptions.ShowFlags.bDOF = ActiveCamera->GetPostProcessSettings().Aperture > 0.0f;
+	}
 	Frame.OcclusionCulling = &GetOcclusionForViewport(VC);
 	Frame.LODContext = World->PrepareLODContext();
 

@@ -7,6 +7,14 @@
 #include "Render/Types/MinimalViewInfo.h"
 #include <cmath>
 
+UCameraComponent::UCameraComponent()
+{
+	// DOF 는 기본 OFF — FPostProcessSettings 의 구조체 기본 Aperture(0.5)는 "DOF 켤 때의 적당한
+	// 조리개"일 뿐, 카메라가 기본적으로 블러되면 안 된다. Aperture=0 이 DOFPass off 스위치이므로
+	// 카메라 기본값을 0 으로 둔다. DOF 는 PostProcessVolume 진입이나 명시적 저작으로만 켜진다.
+	PostProcessSettings.Aperture = 0.0f;
+}
+
 void UCameraComponent::BeginPlay()
 {
 	Super::BeginPlay();

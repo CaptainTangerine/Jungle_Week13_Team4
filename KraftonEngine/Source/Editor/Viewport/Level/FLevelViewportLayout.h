@@ -86,6 +86,7 @@ public:
 		SphereCollider,
 		CapsuleCollider,
 		TriggerVolume,
+		PostProcessVolume,
 		SkeletalMesh,
 		Character,
 		LuaCharacter,

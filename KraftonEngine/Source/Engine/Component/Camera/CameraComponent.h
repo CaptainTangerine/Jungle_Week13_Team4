@@ -25,7 +25,7 @@ class UCameraComponent : public USceneComponent
 public:
 	GENERATED_BODY()
 
-	UCameraComponent() = default;
+	UCameraComponent();
 
 	void BeginPlay() override;
 	void EndPlay() override;
