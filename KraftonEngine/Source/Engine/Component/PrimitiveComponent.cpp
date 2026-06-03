@@ -287,13 +287,18 @@ void UPrimitiveComponent::PostEditProperty(const char* PropertyName)
 		{
 			if (UWorld* World = Owner->GetWorld())
 			{
-				if (IsQueryCollisionEnabled())
+				if (IPhysicsScene* PS = World->GetPhysicsScene())
 				{
-					World->GetPhysicsScene()->RegisterComponent(this);
-				}
-				else
-				{
-					World->GetPhysicsScene()->UnregisterComponent(this);
+					if (IsQueryCollisionEnabled())
+					{
+						if (GUsePerComponentBodyInstance) InitBodyInstanceInScene(PS);
+						else PS->RegisterComponent(this);
+					}
+					else
+					{
+						if (GUsePerComponentBodyInstance) TermBodyInstanceInScene(PS);
+						else PS->UnregisterComponent(this);
+					}
 				}
 			}
 		}
@@ -477,13 +482,21 @@ void UPrimitiveComponent::SetCollisionEnabled(ECollisionEnabled InEnabled)
 	if (!Owner) return;
 	UWorld* World = Owner->GetWorld();
 	if (!World) return;
+	IPhysicsScene* PS = World->GetPhysicsScene();
+	if (!PS) return;
 
 	if (bWasQuery != bIsQuery)
 	{
 		if (bIsQuery)
-			World->GetPhysicsScene()->RegisterComponent(this);
+		{
+			if (GUsePerComponentBodyInstance) InitBodyInstanceInScene(PS);
+			else PS->RegisterComponent(this);
+		}
 		else
-			World->GetPhysicsScene()->UnregisterComponent(this);
+		{
+			if (GUsePerComponentBodyInstance) TermBodyInstanceInScene(PS);
+			else PS->UnregisterComponent(this);
+		}
 	}
 	else if (bWasQuery && bIsQuery)
 	{
