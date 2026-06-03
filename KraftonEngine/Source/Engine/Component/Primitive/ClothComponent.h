@@ -33,7 +33,7 @@ class UClothComponent : public UPrimitiveComponent
 {
 public:
 	GENERATED_BODY()
-	UClothComponent() = default;
+	UClothComponent();
 	~UClothComponent() override;
 
 	FPrimitiveSceneProxy* CreateSceneProxy() override;
@@ -131,6 +131,15 @@ private:
 
 	UPROPERTY(Edit, Save, Category="Cloth|Collision", DisplayName="Pin Collision Ignore Radius", Min=0.f, Max=0.5f, Speed=0.01f)
 	float PinCollisionIgnoreRadius = 0.08f;
+
+	UPROPERTY(Edit, Save, Category="Cloth|Collision", DisplayName="Self Collision")
+	bool bEnableSelfCollision = true;
+
+	UPROPERTY(Edit, Save, Category="Cloth|Collision", DisplayName="Self Collision Distance", Min=0.f, Max=20.f, Speed=0.1f)
+	float SelfCollisionDistance = 2.0f;
+
+	UPROPERTY(Edit, Save, Category="Cloth|Collision", DisplayName="Self Collision Stiffness", Min=0.f, Max=1.f, Speed=0.01f)
+	float SelfCollisionStiffness = 0.5f;
 
 	UPROPERTY(Edit, Save, Category="Cloth|Collision", DisplayName="Keep Behind Master Pose")
 	bool bKeepBehindMasterPose = false;

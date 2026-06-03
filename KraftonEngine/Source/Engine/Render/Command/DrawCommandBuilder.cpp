@@ -748,7 +748,7 @@ void FDrawCommandBuilder::BuildEditorLineCommands(EViewMode ViewMode)
 }
 
 // ============================================================
-// BuildPhysicsBodyCommands — PhysicsAsset 솔리드 바디(반투명) → AlphaBlend 단일 드로우콜
+// BuildPhysicsBodyCommands — PhysicsAsset 솔리드 바디(반투명) → OverlayAlpha 단일 드로우콜
 // ============================================================
 void FDrawCommandBuilder::BuildPhysicsBodyCommands(EViewMode ViewMode)
 {
@@ -758,15 +758,14 @@ void FDrawCommandBuilder::BuildPhysicsBodyCommands(EViewMode ViewMode)
 	FShader* Shader = FShaderManager::Get().GetOrCreate(EShaderPath::PhysicsBody);
 	if (!Shader) return;
 
-	// AlphaBlend 기반 + 두 가지 오버라이드:
-	//  - DepthReadOnly: 씬 메시에 가려지되, 서로 겹치는 반투명 바디끼리 깊이 충돌 없음.
-	//  - SolidNoCull : 양면. 한 바디 너머로 다른 바디 뒷면이 비쳐도 빈 곳이 안 생김.
-	FDrawCommandRenderState RS = PassRenderStateTable->ToDrawCommandState(ERenderPass::AlphaBlend, ViewMode);
-	RS.DepthStencil = EDepthStencilState::DepthReadOnly;
-	RS.Rasterizer   = ERasterizerState::SolidNoCull;
+	// OverlayAlpha 패스 = NoDepth + AlphaBlend. 깊이 테스트가 없어 바디가 프리뷰 메시에
+	// 가려지지 않고 항상 위에 보인다(PhAT 식 오버레이). 양면이 되도록 래스터라이저만 덮어써
+	// 겹치는 반투명 바디 너머 뒷면이 비쳐도 빈 곳이 생기지 않게 한다.
+	FDrawCommandRenderState RS = PassRenderStateTable->ToDrawCommandState(ERenderPass::OverlayAlpha, ViewMode);
+	RS.Rasterizer = ERasterizerState::SolidNoCull;
 
 	FDrawCommand& Cmd = DrawCommandList.AddCommand();
-	Cmd.Pass = ERenderPass::AlphaBlend;
+	Cmd.Pass = ERenderPass::OverlayAlpha;
 	Cmd.Shader = Shader;
 	Cmd.RenderState = RS;
 	Cmd.Buffer = { PhysicsBodies.GetVBBuffer(), PhysicsBodies.GetVBStride(), PhysicsBodies.GetIBBuffer() };

@@ -66,6 +66,14 @@ namespace
 		return std::clamp(SafeRadius, 0.0f, MaxIgnoreRadius);
 	}
 
+	float GetEffectiveSelfCollisionDistance(float InDistance)
+	{
+		constexpr float DefaultSelfCollisionDistance = 2.0f;
+		constexpr float MaxSelfCollisionDistance = 20.0f;
+		const float SafeDistance = IsFiniteFloat(InDistance) ? InDistance : DefaultSelfCollisionDistance;
+		return std::clamp(SafeDistance, 0.0f, MaxSelfCollisionDistance);
+	}
+
 	float GetFiniteOrDefault(float Value, float DefaultValue)
 	{
 		return IsFiniteFloat(Value) ? Value : DefaultValue;
@@ -270,6 +278,12 @@ namespace
 			|| std::strcmp(PropertyName, "Ignore Pin Overlap Collision") == 0
 			|| std::strcmp(PropertyName, "PinCollisionIgnoreRadius") == 0
 			|| std::strcmp(PropertyName, "Pin Collision Ignore Radius") == 0
+			|| std::strcmp(PropertyName, "bEnableSelfCollision") == 0
+			|| std::strcmp(PropertyName, "Self Collision") == 0
+			|| std::strcmp(PropertyName, "SelfCollisionDistance") == 0
+			|| std::strcmp(PropertyName, "Self Collision Distance") == 0
+			|| std::strcmp(PropertyName, "SelfCollisionStiffness") == 0
+			|| std::strcmp(PropertyName, "Self Collision Stiffness") == 0
 			|| std::strcmp(PropertyName, "Gravity") == 0
 			|| std::strcmp(PropertyName, "Damping") == 0
 			|| std::strcmp(PropertyName, "TetherScale") == 0
@@ -632,6 +646,13 @@ namespace
 
 	}
 #endif
+}
+
+UClothComponent::UClothComponent()
+{
+	// Cloth samples the final skeletal/ragdoll pose, then FNvClothSystem simulates after all tick groups.
+	PrimaryComponentTick.SetTickGroup(TG_PostUpdateWork);
+	PrimaryComponentTick.SetEndTickGroup(TG_PostUpdateWork);
 }
 
 UClothComponent::~UClothComponent()
@@ -1073,6 +1094,8 @@ bool UClothComponent::InitializeSimulation()
 	Cloth->setGravity(ToPxVec3(Gravity));
 	Cloth->setDamping(ToPxVec3(GetUnitClothVectorParameter(Damping, FVector(0.65f, 0.65f, 0.65f))));
 	Cloth->enableContinuousCollision(bEnableContinuousCollision);
+	Cloth->setSelfCollisionDistance(bEnableSelfCollision ? GetEffectiveSelfCollisionDistance(SelfCollisionDistance) : 0.0f);
+	Cloth->setSelfCollisionStiffness(bEnableSelfCollision ? GetUnitClothParameter(SelfCollisionStiffness, 0.5f) : 0.0f);
 	Cloth->setCollisionMassScale(GetNonNegativeClothParameter(CollisionMassScale, 0.5f));
 	Cloth->setFriction(GetUnitClothParameter(CollisionFriction, 0.25f));
 	Cloth->setTetherConstraintScale(GetNonNegativeClothParameter(TetherScale, 1.0f));
