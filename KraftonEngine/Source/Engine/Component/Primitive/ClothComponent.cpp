@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <utility>
 
 #if WITH_NVCLOTH
 #include "Physics/NvClothSystem.h"
@@ -44,8 +45,10 @@ namespace
 	float GetNvClothSolverFrequency(float InSolverFrequency, int32 InSolverIterationCount)
 	{
 		constexpr float ReferenceFrameRate = 60.0f;
+		constexpr float MaxStableSolverFrequency = 240.0f;
 		const float IterationFrequency = static_cast<float>(std::max(InSolverIterationCount, 1)) * ReferenceFrameRate;
-		return std::max(std::max(InSolverFrequency, 1.0f), IterationFrequency);
+		const float RequestedFrequency = std::max(std::max(InSolverFrequency, 1.0f), IterationFrequency);
+		return std::min(RequestedFrequency, MaxStableSolverFrequency);
 	}
 
 	float GetEffectiveCollisionThickness(float InCollisionThickness)
@@ -60,6 +63,73 @@ namespace
 		constexpr float MaxIgnoreRadius = 0.5f;
 		const float SafeRadius = IsFiniteFloat(InIgnoreRadius) ? InIgnoreRadius : 0.0f;
 		return std::clamp(SafeRadius, 0.0f, MaxIgnoreRadius);
+	}
+
+	float GetFiniteOrDefault(float Value, float DefaultValue)
+	{
+		return IsFiniteFloat(Value) ? Value : DefaultValue;
+	}
+
+	float GetUnitClothParameter(float Value, float DefaultValue)
+	{
+		return std::clamp(GetFiniteOrDefault(Value, DefaultValue), 0.0f, 1.0f);
+	}
+
+	float GetNonNegativeClothParameter(float Value, float DefaultValue)
+	{
+		return std::max(0.0f, GetFiniteOrDefault(Value, DefaultValue));
+	}
+
+	float GetEffectiveCompressionLimit(float Value)
+	{
+		return GetUnitClothParameter(Value, 1.0f);
+	}
+
+	float GetEffectiveStretchLimit(float Value)
+	{
+		return std::max(1.0f, GetFiniteOrDefault(Value, 1.0f));
+	}
+
+	FVector GetUnitClothVectorParameter(const FVector& Value, const FVector& DefaultValue)
+	{
+		return FVector(
+			GetUnitClothParameter(Value.X, DefaultValue.X),
+			GetUnitClothParameter(Value.Y, DefaultValue.Y),
+			GetUnitClothParameter(Value.Z, DefaultValue.Z));
+	}
+
+	FVector GetFiniteScaleVectorParameter(const FVector& Value, const FVector& DefaultValue)
+	{
+		return FVector(
+			GetFiniteOrDefault(Value.X, DefaultValue.X),
+			GetFiniteOrDefault(Value.Y, DefaultValue.Y),
+			GetFiniteOrDefault(Value.Z, DefaultValue.Z));
+	}
+
+	bool AreNearlyEqualVectors(const FVector& A, const FVector& B, float Tolerance)
+	{
+		return FVector::DistSquared(A, B) <= Tolerance * Tolerance;
+	}
+
+	bool AreNearlyEqualQuats(const FQuat& A, const FQuat& B, float Tolerance)
+	{
+		const FQuat NormalizedA = A.GetNormalized();
+		const FQuat NormalizedB = B.GetNormalized();
+		const float Dot = NormalizedA.X * NormalizedB.X
+			+ NormalizedA.Y * NormalizedB.Y
+			+ NormalizedA.Z * NormalizedB.Z
+			+ NormalizedA.W * NormalizedB.W;
+		return std::abs(Dot) >= 1.0f - Tolerance;
+	}
+
+	bool AreNearlyEqualTransforms(const FTransform& A, const FTransform& B)
+	{
+		constexpr float LocationTolerance = 1.0e-4f;
+		constexpr float ScaleTolerance = 1.0e-4f;
+		constexpr float RotationTolerance = 1.0e-5f;
+		return AreNearlyEqualVectors(A.Location, B.Location, LocationTolerance)
+			&& AreNearlyEqualVectors(A.Scale, B.Scale, ScaleTolerance)
+			&& AreNearlyEqualQuats(A.Rotation, B.Rotation, RotationTolerance);
 	}
 
 	FVector SafeNormal(FVector Value, const FVector& Fallback)
@@ -179,7 +249,9 @@ namespace
 			|| std::strcmp(PropertyName, "AttachBoneOffset") == 0
 			|| std::strcmp(PropertyName, "Attach Bone Offset") == 0
 			|| std::strcmp(PropertyName, "AttachBoneRotationOffset") == 0
-			|| std::strcmp(PropertyName, "Attach Bone Rotation Offset") == 0;
+			|| std::strcmp(PropertyName, "Attach Bone Rotation Offset") == 0
+			|| std::strcmp(PropertyName, "AttachBoneScale") == 0
+			|| std::strcmp(PropertyName, "Attach Bone Scale") == 0;
 	}
 
 #if WITH_NVCLOTH
@@ -198,6 +270,214 @@ namespace
 	{
 		const FQuat Normalized = Value.GetNormalized();
 		return physx::PxQuat(Normalized.X, Normalized.Y, Normalized.Z, Normalized.W);
+	}
+
+	uint64 MakeClothConstraintKey(uint32 A, uint32 B)
+	{
+		if (A > B)
+		{
+			std::swap(A, B);
+		}
+		return (static_cast<uint64>(A) << 32) | static_cast<uint64>(B);
+	}
+
+	void BuildTriangleEdgeKeySet(const TArray<uint32>& Triangles, TSet<uint64>& OutTriangleEdges)
+	{
+		OutTriangleEdges.clear();
+		if (Triangles.size() < 3 || Triangles.size() % 3 != 0)
+		{
+			return;
+		}
+
+		for (uint32 IndexOffset = 0; IndexOffset + 2 < static_cast<uint32>(Triangles.size()); IndexOffset += 3)
+		{
+			const uint32 I0 = Triangles[IndexOffset + 0];
+			const uint32 I1 = Triangles[IndexOffset + 1];
+			const uint32 I2 = Triangles[IndexOffset + 2];
+			if (I0 == I1 || I1 == I2 || I2 == I0)
+			{
+				continue;
+			}
+
+			OutTriangleEdges.insert(MakeClothConstraintKey(I0, I1));
+			OutTriangleEdges.insert(MakeClothConstraintKey(I1, I2));
+			OutTriangleEdges.insert(MakeClothConstraintKey(I2, I0));
+		}
+	}
+
+	bool IsTriangleEdgeConstraint(const TSet<uint64>& TriangleEdges, uint32 A, uint32 B)
+	{
+		return TriangleEdges.find(MakeClothConstraintKey(A, B)) != TriangleEdges.end();
+	}
+
+	struct FRuntimeClothConstraint
+	{
+		uint32 A = 0;
+		uint32 B = 0;
+		float RestValue = 0.0f;
+		float StiffnessValue = 0.0f;
+		bool bHasStiffnessValue = false;
+	};
+
+	void AppendIndependentFabricPhases(
+		FClothFabricCookedData& OutData,
+		const TArray<FRuntimeClothConstraint>& Constraints)
+	{
+		TArray<bool> Consumed(Constraints.size(), false);
+		uint32 RemainingConstraintCount = static_cast<uint32>(Constraints.size());
+
+		while (RemainingConstraintCount > 0)
+		{
+			TSet<uint32> UsedParticlesInSet;
+			TArray<uint32> SetConstraintIndices;
+			SetConstraintIndices.reserve(RemainingConstraintCount);
+
+			for (uint32 ConstraintIndex = 0; ConstraintIndex < static_cast<uint32>(Constraints.size()); ++ConstraintIndex)
+			{
+				if (Consumed[ConstraintIndex])
+				{
+					continue;
+				}
+
+				const FRuntimeClothConstraint& Constraint = Constraints[ConstraintIndex];
+				if (UsedParticlesInSet.find(Constraint.A) != UsedParticlesInSet.end()
+					|| UsedParticlesInSet.find(Constraint.B) != UsedParticlesInSet.end())
+				{
+					continue;
+				}
+
+				UsedParticlesInSet.insert(Constraint.A);
+				UsedParticlesInSet.insert(Constraint.B);
+				SetConstraintIndices.push_back(ConstraintIndex);
+				Consumed[ConstraintIndex] = true;
+				--RemainingConstraintCount;
+			}
+
+			if (SetConstraintIndices.empty())
+			{
+				break;
+			}
+
+			const uint32 SetIndex = static_cast<uint32>(OutData.Sets.size());
+			for (uint32 ConstraintIndex : SetConstraintIndices)
+			{
+				const FRuntimeClothConstraint& Constraint = Constraints[ConstraintIndex];
+				OutData.ConstraintIndices.push_back(Constraint.A);
+				OutData.ConstraintIndices.push_back(Constraint.B);
+				OutData.RestValues.push_back(Constraint.RestValue);
+				if (Constraint.bHasStiffnessValue)
+				{
+					OutData.StiffnessValues.push_back(Constraint.StiffnessValue);
+				}
+			}
+
+			OutData.PhaseIndices.push_back(SetIndex);
+			OutData.Sets.push_back(static_cast<uint32>(OutData.RestValues.size()));
+		}
+	}
+
+	bool BuildRuntimeIndependentFabricData(FClothFabricCookedData& InOutData)
+	{
+		const uint32 SourceConstraintCount = static_cast<uint32>(InOutData.RestValues.size());
+		if (SourceConstraintCount == 0 || InOutData.ConstraintIndices.size() != static_cast<size_t>(SourceConstraintCount) * 2)
+		{
+			return false;
+		}
+
+		TSet<uint64> TriangleEdges;
+		BuildTriangleEdgeKeySet(InOutData.Triangles, TriangleEdges);
+
+		const bool bHasStiffnessValues = InOutData.StiffnessValues.size() == InOutData.RestValues.size();
+		TArray<FRuntimeClothConstraint> EdgeConstraints;
+		TArray<FRuntimeClothConstraint> BendConstraints;
+		EdgeConstraints.reserve(SourceConstraintCount);
+		BendConstraints.reserve(SourceConstraintCount);
+
+		for (uint32 ConstraintIndex = 0; ConstraintIndex < SourceConstraintCount; ++ConstraintIndex)
+		{
+			FRuntimeClothConstraint RuntimeConstraint;
+			RuntimeConstraint.A = InOutData.ConstraintIndices[ConstraintIndex * 2 + 0];
+			RuntimeConstraint.B = InOutData.ConstraintIndices[ConstraintIndex * 2 + 1];
+			RuntimeConstraint.RestValue = InOutData.RestValues[ConstraintIndex];
+			RuntimeConstraint.bHasStiffnessValue = bHasStiffnessValues;
+			RuntimeConstraint.StiffnessValue = bHasStiffnessValues ? InOutData.StiffnessValues[ConstraintIndex] : 0.0f;
+
+			if (!TriangleEdges.empty() && !IsTriangleEdgeConstraint(TriangleEdges, RuntimeConstraint.A, RuntimeConstraint.B))
+			{
+				BendConstraints.push_back(RuntimeConstraint);
+			}
+			else
+			{
+				EdgeConstraints.push_back(RuntimeConstraint);
+			}
+		}
+
+		FClothFabricCookedData RebuiltData;
+		RebuiltData.Anchors = InOutData.Anchors;
+		RebuiltData.TetherLengths = InOutData.TetherLengths;
+		RebuiltData.Triangles = InOutData.Triangles;
+
+		AppendIndependentFabricPhases(RebuiltData, EdgeConstraints);
+		AppendIndependentFabricPhases(RebuiltData, BendConstraints);
+
+		if (RebuiltData.RestValues.empty() || RebuiltData.Sets.empty() || RebuiltData.PhaseIndices.empty())
+		{
+			return false;
+		}
+
+		InOutData = std::move(RebuiltData);
+		return true;
+	}
+
+	bool GetFabricPhaseConstraintRange(const FClothFabricCookedData& Data, uint32 PhaseIndex, uint32& OutStart, uint32& OutEnd)
+	{
+		if (PhaseIndex >= Data.PhaseIndices.size())
+		{
+			return false;
+		}
+
+		const uint32 SetIndex = Data.PhaseIndices[PhaseIndex];
+		if (SetIndex >= Data.Sets.size())
+		{
+			return false;
+		}
+
+		OutStart = SetIndex == 0 ? 0 : Data.Sets[SetIndex - 1];
+		OutEnd = Data.Sets[SetIndex];
+		return OutStart <= OutEnd && OutEnd <= Data.RestValues.size();
+	}
+
+	bool IsFabricBendPhase(const FClothFabricCookedData& Data, const TSet<uint64>& TriangleEdges, uint32 PhaseIndex)
+	{
+		if (TriangleEdges.empty())
+		{
+			return false;
+		}
+
+		uint32 ConstraintStart = 0;
+		uint32 ConstraintEnd = 0;
+		if (!GetFabricPhaseConstraintRange(Data, PhaseIndex, ConstraintStart, ConstraintEnd))
+		{
+			return false;
+		}
+
+		for (uint32 ConstraintIndex = ConstraintStart; ConstraintIndex < ConstraintEnd; ++ConstraintIndex)
+		{
+			const uint32 PairOffset = ConstraintIndex * 2;
+			if (PairOffset + 1 >= Data.ConstraintIndices.size())
+			{
+				return false;
+			}
+
+			const uint32 A = Data.ConstraintIndices[PairOffset + 0];
+			const uint32 B = Data.ConstraintIndices[PairOffset + 1];
+			if (!IsTriangleEdgeConstraint(TriangleEdges, A, B))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	void AppendBodySetupNvClothCollision(
@@ -463,6 +743,7 @@ void UClothComponent::UpdateBoneAttachment()
 	}
 
 	const FMatrix BoneOffset = FTransform(AttachBoneOffset, AttachBoneRotationOffset, FVector::OneVector).ToMatrix();
+	const FVector EffectiveAttachBoneScale = GetFiniteScaleVectorParameter(AttachBoneScale, FVector(1.0f, 1.0f, 1.0f));
 	const FMatrix DesiredWorld = BoneOffset * BoneGlobals[BoneIndex] * SourceMesh->GetWorldMatrix();
 
 	FMatrix DesiredRelative = DesiredWorld;
@@ -471,7 +752,13 @@ void UClothComponent::UpdateBoneAttachment()
 		DesiredRelative = DesiredWorld * Parent->GetWorldMatrix().GetInverse();
 	}
 
-	SetRelativeTransform(FTransform(MakeRigidPoseMatrix(DesiredRelative)));
+	FTransform DesiredTransform(MakeRigidPoseMatrix(DesiredRelative));
+	DesiredTransform.Scale = EffectiveAttachBoneScale;
+	if (AreNearlyEqualTransforms(GetRelativeTransform(), DesiredTransform))
+	{
+		return;
+	}
+	SetRelativeTransform(DesiredTransform);
 }
 
 FMeshDataView UClothComponent::GetMeshDataView() const
@@ -659,7 +946,19 @@ bool UClothComponent::InitializeSimulation()
 		return false;
 	}
 
-	const FClothFabricCookedData& Data = ClothAsset->GetFabricData();
+	FClothFabricCookedData RuntimeFabricData = ClothAsset->GetFabricData();
+	const uint32 SourcePhaseCount = static_cast<uint32>(RuntimeFabricData.PhaseIndices.size());
+	const uint32 SourceSetCount = static_cast<uint32>(RuntimeFabricData.Sets.size());
+	if (!BuildRuntimeIndependentFabricData(RuntimeFabricData) || !RuntimeFabricData.IsValid(ClothAsset->GetParticleCount()))
+	{
+		UE_LOG("[NvCloth] ClothComponent could not build runtime independent fabric data");
+		return false;
+	}
+
+	const FClothFabricCookedData& Data = RuntimeFabricData;
+	TSet<uint64> RuntimeTriangleEdges;
+	BuildTriangleEdgeKeySet(Data.Triangles, RuntimeTriangleEdges);
+
 	Fabric = Factory->createFabric(
 		ClothAsset->GetParticleCount(),
 		MakeNvConstRange(Data.PhaseIndices),
@@ -698,28 +997,30 @@ bool UClothComponent::InitializeSimulation()
 
 	TArray<nv::cloth::PhaseConfig> PhaseConfigs;
 	PhaseConfigs.reserve(Data.PhaseIndices.size());
+	const float EffectiveCompressionLimit = GetEffectiveCompressionLimit(CompressionLimit);
+	const float EffectiveStretchLimit = GetEffectiveStretchLimit(StretchLimit);
 	for (uint32 PhaseIndex = 0; PhaseIndex < static_cast<uint32>(Data.PhaseIndices.size()); ++PhaseIndex)
 	{
 		nv::cloth::PhaseConfig Config(static_cast<uint16_t>(PhaseIndex));
-		const bool bBendPhase = PhaseIndex > 0;
-		Config.mStiffness = bBendPhase ? std::clamp(BendStiffness, 0.0f, 1.0f) : std::clamp(ConstraintStiffness, 0.0f, 1.0f);
-		Config.mCompressionLimit = std::max(0.0f, CompressionLimit);
-		Config.mStretchLimit = std::max(0.0f, StretchLimit);
+		const bool bBendPhase = IsFabricBendPhase(Data, RuntimeTriangleEdges, PhaseIndex);
+		Config.mStiffness = bBendPhase ? GetUnitClothParameter(BendStiffness, 0.85f) : GetUnitClothParameter(ConstraintStiffness, 1.0f);
+		Config.mCompressionLimit = EffectiveCompressionLimit;
+		Config.mStretchLimit = EffectiveStretchLimit;
 		PhaseConfigs.push_back(Config);
 	}
 	Cloth->setPhaseConfig(MakeNvConstRange(PhaseConfigs));
 	Cloth->setSolverFrequency(GetNvClothSolverFrequency(SolverFrequency, SolverIterationCount));
 	Cloth->setGravity(ToPxVec3(Gravity));
-	Cloth->setDamping(ToPxVec3(Damping));
+	Cloth->setDamping(ToPxVec3(GetUnitClothVectorParameter(Damping, FVector(0.95f, 0.95f, 0.95f))));
 	Cloth->enableContinuousCollision(bEnableContinuousCollision);
 	Cloth->setCollisionMassScale(1.0f);
 	Cloth->setFriction(0.5f);
-	Cloth->setTetherConstraintScale(std::max(0.0f, TetherScale));
-	Cloth->setTetherConstraintStiffness(std::clamp(TetherStiffness, 0.0f, 1.0f));
+	Cloth->setTetherConstraintScale(GetNonNegativeClothParameter(TetherScale, 1.0f));
+	Cloth->setTetherConstraintStiffness(GetUnitClothParameter(TetherStiffness, 1.0f));
 	ApplyMotionConstraints();
-	Cloth->setLinearInertia(ToPxVec3(LinearInertia));
-	Cloth->setAngularInertia(ToPxVec3(AngularInertia));
-	Cloth->setCentrifugalInertia(ToPxVec3(CentrifugalInertia));
+	Cloth->setLinearInertia(ToPxVec3(GetUnitClothVectorParameter(LinearInertia, FVector::ZeroVector)));
+	Cloth->setAngularInertia(ToPxVec3(GetUnitClothVectorParameter(AngularInertia, FVector::ZeroVector)));
+	Cloth->setCentrifugalInertia(ToPxVec3(GetUnitClothVectorParameter(CentrifugalInertia, FVector::ZeroVector)));
 	Cloth->setUserData(this);
 
 	UpdateClothFrame();
@@ -739,10 +1040,14 @@ bool UClothComponent::InitializeSimulation()
 	}
 
 	ClothSystem.RegisterComponent(this);
-	UE_LOG("[NvCloth] ClothComponent initialized: particles=%u, triangles=%u, constraints=%u, pinned=%u",
+	UE_LOG("[NvCloth] ClothComponent initialized: particles=%u, triangles=%u, constraints=%u, phases=%u->%u, sets=%u->%u, pinned=%u",
 		ClothAsset->GetParticleCount(),
 		ClothAsset->GetIndexCount() / 3,
 		static_cast<uint32>(Data.RestValues.size()),
+		SourcePhaseCount,
+		static_cast<uint32>(Data.PhaseIndices.size()),
+		SourceSetCount,
+		static_cast<uint32>(Data.Sets.size()),
 		PinnedParticleCount);
 	if (bDebugLogPinnedGrid96x96Simulation)
 	{
@@ -797,7 +1102,7 @@ void UClothComponent::UpdateClothFrame()
 	if (Cloth)
 	{
 		Cloth->setTranslation(ToPxVec3(GetWorldLocation()));
-		Cloth->setRotation(ToPxQuat(GetWorldMatrix().ToQuat()));
+		Cloth->setRotation(ToPxQuat(GetWorldRotation().ToQuaternion()));
 	}
 #endif
 }
@@ -828,9 +1133,13 @@ void UClothComponent::ApplyMotionConstraints()
 		return;
 	}
 
-	const bool bHasMotionRadius = IsFiniteFloat(MaxParticleDistanceFromRest) && MaxParticleDistanceFromRest > 0.0f;
+	const float Stiffness = GetUnitClothParameter(MotionConstraintStiffness, 0.0f);
+	const float Radius = IsFiniteFloat(MaxParticleDistanceFromRest) && MaxParticleDistanceFromRest > 0.0f
+		? MaxParticleDistanceFromRest
+		: 0.0f;
+	const bool bHasMotionConstraint = Stiffness > 0.0f && Radius > 0.0f;
 	const uint32 ParticleCount = Cloth->getNumParticles();
-	if (!bHasMotionRadius || ParticleCount == 0 || InitialParticles.size() < ParticleCount)
+	if (!bHasMotionConstraint || ParticleCount == 0 || InitialParticles.size() < ParticleCount)
 	{
 		Cloth->clearMotionConstraints();
 		Cloth->setMotionConstraintScaleBias(1.0f, 0.0f);
@@ -847,7 +1156,6 @@ void UClothComponent::ApplyMotionConstraints()
 		return;
 	}
 
-	const float Radius = std::max(0.0f, MaxParticleDistanceFromRest);
 	for (uint32 Index = 0; Index < ParticleCount; ++Index)
 	{
 		const FVector4& InitialParticle = InitialParticles[Index];
@@ -855,9 +1163,8 @@ void UClothComponent::ApplyMotionConstraints()
 		MotionConstraints[Index] = physx::PxVec4(InitialParticle.X, InitialParticle.Y, InitialParticle.Z, ParticleRadius);
 	}
 
-	const float Scale = IsFiniteFloat(MotionConstraintScale) ? std::max(0.0f, MotionConstraintScale) : 1.0f;
-	const float Bias = IsFiniteFloat(MotionConstraintBias) ? MotionConstraintBias : 0.0f;
-	const float Stiffness = IsFiniteFloat(MotionConstraintStiffness) ? std::clamp(MotionConstraintStiffness, 0.0f, 1.0f) : 0.0f;
+	const float Scale = GetNonNegativeClothParameter(MotionConstraintScale, 1.0f);
+	const float Bias = GetFiniteOrDefault(MotionConstraintBias, 0.0f);
 	Cloth->setMotionConstraintScaleBias(Scale, Bias);
 	Cloth->setMotionConstraintStiffness(Stiffness);
 #endif
@@ -1076,7 +1383,7 @@ bool UClothComponent::BuildNvClothCollisionFromPhysicsBodies()
 
 	auto AppendSkeletalMeshBodies = [&](USkeletalMeshComponent* SkeletalMeshComponent)
 	{
-		if (!SkeletalMeshComponent || SkeletalMeshComponent->GetWorld() != World)
+		if (!SkeletalMeshComponent || SkeletalMeshComponent->GetWorld() != World || !SkeletalMeshComponent->IsQueryCollisionEnabled())
 		{
 			return;
 		}
@@ -1233,7 +1540,7 @@ bool UClothComponent::BuildNvClothCollisionFromPhysicsAsset(UPhysicsAsset* Physi
 	CollisionPlanes.clear();
 	CollisionConvexes.clear();
 
-	if (!PhysicsAsset || !MasterPoseComponent)
+	if (!PhysicsAsset || !MasterPoseComponent || !MasterPoseComponent->IsQueryCollisionEnabled())
 	{
 		ClearNvClothCollision();
 		return false;

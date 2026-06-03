@@ -101,6 +101,9 @@ private:
 	UPROPERTY(Edit, Save, Category="Cloth", DisplayName="Attach Bone Rotation Offset", Type=Rotator, Min=0.0f, Max=0.0f, Speed=0.1f)
 	FRotator AttachBoneRotationOffset = FRotator(0.0f, 0.0f, 0.0f);
 
+	UPROPERTY(Edit, Save, Category="Cloth", DisplayName="Attach Bone Scale", Type=Vec3, Min=0.001f, Max=0.0f, Speed=0.01f)
+	FVector AttachBoneScale = FVector(1.0f, 1.0f, 1.0f);
+
 	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Enable Simulation")
 	bool bEnableSimulation = true;
 
@@ -111,10 +114,10 @@ private:
 	int32 SolverIterationCount = 4;
 
 	UPROPERTY(Edit, Save, Category="Cloth|Collision", DisplayName="Continuous Collision")
-	bool bEnableContinuousCollision = true;
+	bool bEnableContinuousCollision = false;
 
-	UPROPERTY(Edit, Save, Category="Cloth|Collision", DisplayName="Collision Thickness", Min=0.1f, Max=1.f, Speed=0.1f)
-	float CollisionThickness = 0.5f;
+	UPROPERTY(Edit, Save, Category="Cloth|Collision", DisplayName="Collision Thickness", Min=0.f, Max=0.25f, Speed=0.01f)
+	float CollisionThickness = 0.03f;
 
 	UPROPERTY(Edit, Save, Category="Cloth|Collision", DisplayName="Ignore Pin Overlap Collision")
 	bool bIgnoreCollisionAtPinnedParticles = true;
@@ -126,7 +129,7 @@ private:
 	FVector Gravity = FVector(0.0f, 0.0f, -980.0f);
 
 	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Damping")
-	FVector Damping = FVector(0.8f, 0.8f, 0.8f);
+	FVector Damping = FVector(0.95f, 0.95f, 0.95f);
 
 	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Tether Length Scale", Min=0.f, Speed=0.01f)
 	float TetherScale = 1.0f;
@@ -138,22 +141,22 @@ private:
 	float ConstraintStiffness = 1.0f;
 
 	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Bend Stiffness", Min=0.f, Max=1.f, Speed=0.01f)
-	float BendStiffness = 0.6f;
+	float BendStiffness = 0.85f;
 
-	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Compression Limit", Min=0.f, Speed=0.01f)
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Compression Limit", Min=0.f, Max=1.f, Speed=0.01f)
 	float CompressionLimit = 1.0f;
 
-	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Stretch Limit", Min=0.f, Speed=0.01f)
-	float StretchLimit = 1.1f;
+	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Stretch Limit", Min=1.f, Speed=0.01f)
+	float StretchLimit = 1.0f;
 
 	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Linear Inertia")
-	FVector LinearInertia = FVector(1.0f, 1.0f, 1.0f);
+	FVector LinearInertia = FVector(0.0f, 0.0f, 0.0f);
 
 	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Angular Inertia")
-	FVector AngularInertia = FVector(1.0f, 1.0f, 1.0f);
+	FVector AngularInertia = FVector(0.0f, 0.0f, 0.0f);
 
 	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Centrifugal Inertia")
-	FVector CentrifugalInertia = FVector(1.0f, 1.0f, 1.0f);
+	FVector CentrifugalInertia = FVector(0.0f, 0.0f, 0.0f);
 
 	UPROPERTY(Edit, Save, Category="Cloth|Simulation", DisplayName="Motion Constraint Radius", Min=0.f, Speed=1.f)
 	float MaxParticleDistanceFromRest = 0.0f;
